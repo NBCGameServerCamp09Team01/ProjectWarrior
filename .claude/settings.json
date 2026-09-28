@@ -1,0 +1,7 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": ["unreal-mcp"],
+  "enabledPlugins": {
+    "unreal-engine-skills-for-claude-code@claude-plugins-official": true
+  }
+}
