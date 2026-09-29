@@ -14,6 +14,8 @@ class UWarriorAttributeSet;
 class UDataAsset_StartUpDataBase;
 class UMotionWarpingComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorCharacterDied, AWarriorBaseCharacter*, DeadCharacter);
+
 /**
  * 
  */
@@ -55,6 +57,15 @@ protected:
 	TSoftObjectPtr<UDataAsset_StartUpDataBase> CharacterStartUpData;
 
 public:
+	UPROPERTY(BlueprintAssignable)
+	FOnWarriorCharacterDied OnCharacterDied;
+
+public:
 	FORCEINLINE UWarriorAbilitySystemComponent* GetWarriorAbilitySystemComponent() const { return WarriorAbilitySystemComponent; }
 	FORCEINLINE UWarriorAttributeSet* GetWarriorAttributeSet() const { return WarriorAttributeSet; }
+
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
+	void OnCharacterDiedEvent();
+
+	virtual void OnCharacterDiedEvent_Implementation();
 };
