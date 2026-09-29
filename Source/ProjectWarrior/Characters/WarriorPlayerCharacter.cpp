@@ -16,6 +16,11 @@
 #include "ProjectWarrior/Components/Combat/PlayerCombatComponent.h"
 #include "ProjectWarrior/Components/UI/PlayerUIComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
+#include "ProjectWarrior/DataAssets/DataAsset_Item.h"
+#include "ProjectWarrior/Widgets/InventoryWheelWidget.h"
+
 
 AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -52,6 +57,12 @@ UPawnUIComponent* AWarriorPlayerCharacter::GetPawnUIComponent() const
 UPlayerUIComponent* AWarriorPlayerCharacter::GetPlayerUIComponent() const
 {
     return PlayerUIComponent;
+}
+
+UPlayerInventoryComponent* AWarriorPlayerCharacter::GetPlayerInventoryComponent() const
+{
+    const AWarriorPlayerState* WarriorPlayerState = GetPlayerState<AWarriorPlayerState>();
+    return WarriorPlayerState ? WarriorPlayerState->GetPlayerInventoryComponent() : nullptr;
 }
 
 void AWarriorPlayerCharacter::PossessedBy(AController* NewController)
@@ -97,6 +108,9 @@ void AWarriorPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerI
     WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_SwitchTarget, ETriggerEvent::Completed, this, &ThisClass::Input_SwitchTargetCompleted);
 
     WarriorInputComponent->BindAbilityInputAction(InputConfigData, this, &ThisClass::Input_AbilityInputPressed, &ThisClass::Input_AbilityInputReleased);
+
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_InventoryWheel, ETriggerEvent::Started, this, &ThisClass::Input_InventoryWheelStarted);
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_InventoryWheel, ETriggerEvent::Completed, this, &ThisClass::Input_InventoryWheelCompleted);
 }
 
 void AWarriorPlayerCharacter::BeginPlay()
@@ -182,6 +196,12 @@ void AWarriorPlayerCharacter::Input_SwitchTargetCompleted(const FInputActionValu
 
 void AWarriorPlayerCharacter::Input_LeftButton(const FInputActionValue& InputActionValue)
 {
+    // Inventory 열려있을 때 공격 x.
+    if (InventoryWheelWidget && InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+
     FGameplayTagContainer TagContainer;
 
     TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Player.Ability.Attack")));
@@ -197,4 +217,77 @@ void AWarriorPlayerCharacter::Input_AbilityInputPressed(FGameplayTag _InputTag)
 void AWarriorPlayerCharacter::Input_AbilityInputReleased(FGameplayTag _InputTag)
 {
     WarriorAbilitySystemComponent->OnAbilityInputReleased(_InputTag);
+}
+
+void AWarriorPlayerCharacter::Input_InventoryWheelStarted(const FInputActionValue& InputActionValue)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    if (!Inventory || !InventoryWheelWidgetClass)
+    {
+        return;
+    }
+
+    if (!InventoryWheelWidget)
+    {
+        InventoryWheelWidget = CreateWidget<UInventoryWheelWidget>(GetController<APlayerController>(), InventoryWheelWidgetClass);
+        InventoryWheelWidget->AddToViewport(10);
+    }
+
+    InventoryWheelWidget->OpenWheel(Inventory);
+}
+
+void AWarriorPlayerCharacter::Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue)
+{
+    if (!InventoryWheelWidget || !InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+
+    if (UDataAsset_Item* SelectedItem = InventoryWheelWidget->CloseWheel())
+    {
+        if (UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent())
+        {
+            Inventory->UseItem(SelectedItem);
+        }
+    }
+}
+
+// 아이템 사용 테스트 코드.
+void AWarriorPlayerCharacter::DebugAddItem(const FString& InItemPath, int32 InCount)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    UDataAsset_Item* Item = LoadObject<UDataAsset_Item>(nullptr, *InItemPath);
+    if (!Inventory || !Item)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DebugAddItem: Inventory(%d) or Item(%s) not found"), Inventory != nullptr, *InItemPath);
+        return;
+    }
+
+    const bool bAdded = Inventory->AddItem(Item, InCount);
+    UE_LOG(LogTemp, Log, TEXT("DebugAddItem: %s x%d -> %s (Count: %d)"),
+        *Item->GetName(), InCount, bAdded ? TEXT("OK") : TEXT("FAILED"), Inventory->GetItemCount(Item));
+}
+
+void AWarriorPlayerCharacter::DebugUseItem(const FString& InItemPath)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    UDataAsset_Item* Item = LoadObject<UDataAsset_Item>(nullptr, *InItemPath);
+    if (!Inventory || !Item)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DebugUseItem: Inventory(%d) or Item(%s) not found"), Inventory != nullptr, *InItemPath);
+        return;
+    }
+
+    const bool bUsed = Inventory->UseItem(Item);
+    UE_LOG(LogTemp, Log, TEXT("DebugUseItem: %s -> %s (Left: %d)"),
+        *Item->GetName(), bUsed ? TEXT("OK") : TEXT("FAILED"), Inventory->GetItemCount(Item));
+}
+
+void AWarriorPlayerCharacter::DebugAddGold(int32 InAmount)
+{
+    if (UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent())
+    {
+        Inventory->AddGold(InAmount);
+        UE_LOG(LogTemp, Log, TEXT("DebugAddGold: +%d -> %d"), InAmount, Inventory->GetGold());
+    }
 }

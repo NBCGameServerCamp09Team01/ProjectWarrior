@@ -13,5 +13,8 @@ UCLASS()
 class PROJECTWARRIOR_API AWarriorGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
+
+public:
+	AWarriorGameMode();
 	
 };

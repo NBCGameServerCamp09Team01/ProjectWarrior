@@ -12,6 +12,8 @@ class UCameraComponent;
 class UDataAsset_InputConfig;
 class UPlayerCombatComponent;
 class UPlayerUIComponent;
+class UPlayerInventoryComponent;
+class UInventoryWheelWidget;
 
 struct FInputActionValue;
 /**
@@ -33,6 +35,19 @@ public:
 	virtual UPawnUIComponent* GetPawnUIComponent() const override;
 	virtual UPlayerUIComponent* GetPlayerUIComponent() const override;
 	//~ End PawnUIInterface Interface
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	UPlayerInventoryComponent* GetPlayerInventoryComponent() const;
+
+	// 테스트용 콘솔 명령
+	UFUNCTION(Exec)
+	void DebugAddItem(const FString& InItemPath, int32 InCount = 1);
+
+	UFUNCTION(Exec)
+	void DebugUseItem(const FString& InItemPath);
+
+	UFUNCTION(Exec)
+	void DebugAddGold(int32 InAmount);
 
 protected:
 	//~ Begin APawn Interface.
@@ -96,7 +111,20 @@ private:
 	UFUNCTION()
 	void Input_AbilityInputReleased(FGameplayTag _InputTag);
 
+	UFUNCTION()
+	void Input_InventoryWheelStarted(const FInputActionValue& InputActionValue);
+
+	UFUNCTION()
+	void Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue);
+
 #pragma endregion
+
+private:
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UInventoryWheelWidget> InventoryWheelWidgetClass;
+
+	UPROPERTY()
+	UInventoryWheelWidget* InventoryWheelWidget;
 
 private:
 	UPROPERTY()

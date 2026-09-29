@@ -7,6 +7,7 @@
 
 class UInputMappingContext;
 class UWarriorGameplayAbility;
+class UDataAsset_Item;
 
 USTRUCT(BlueprintType)
 struct FWarriorPlayerAbilitySet
@@ -41,4 +42,18 @@ struct FWarriorPlayerWeaponData
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
     TSoftObjectPtr<UTexture2D> SoftWeaponIconTexture;
+};
+
+USTRUCT(BlueprintType)
+struct FWarriorInventorySlot
+{
+    GENERATED_BODY()
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    TObjectPtr<UDataAsset_Item> ItemData = nullptr;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    int32 Quantity = 0;
+
+    bool IsEmpty() const { return ItemData == nullptr || Quantity <= 0; }
 };
