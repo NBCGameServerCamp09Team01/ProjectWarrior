@@ -21,7 +21,8 @@ class PROJECTWARRIOR_API AWarriorWaveSpawner : public AActor
 public:
 	AWarriorWaveSpawner();
 
-	void StartWaveFromData(const FWarriorStageWaveData& InWaveData);
+	/** 웨이브 시작을 수락하면 true. 중복 실행이나 잘못된 데이터로 거부하면 false이며 클리어 알림도 발생하지 않는다. */
+	bool StartWaveFromData(const FWarriorStageWaveData& InWaveData);
 	void StopSpawning();
 
 	int32 GetAliveEnemyCount() const;

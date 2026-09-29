@@ -35,13 +35,21 @@ bool FWarriorWaveSpawnerTest::RunTest(const FString& Parameters)
 	Wave.Enemies.Add(Entry);
 
 	// 빈 웨이브를 거절할 때 클리어 이벤트가 발생하면 안 된다.
-	AddExpectedError(TEXT("rejected empty or invalid wave data"), EAutomationExpectedErrorFlags::Contains, 1);
-	Spawner->StartWaveFromData(FWarriorStageWaveData());
+	AddExpectedError(TEXT("rejected empty or invalid wave data"), EAutomationExpectedErrorFlags::Contains, 2);
+	TestFalse(TEXT("Empty wave is rejected"), Spawner->StartWaveFromData(FWarriorStageWaveData()));
 	TestEqual(TEXT("Empty wave does not clear"), ClearCount, 0);
+
+	// 적 수량이 잘못된 데이터도 시작을 거절한다.
+	FWarriorStageWaveData InvalidWave = Wave;
+	InvalidWave.Enemies[0].Count = 0;
+	TestFalse(TEXT("Invalid wave is rejected"), Spawner->StartWaveFromData(InvalidWave));
+	TestEqual(TEXT("Invalid wave does not clear"), ClearCount, 0);
 
 	// 스폰 그룹이 없으면 재시도 중에도, 재시도 한도에 도달한 뒤에도 현재 요청을 유지해야 한다.
 	Spawner->MaxSpawnAttempts = 2;
-	Spawner->StartWaveFromData(Wave);
+	TestTrue(TEXT("Valid wave is accepted"), Spawner->StartWaveFromData(Wave));
+	TestFalse(TEXT("Overlapping wave is rejected"), Spawner->StartWaveFromData(Wave));
+	TestEqual(TEXT("Rejected overlapping wave does not clear"), ClearCount, 0);
 	Spawner->ProcessNextSpawnRequest();
 	TestEqual(TEXT("Failed request not consumed"), Spawner->NextRequestIndex, 0);
 	TestTrue(TEXT("Pending request counts as remaining work"), Spawner->HasAliveEnemies());
