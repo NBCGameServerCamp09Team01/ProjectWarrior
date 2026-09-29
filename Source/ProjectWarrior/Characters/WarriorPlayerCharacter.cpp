@@ -16,6 +16,9 @@
 #include "ProjectWarrior/Components/Combat/PlayerCombatComponent.h"
 #include "ProjectWarrior/Components/UI/PlayerUIComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
+#include "ProjectWarrior/DataAssets/DataAsset_Item.h"
 
 AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -52,6 +55,12 @@ UPawnUIComponent* AWarriorPlayerCharacter::GetPawnUIComponent() const
 UPlayerUIComponent* AWarriorPlayerCharacter::GetPlayerUIComponent() const
 {
     return PlayerUIComponent;
+}
+
+UPlayerInventoryComponent* AWarriorPlayerCharacter::GetPlayerInventoryComponent() const
+{
+    const AWarriorPlayerState* WarriorPlayerState = GetPlayerState<AWarriorPlayerState>();
+    return WarriorPlayerState ? WarriorPlayerState->GetPlayerInventoryComponent() : nullptr;
 }
 
 void AWarriorPlayerCharacter::PossessedBy(AController* NewController)
@@ -197,4 +206,46 @@ void AWarriorPlayerCharacter::Input_AbilityInputPressed(FGameplayTag _InputTag)
 void AWarriorPlayerCharacter::Input_AbilityInputReleased(FGameplayTag _InputTag)
 {
     WarriorAbilitySystemComponent->OnAbilityInputReleased(_InputTag);
+}
+
+
+
+// 아이템 사용 테스트 코드.
+void AWarriorPlayerCharacter::DebugAddItem(const FString& InItemPath, int32 InCount)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    UDataAsset_Item* Item = LoadObject<UDataAsset_Item>(nullptr, *InItemPath);
+    if (!Inventory || !Item)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DebugAddItem: Inventory(%d) or Item(%s) not found"), Inventory != nullptr, *InItemPath);
+        return;
+    }
+
+    const bool bAdded = Inventory->AddItem(Item, InCount);
+    UE_LOG(LogTemp, Log, TEXT("DebugAddItem: %s x%d -> %s (Count: %d)"),
+        *Item->GetName(), InCount, bAdded ? TEXT("OK") : TEXT("FAILED"), Inventory->GetItemCount(Item));
+}
+
+void AWarriorPlayerCharacter::DebugUseItem(const FString& InItemPath)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    UDataAsset_Item* Item = LoadObject<UDataAsset_Item>(nullptr, *InItemPath);
+    if (!Inventory || !Item)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DebugUseItem: Inventory(%d) or Item(%s) not found"), Inventory != nullptr, *InItemPath);
+        return;
+    }
+
+    const bool bUsed = Inventory->UseItem(Item);
+    UE_LOG(LogTemp, Log, TEXT("DebugUseItem: %s -> %s (Left: %d)"),
+        *Item->GetName(), bUsed ? TEXT("OK") : TEXT("FAILED"), Inventory->GetItemCount(Item));
+}
+
+void AWarriorPlayerCharacter::DebugAddGold(int32 InAmount)
+{
+    if (UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent())
+    {
+        Inventory->AddGold(InAmount);
+        UE_LOG(LogTemp, Log, TEXT("DebugAddGold: +%d -> %d"), InAmount, Inventory->GetGold());
+    }
 }
