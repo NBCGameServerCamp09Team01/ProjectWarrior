@@ -81,8 +81,11 @@ namespace WarriorGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Equip_Weapon_Katana, "AI.Ability.Equip.Weapon.Katana");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Unequip_Weapon_Katana, "AI.Ability.Unequip.Weapon.Katana");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Equip_Weapon_Bow, "AI.Ability.Equip.Weapon.Bow");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Unequip_Weapon_Bow, "AI.Ability.Unequip.Weapon.Bow");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Katana, "AI.Weapon.Katana");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
 
