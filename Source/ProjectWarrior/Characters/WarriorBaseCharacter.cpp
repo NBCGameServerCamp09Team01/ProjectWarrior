@@ -48,3 +48,8 @@ void AWarriorBaseCharacter::PossessedBy(AController* NewController)
 		ensureMsgf(!CharacterStartUpData.IsNull(), TEXT("Forgot to assign start up data to %s"), *GetName());
 	}
 }
+
+void AWarriorBaseCharacter::OnCharacterDiedEvent_Implementation()
+{
+	OnCharacterDied.Broadcast(this);
+}
