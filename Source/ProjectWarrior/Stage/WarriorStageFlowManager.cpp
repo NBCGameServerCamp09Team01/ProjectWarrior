@@ -2,6 +2,7 @@
 
 
 #include "WarriorStageFlowManager.h"
+#include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameMode.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
 #include "Engine/World.h"
@@ -22,7 +23,7 @@ void AWarriorStageFlowManager::BeginPlay()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Stage] %s is placed in a level without AWarriorStageGameMode. It will not run."), *GetName());
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] %s is placed in a level without AWarriorStageGameMode. It will not run."), *GetName());
 	}
 }
 
@@ -37,7 +38,7 @@ bool AWarriorStageFlowManager::StartWave(int32 InWaveIndex)
 {
 	if (InWaveIndex < 0 || InWaveIndex >= GetTotalWaveCount())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Stage] StartWave(%d) is out of range. Total waves: %d"), InWaveIndex, GetTotalWaveCount());
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] StartWave(%d) is out of range. Total waves: %d"), InWaveIndex, GetTotalWaveCount());
 		return false;
 	}
 
@@ -45,7 +46,7 @@ bool AWarriorStageFlowManager::StartWave(int32 InWaveIndex)
 
 	if (bUseDebugWaves)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[Stage][Debug] StartWave %d/%d. Clears in %.1f s"), ActiveWaveNumber, GetTotalWaveCount(), DebugWaveClearTime);
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Stage][Debug] StartWave %d/%d. Clears in %.1f s"), ActiveWaveNumber, GetTotalWaveCount(), DebugWaveClearTime);
 
 		ReportEnemyCount(DebugEnemyCount, DebugEnemyCount);
 		GetWorldTimerManager().SetTimer(DebugWaveTimerHandle, this, &ThisClass::HandleDebugWaveTimerElapsed, DebugWaveClearTime, false);
@@ -124,7 +125,7 @@ void AWarriorStageFlowManager::ReportWaveCleared(int32 InWaveNumber)
 	LastClearedWaveNumber = InWaveNumber;
 	ActiveWaveNumber = 0;
 
-	UE_LOG(LogTemp, Log, TEXT("[Stage] Wave %d cleared"), InWaveNumber);
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Wave %d cleared"), InWaveNumber);
 
 	OnWaveCleared.Broadcast(InWaveNumber);
 }
