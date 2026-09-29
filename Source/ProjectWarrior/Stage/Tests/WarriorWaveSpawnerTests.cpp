@@ -35,23 +35,43 @@ bool FWarriorWaveSpawnerTest::RunTest(const FString& Parameters)
 	Wave.Enemies.Add(Entry);
 
 	// 빈 웨이브를 거절할 때 클리어 이벤트가 발생하면 안 된다.
-	AddExpectedError(TEXT("rejected empty or invalid wave data"), EAutomationExpectedErrorFlags::Contains, 1);
-	Spawner->StartWaveFromData(FWarriorStageWaveData());
+	AddExpectedError(TEXT("rejected empty or invalid wave data"), EAutomationExpectedErrorFlags::Contains, 2);
+	TestFalse(TEXT("Empty wave is rejected"), Spawner->StartWaveFromData(FWarriorStageWaveData()));
 	TestEqual(TEXT("Empty wave does not clear"), ClearCount, 0);
 
-	// 스폰 그룹이 없으면 재시도 중에도, 재시도 한도에 도달한 뒤에도 현재 요청을 유지해야 한다.
+	// 적 수량이 잘못된 데이터도 시작을 거절한다.
+	FWarriorStageWaveData InvalidWave = Wave;
+	InvalidWave.Enemies[0].Count = 0;
+	TestFalse(TEXT("Invalid wave is rejected"), Spawner->StartWaveFromData(InvalidWave));
+	TestEqual(TEXT("Invalid wave does not clear"), ClearCount, 0);
+
+	// 스폰 그룹이 없으면 한도까지 재시도한 뒤 요청을 건너뛰고, 모든 요청을 건너뛰면 클리어한다.
 	Spawner->MaxSpawnAttempts = 2;
-	Spawner->StartWaveFromData(Wave);
+	TestTrue(TEXT("Valid wave is accepted"), Spawner->StartWaveFromData(Wave));
+	TestFalse(TEXT("Overlapping wave is rejected"), Spawner->StartWaveFromData(Wave));
+	TestEqual(TEXT("Rejected overlapping wave does not clear"), ClearCount, 0);
 	Spawner->ProcessNextSpawnRequest();
 	TestEqual(TEXT("Failed request not consumed"), Spawner->NextRequestIndex, 0);
 	TestTrue(TEXT("Pending request counts as remaining work"), Spawner->HasAliveEnemies());
-	AddExpectedError(TEXT("paused at request"), EAutomationExpectedErrorFlags::Contains, 1);
+	AddExpectedError(TEXT("skipped request"), EAutomationExpectedErrorFlags::Contains, 3);
 	Spawner->ProcessNextSpawnRequest();
-	TestEqual(TEXT("Retry exhaustion does not clear"), ClearCount, 0);
-	TestTrue(TEXT("Retry exhaustion retains request"), Spawner->HasAliveEnemies());
-	TestFalse(TEXT("Retry timer stopped"), World->GetTimerManager().IsTimerActive(Spawner->SpawnTimerHandle));
+	TestEqual(TEXT("Request skipped at limit"), Spawner->NextRequestIndex, 1);
+	TestEqual(TEXT("Remaining spawn count after skip"), Spawner->GetRemainingSpawnCount(), 1);
+	TestEqual(TEXT("Retry count resets after skip"), Spawner->CurrentSpawnAttempts, 0);
+	TestEqual(TEXT("Pending request prevents clear after skip"), ClearCount, 0);
+	TestTrue(TEXT("Next request timer continues after skip"), World->GetTimerManager().IsTimerActive(Spawner->SpawnTimerHandle));
+	Spawner->ProcessNextSpawnRequest();
+	TestEqual(TEXT("Next request gets its own retry budget"), Spawner->NextRequestIndex, 1);
+	Spawner->ProcessNextSpawnRequest();
+	TestEqual(TEXT("All requests skipped"), Spawner->NextRequestIndex, 2);
+	TestEqual(TEXT("No remaining spawn requests"), Spawner->GetRemainingSpawnCount(), 0);
+	Spawner->TryReportWaveCleared();
+	TestEqual(TEXT("Wave with only skipped requests clears once"), ClearCount, 1);
+	TestFalse(TEXT("No remaining work after skips"), Spawner->HasAliveEnemies());
+	TestEqual(TEXT("Skipped requests are not counted as spawned"), LatestSpawned, 0);
 	Spawner->StopSpawning();
 	TestFalse(TEXT("Stop cancels pending work"), Spawner->HasAliveEnemies());
+	ClearCount = 0;
 
 	ATargetPoint* Point = World->SpawnActor<ATargetPoint>();
 	Point->SetActorLocation(FVector(0, 0, 300));
@@ -83,6 +103,32 @@ bool FWarriorWaveSpawnerTest::RunTest(const FString& Parameters)
 	Spawner->TryReportWaveCleared();
 	TestEqual(TEXT("Exactly one wave completion"), ClearCount, 1);
 	TestEqual(TEXT("Final alive count published"), LatestAlive, 0);
+
+	// 일부 요청을 건너뛰더라도 이미 생성된 적이 남아 있으면 클리어하면 안 된다.
+	Spawner->StopSpawning();
+	ClearCount = 0;
+	FWarriorStageWaveData MixedWave;
+	FWarriorWaveEnemySpawnData MixedEntry = Entry;
+	MixedEntry.Count = 1;
+	MixedWave.Enemies.Add(MixedEntry);
+	MixedEntry.SpawnGroup = TEXT("Missing");
+	MixedWave.Enemies.Add(MixedEntry);
+	TestTrue(TEXT("Mixed wave starts"), Spawner->StartWaveFromData(MixedWave));
+	Spawner->ProcessNextSpawnRequest();
+	Spawner->ProcessNextSpawnRequest();
+	Spawner->ProcessNextSpawnRequest();
+	TestEqual(TEXT("Mixed wave has no pending requests"), Spawner->GetRemainingSpawnCount(), 0);
+	TestEqual(TEXT("Mixed wave counts only successful spawns"), LatestSpawned, 1);
+	TestEqual(TEXT("Mixed wave keeps spawned enemy alive"), LatestAlive, 1);
+	TestEqual(TEXT("Skipped last request waits for living enemy"), ClearCount, 0);
+	if (Spawner->AliveEnemies.Num() == 1)
+	{
+		AWarriorAICharacter* RemainingEnemy = Spawner->AliveEnemies.Array()[0].Get();
+		RemainingEnemy->Destroy();
+		Spawner->HandleSpawnedEnemyDestroyed(RemainingEnemy);
+	}
+	Spawner->TryReportWaveCleared();
+	TestEqual(TEXT("Mixed wave clears once after enemy removal"), ClearCount, 1);
 
 	// 이벤트 수신 중 StopSpawning을 호출했다면, 이후 첫 스폰 타이머가 등록되면 안 된다.
 	Spawner->OnEnemyCountChanged.AddLambda([Spawner](int32, int32) { Spawner->StopSpawning(); });

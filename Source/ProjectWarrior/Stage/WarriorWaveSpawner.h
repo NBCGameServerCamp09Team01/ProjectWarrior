@@ -21,10 +21,13 @@ class PROJECTWARRIOR_API AWarriorWaveSpawner : public AActor
 public:
 	AWarriorWaveSpawner();
 
-	void StartWaveFromData(const FWarriorStageWaveData& InWaveData);
+	/** 웨이브 시작을 수락하면 true. 중복 실행이나 잘못된 데이터로 거부하면 false이며 클리어 알림도 발생하지 않는다. */
+	bool StartWaveFromData(const FWarriorStageWaveData& InWaveData);
 	void StopSpawning();
 
 	int32 GetAliveEnemyCount() const;
+	/** 아직 생성하거나 건너뛰지 않은 요청 수. */
+	int32 GetRemainingSpawnCount() const { return FMath::Max(0, PendingRequests.Num() - NextRequestIndex); }
 	bool HasAliveEnemies() const;
 
 	FOnWarriorSpawnerEnemyCountChanged OnEnemyCountChanged;
@@ -42,7 +45,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Stage", meta = (ClampMin = "0.01"))
 	float SpawnRetryInterval = 1.0f;
 
-	/** 요청당 최대 실패 횟수. 한도에 도달하면 웨이브를 클리어하지 않고 스폰을 일시 중단한다. */
+	/** 요청당 최대 실패 횟수. 한도에 도달하면 오류 로그를 남기고 해당 요청을 건너뛴다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Stage", meta = (ClampMin = "1"))
 	int32 MaxSpawnAttempts = 10;
 

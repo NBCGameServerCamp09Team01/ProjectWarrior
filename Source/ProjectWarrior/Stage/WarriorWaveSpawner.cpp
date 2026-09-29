@@ -12,7 +12,7 @@ AWarriorWaveSpawner::AWarriorWaveSpawner()
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("Root")));
 }
 
-void AWarriorWaveSpawner::StartWaveFromData(const FWarriorStageWaveData& InWaveData)
+bool AWarriorWaveSpawner::StartWaveFromData(const FWarriorStageWaveData& InWaveData)
 {
 	CompactAliveEnemies();
 
@@ -21,7 +21,7 @@ void AWarriorWaveSpawner::StartWaveFromData(const FWarriorStageWaveData& InWaveD
 		UE_LOG(LogProjectWarrior, Warning,
 			TEXT("WaveSpawner %s rejected overlapping waves (%d tracked enemies). Call StopSpawning and remove remaining enemies before restarting."),
 			*GetName(), AliveEnemies.Num());
-		return;
+		return false;
 	}
 
 	StopSpawning();
@@ -32,7 +32,7 @@ void AWarriorWaveSpawner::StartWaveFromData(const FWarriorStageWaveData& InWaveD
 	if (!BuildPendingRequests(InWaveData))
 	{
 		UE_LOG(LogProjectWarrior, Error, TEXT("WaveSpawner %s rejected empty or invalid wave data. No clear event will be emitted."), *GetName());
-		return;
+		return false;
 	}
 
 	bWaveActive = true;
@@ -43,6 +43,7 @@ void AWarriorWaveSpawner::StartWaveFromData(const FWarriorStageWaveData& InWaveD
 	{
 		SpawnTimerHandle = GetWorldTimerManager().SetTimerForNextTick(this, &ThisClass::ProcessNextSpawnRequest);
 	}
+	return true;
 }
 
 void AWarriorWaveSpawner::StopSpawning()
@@ -152,11 +153,17 @@ void AWarriorWaveSpawner::ProcessNextSpawnRequest()
 	}
 	else if (++CurrentSpawnAttempts >= FMath::Max(1, MaxSpawnAttempts))
 	{
-		GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
 		UE_LOG(LogProjectWarrior, Error,
-			TEXT("WaveSpawner %s paused at request %d, group '%s', after %d failed attempts. Request retained; wave will NOT clear. Fix spawn points and restart explicitly."),
+			TEXT("[Wave] %s skipped request %d, group '%s', after %d failed attempts. Check spawn points."),
 			*GetName(), NextRequestIndex, *SpawnRequest.SpawnGroup.ToString(), CurrentSpawnAttempts);
-		return;
+
+		++NextRequestIndex;
+		CurrentSpawnAttempts = 0;
+		NotifyEnemyCountChanged();
+		if (!bWaveActive || Generation != WaveGeneration)
+		{
+			return;
+		}
 	}
 
 	if (PendingRequests.IsValidIndex(NextRequestIndex))

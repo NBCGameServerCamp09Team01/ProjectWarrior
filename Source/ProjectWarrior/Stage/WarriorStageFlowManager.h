@@ -7,12 +7,15 @@
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 #include "WarriorStageFlowManager.generated.h"
 
+class UWarriorStageWaveDataAsset;
+class AWarriorWaveSpawner;
+
 /**
  * 스테이지 레벨에 1개 배치하는 웨이브 실행기. 흐름(다음 웨이브, 휴식, 클리어, 실패)은 판단하지 않고
  * AWarriorStageGameMode의 명령을 수행한 뒤 결과만 보고한다.
  *
  * GameMode와의 이음매. "GameMode가 호출" 구역의 이름·인자·반환형은 바꾸지 않는다.
- * 실제 웨이브 구현(DataAsset, WaveSpawner)은 웨이브 담당이 bUseDebugWaves == false 분기에 채운다.
+ * bUseDebugWaves가 false이면 DataAsset의 웨이브를 WaveSpawner로 실행한다.
  */
 UCLASS()
 class PROJECTWARRIOR_API AWarriorStageFlowManager : public AActor
@@ -47,7 +50,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	//생존·전체 적 수를 GameState에 알린다 (HUD가 읽음)
+	//남은 적 수(생존 + 미스폰)와 계획된 전체 적 수를 GameState에 알린다 (HUD가 읽음)
 	void ReportEnemyCount(int32 InAliveCount, int32 InTotalCount);
 
 	//OnWaveCleared를 방송한다. 같은 웨이브 번호로는 한 번만 방송한다. InWaveNumber는 1부터
@@ -69,12 +72,19 @@ protected:
 	int32 DebugEnemyCount = 3;
 	//~ End 디버그 웨이브
 
-	// ↓ 웨이브 담당이 추가할 자리
-	// UPROPERTY(EditAnywhere, Category = "Warrior|Stage") TObjectPtr<UWarriorStageWaveDataAsset> StageWaveData;
-	// UPROPERTY(EditAnywhere, Category = "Warrior|Stage") TObjectPtr<AWarriorWaveSpawner> WaveSpawner;
+	UPROPERTY(EditAnywhere, Category = "Warrior|Stage")
+	TObjectPtr<UWarriorStageWaveDataAsset> StageWaveData;
+
+	UPROPERTY(EditAnywhere, Category = "Warrior|Stage")
+	TObjectPtr<AWarriorWaveSpawner> WaveSpawner;
 
 private:
 	void HandleDebugWaveTimerElapsed();
+	void HandleSpawnerEnemyCountChanged(int32 InAliveCount, int32 InSpawnedCount);
+	void HandleSpawnerWaveCleared();
+
+	//현재 웨이브 데이터에 설정된 적 수량의 합
+	int32 PlannedEnemyCount = 0;
 
 	FTimerHandle DebugWaveTimerHandle;
 
