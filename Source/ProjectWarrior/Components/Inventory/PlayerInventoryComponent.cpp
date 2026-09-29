@@ -92,7 +92,6 @@ bool UPlayerInventoryComponent::UseItem(UDataAsset_Item* InItem)
 		return false;
 	}
 
-	// ASC는 캐릭터에 있으므로 PlayerState가 아닌 Pawn에서 가져온다
 	UWarriorAbilitySystemComponent* ASC = UWarriorFunctionLibrary::NativeGetWarriorASCFromActor(OwningPawn);
 
 	FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();

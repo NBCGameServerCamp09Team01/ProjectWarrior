@@ -26,6 +26,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_TargetLock, "InputTag.Toggleable.TargetLock");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_SwitchTarget, "InputTag.SwitchTarget");
 
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_InventoryWheel, "InputTag.InventoryWheel");
+
 	/** Player tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Equip_Weapon_Katana, "Player.Ability.Equip.Weapon.Katana");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Unequip_Weapon_Katana, "Player.Ability.Unequip.Weapon.Katana");

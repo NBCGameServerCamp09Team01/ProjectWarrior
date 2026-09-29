@@ -12,9 +12,7 @@ class UDataAsset_Item;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChangedDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGoldChangedDelegate, int32, NewGold);
 
-/**
- * 플레이어의 골드와 아이템. AWarriorPlayerState에 붙는다.
- */
+
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class PROJECTWARRIOR_API UPlayerInventoryComponent : public UActorComponent
 {
@@ -57,13 +55,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TArray<FWarriorInventorySlot> Slots;
 
-	// 테스트용 시작 골드. 웹서버 연동 후에는 서버에서 받은 값으로 덮어쓴다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory", meta = (ClampMin = "0"))
-	int32 Gold = 100;
+	int32 Gold = 0;
 
 private:
 	FWarriorInventorySlot* FindSlot(const UDataAsset_Item* InItem);
 
-	// 소유 PlayerState가 현재 조종 중인 Pawn (죽었거나 아직 스폰 전이면 nullptr)
 	APawn* GetOwningPlayerPawn() const;
 };

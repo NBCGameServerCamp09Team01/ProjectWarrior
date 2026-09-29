@@ -13,6 +13,7 @@ class UDataAsset_InputConfig;
 class UPlayerCombatComponent;
 class UPlayerUIComponent;
 class UPlayerInventoryComponent;
+class UInventoryWheelWidget;
 
 struct FInputActionValue;
 /**
@@ -39,7 +40,6 @@ public:
 	UPlayerInventoryComponent* GetPlayerInventoryComponent() const;
 
 	// 테스트용 콘솔 명령
-	// 예: DebugAddItem /Game/MyGameContents/Items/DA_Potion_Small.DA_Potion_Small 3
 	UFUNCTION(Exec)
 	void DebugAddItem(const FString& InItemPath, int32 InCount = 1);
 
@@ -111,7 +111,20 @@ private:
 	UFUNCTION()
 	void Input_AbilityInputReleased(FGameplayTag _InputTag);
 
+	UFUNCTION()
+	void Input_InventoryWheelStarted(const FInputActionValue& InputActionValue);
+
+	UFUNCTION()
+	void Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue);
+
 #pragma endregion
+
+private:
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UInventoryWheelWidget> InventoryWheelWidgetClass;
+
+	UPROPERTY()
+	UInventoryWheelWidget* InventoryWheelWidget;
 
 private:
 	UPROPERTY()

@@ -19,6 +19,8 @@
 #include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/DataAssets/DataAsset_Item.h"
+#include "ProjectWarrior/Widgets/InventoryWheelWidget.h"
+
 
 AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -106,6 +108,9 @@ void AWarriorPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerI
     WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_SwitchTarget, ETriggerEvent::Completed, this, &ThisClass::Input_SwitchTargetCompleted);
 
     WarriorInputComponent->BindAbilityInputAction(InputConfigData, this, &ThisClass::Input_AbilityInputPressed, &ThisClass::Input_AbilityInputReleased);
+
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_InventoryWheel, ETriggerEvent::Started, this, &ThisClass::Input_InventoryWheelStarted);
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_InventoryWheel, ETriggerEvent::Completed, this, &ThisClass::Input_InventoryWheelCompleted);
 }
 
 void AWarriorPlayerCharacter::BeginPlay()
@@ -191,6 +196,12 @@ void AWarriorPlayerCharacter::Input_SwitchTargetCompleted(const FInputActionValu
 
 void AWarriorPlayerCharacter::Input_LeftButton(const FInputActionValue& InputActionValue)
 {
+    // Inventory 열려있을 때 공격 x.
+    if (InventoryWheelWidget && InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+
     FGameplayTagContainer TagContainer;
 
     TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Player.Ability.Attack")));
@@ -208,7 +219,38 @@ void AWarriorPlayerCharacter::Input_AbilityInputReleased(FGameplayTag _InputTag)
     WarriorAbilitySystemComponent->OnAbilityInputReleased(_InputTag);
 }
 
+void AWarriorPlayerCharacter::Input_InventoryWheelStarted(const FInputActionValue& InputActionValue)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    if (!Inventory || !InventoryWheelWidgetClass)
+    {
+        return;
+    }
 
+    if (!InventoryWheelWidget)
+    {
+        InventoryWheelWidget = CreateWidget<UInventoryWheelWidget>(GetController<APlayerController>(), InventoryWheelWidgetClass);
+        InventoryWheelWidget->AddToViewport(10);
+    }
+
+    InventoryWheelWidget->OpenWheel(Inventory);
+}
+
+void AWarriorPlayerCharacter::Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue)
+{
+    if (!InventoryWheelWidget || !InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+
+    if (UDataAsset_Item* SelectedItem = InventoryWheelWidget->CloseWheel())
+    {
+        if (UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent())
+        {
+            Inventory->UseItem(SelectedItem);
+        }
+    }
+}
 
 // 아이템 사용 테스트 코드.
 void AWarriorPlayerCharacter::DebugAddItem(const FString& InItemPath, int32 InCount)
