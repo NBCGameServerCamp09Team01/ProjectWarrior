@@ -19,7 +19,9 @@ class PROJECTWARRIOR_API AWeaponBase : public AActor
 	
 public:	
 	// Sets default values for this actor's properties
-	AWeaponBase();
+	AWeaponBase(const FObjectInitializer& ObjectInitializer);
+
+	static inline const FName WeaponMeshComponentName = TEXT("WeaponMesh");
 
 	FOnTargetInteractedDelegate OnWeaponHitTarget;
 	FOnTargetInteractedDelegate OnWeaponPulledFromTarget;
@@ -39,7 +41,7 @@ private:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapons")
-	UStaticMeshComponent* WeaponMesh;
+	UMeshComponent* WeaponMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapons")
 	UBoxComponent* WeaponCollision;
