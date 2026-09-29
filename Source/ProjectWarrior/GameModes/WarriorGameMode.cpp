@@ -2,9 +2,4 @@
 
 
 #include "WarriorGameMode.h"
-#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
 
-AWarriorGameMode::AWarriorGameMode()
-{
-	PlayerStateClass = AWarriorPlayerState::StaticClass();
-}
