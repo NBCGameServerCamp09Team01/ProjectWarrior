@@ -14,7 +14,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorEnemyCountChanged, int32,
 /**
  * 스테이지 진행 상태를 보관하고 방송한다.
  * 값을 쓰는 쪽은 AWarriorStageGameMode(상태·웨이브)와 AWarriorStageFlowManager(적 수)뿐이고,
- * UI·플레이어·상점은 조회와 구독만 한다.
  */
 UCLASS()
 class PROJECTWARRIOR_API AWarriorStageGameState : public AWarriorGameState
@@ -24,7 +23,7 @@ class PROJECTWARRIOR_API AWarriorStageGameState : public AWarriorGameState
 public:
 	AWarriorStageGameState();
 
-	//~ Begin 조회
+	//Begin 조회
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
 	EWarriorStageState GetStageState() const { return StageState; }
 
@@ -59,7 +58,7 @@ public:
 	static bool IsActionAllowed(const UObject* WorldContextObject, EWarriorStageAction InAction);
 	//~ End 조회
 
-	//~ Begin 쓰기 (GameMode·FlowManager 전용)
+	//Begin 쓰기 (GameMode·FlowManager 전용)
 	//InDuration이 0보다 크면 남은 시간 계산에 쓰인다. 같은 상태로는 바꾸지 않는다.
 	void SetStageState(EWarriorStageState InNewState, float InDuration);
 
