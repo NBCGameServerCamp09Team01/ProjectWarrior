@@ -153,11 +153,17 @@ void AWarriorWaveSpawner::ProcessNextSpawnRequest()
 	}
 	else if (++CurrentSpawnAttempts >= FMath::Max(1, MaxSpawnAttempts))
 	{
-		GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
 		UE_LOG(LogProjectWarrior, Error,
-			TEXT("WaveSpawner %s paused at request %d, group '%s', after %d failed attempts. Request retained; wave will NOT clear. Fix spawn points and restart explicitly."),
+			TEXT("[Wave] %s skipped request %d, group '%s', after %d failed attempts. Check spawn points."),
 			*GetName(), NextRequestIndex, *SpawnRequest.SpawnGroup.ToString(), CurrentSpawnAttempts);
-		return;
+
+		++NextRequestIndex;
+		CurrentSpawnAttempts = 0;
+		NotifyEnemyCountChanged();
+		if (!bWaveActive || Generation != WaveGeneration)
+		{
+			return;
+		}
 	}
 
 	if (PendingRequests.IsValidIndex(NextRequestIndex))
