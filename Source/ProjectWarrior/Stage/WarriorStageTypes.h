@@ -74,6 +74,34 @@ struct FWarriorStagePermission
 	}
 };
 
+//스테이지 한 판의 결과. 결과 화면에 표시하고, 추후 웹 백엔드의 플레이 기록 저장에 쓴다.
+//항목은 기획이 정해지면 늘어난다. EarnedGold·KillCount는 수집 경로가 정해질 때까지 0으로 둔다.
+USTRUCT(BlueprintType)
+struct FWarriorStageResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	bool bCleared = false;
+
+	//마지막으로 시작한 웨이브. 1부터
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 ReachedWave = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 TotalWaveCount = 0;
+
+	//레벨 시작부터 결과가 나올 때까지의 실제 시간(초). 시간 배율(인벤토리 휠의 슬로우)의 영향을 받지 않는다.
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	float PlayTimeSeconds = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 EarnedGold = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 KillCount = 0;
+};
+
 // 델리게이트 매크로 선언
 //FlowManager → GameMode: 현재 웨이브의 적이 전멸했고 대기 스폰도 없음. WaveNumber는 1부터
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorWaveCleared, int32, WaveNumber);
