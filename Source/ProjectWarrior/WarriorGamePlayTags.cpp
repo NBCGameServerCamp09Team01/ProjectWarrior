@@ -125,7 +125,9 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Stagger, "Shared.Event.Stagger");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_BaseDamage, "Shared.SetByCaller.BaseDamage");
+
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Heal, "Shared.SetByCaller.Heal");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Upgrade, "Shared.SetByCaller.Upgrade");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Normal, "Shared.Status.Death.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Finisher, "Shared.Status.Death.Finisher");
@@ -140,4 +142,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Sprint, "Shared.Status.Sprint");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Finisher, "Shared.Status.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_WeaponEquipped, "Shared.Status.WeaponEquipped");
+
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_AttackPower, "Upgrade.Stage.AttackPower");
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxHealth, "Upgrade.Stage.MaxHealth");
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxStamina, "Upgrade.Stage.MaxStamina");
 }

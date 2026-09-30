@@ -11,8 +11,14 @@
 #include "ProjectWarrior/Stage/States/WarriorStageState_Resting.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_StageCleared.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_StageFailed.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/Components/Upgrade/StageUpgradeComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "ProjectWarrior/ProjectWarrior.h"
 #include "TimerManager.h"
+
+
 
 AWarriorStageGameMode::AWarriorStageGameMode()
 {
@@ -53,14 +59,14 @@ void AWarriorStageGameMode::SendStageEvent(EWarriorStageEvent InEvent)
 
 	if (!CurrentState)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Stage] Event %s ignored. State machine is not started."), *UEnum::GetValueAsString(InEvent));
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Event %s ignored. State machine is not started."), *UEnum::GetValueAsString(InEvent));
 		return;
 	}
 
 	const EWarriorStageState NextState = CurrentState->HandleEvent(InEvent);
 	if (NextState == EWarriorStageState::None)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("[Stage] Event %s ignored in state %s"),
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Stage] Event %s ignored in state %s"),
 			*UEnum::GetValueAsString(InEvent),
 			*UEnum::GetValueAsString(CurrentState->GetStateType()));
 		return;
@@ -87,7 +93,7 @@ void AWarriorStageGameMode::RegisterStageFlowManager(AWarriorStageFlowManager* I
 	{
 		if (StageFlowManager.Get() != InFlowManager)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[Stage] %s is ignored. %s is already registered as the stage flow manager."),
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] %s is ignored. %s is already registered as the stage flow manager."),
 				*InFlowManager->GetName(),
 				*StageFlowManager->GetName());
 		}
@@ -102,7 +108,7 @@ void AWarriorStageGameMode::RegisterStageFlowManager(AWarriorStageFlowManager* I
 		StageGameState->SetWaveInfo(0, InFlowManager->GetTotalWaveCount(), false);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[Stage] Flow manager %s registered. Total waves: %d"),
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Flow manager %s registered. Total waves: %d"),
 		*InFlowManager->GetName(),
 		InFlowManager->GetTotalWaveCount());
 
@@ -124,7 +130,7 @@ void AWarriorStageGameMode::StartNextWave()
 
 	if (!FlowManager || !FlowManager->StartWave(CurrentWaveIndex))
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Stage] Wave %d could not start. Skipping it."), CurrentWaveIndex + 1);
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] Wave %d could not start. Skipping it."), CurrentWaveIndex + 1);
 
 		//InProgress의 OnEnter 안(상태 변경 중)이라 큐에 들어가고, 변경이 끝난 뒤 WaveCleared로 넘어간다.
 		SendStageEvent(EWarriorStageEvent::AllEnemiesDead);
@@ -186,7 +192,7 @@ void AWarriorStageGameMode::ChangeState(EWarriorStageState InNewState)
 	UWarriorStageStateBase* NextState = States.FindRef(InNewState);
 	if (!NextState)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Stage] No state object for %s"), *UEnum::GetValueAsString(InNewState));
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] No state object for %s"), *UEnum::GetValueAsString(InNewState));
 		return;
 	}
 
@@ -203,6 +209,12 @@ void AWarriorStageGameMode::ChangeState(EWarriorStageState InNewState)
 
 	const bool bUsesTimer = CurrentState->UsesTimer();
 	const float Duration = bUsesTimer ? CurrentState->GetDuration() : 0.f;
+
+	//결과 화면이 상태 변화 알림을 받을 때 결과가 이미 있어야 하므로, 끝 상태는 상태를 바꾸기 전에 결과부터 확정한다.
+	if (InNewState == EWarriorStageState::StageCleared || InNewState == EWarriorStageState::StageFailed)
+	{
+		FinishRun(InNewState == EWarriorStageState::StageCleared);
+	}
 
 	if (AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>())
 	{
@@ -240,12 +252,13 @@ void AWarriorStageGameMode::TryFinishInitialize()
 
 	if (!StageFlowManager.IsValid() || !bPlayerSpawned)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[Stage] Waiting for initialize. FlowManager: %s, Player pawn: %s"),
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Waiting for initialize. FlowManager: %s, Player pawn: %s"),
 			StageFlowManager.IsValid() ? TEXT("ready") : TEXT("missing"),
 			bPlayerSpawned ? TEXT("ready") : TEXT("missing"));
 		return;
 	}
 
+	BeginRun();
 	SendStageEvent(EWarriorStageEvent::StageReady);
 }
 
@@ -264,3 +277,84 @@ void AWarriorStageGameMode::ProcessPendingEvents()
 		SendStageEvent(PendingEvent);
 	}
 }
+
+
+void AWarriorStageGameMode::ResetStageUpgrades()
+{
+	if (!GameState)
+	{
+		return;
+	}
+	for (APlayerState* PS : GameState->PlayerArray)
+	{
+		if (const AWarriorPlayerState* WarriorPS = Cast<AWarriorPlayerState>(PS))
+		{
+			if (UStageUpgradeComponent* UpgradeComp = WarriorPS->GetStageUpgradeComponent())
+			{
+				UpgradeComp->ResetAll();
+			}
+		}
+	}
+}
+
+void AWarriorStageGameMode::BeginRun()
+{
+	//지금은 여기서 RunId를 만든다. GameInstance가 들어오면 그쪽의 한 판 시작 함수에서 발급받고,
+	//서버 연동 뒤에는 서버가 발급한 값을 쓴다. 호출 위치는 그대로다.
+	RunId = FGuid::NewGuid();
+	RunStartRealTime = GetWorld()->GetRealTimeSeconds();
+	bRunFinished = false;
+
+	if (AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>())
+	{
+		StageGameState->SetRunId(RunId);
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Run started. RunId %s, Stage %s, Difficulty %d"),
+		*RunId.ToString(EGuidFormats::DigitsWithHyphens),
+		*GetResolvedStageId().ToString(),
+		Difficulty);
+}
+
+void AWarriorStageGameMode::FinishRun(bool bInCleared)
+{
+	if (bRunFinished)
+	{
+		return;
+	}
+	bRunFinished = true;
+
+	//EarnedGold·KillCount는 결과 통계 쪽에서 채운다.
+	FWarriorStageResult Result;
+	Result.RunId = RunId;
+	Result.StageId = GetResolvedStageId();
+	Result.Difficulty = Difficulty;
+	Result.bCleared = bInCleared;
+	Result.PlayTimeSeconds = static_cast<float>(GetWorld()->GetRealTimeSeconds() - RunStartRealTime);
+
+	AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>();
+	if (StageGameState)
+	{
+		Result.ReachedWave = StageGameState->GetWaveNumber();
+		Result.TotalWaveCount = StageGameState->GetTotalWaveCount();
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Run finished. RunId %s, %s, Wave %d/%d, PlayTime %.1f s"),
+		*Result.RunId.ToString(EGuidFormats::DigitsWithHyphens),
+		Result.bCleared ? TEXT("Cleared") : TEXT("Failed"),
+		Result.ReachedWave,
+		Result.TotalWaveCount,
+		Result.PlayTimeSeconds);
+
+	//GameInstance 연결 지점: 결과 기록과 보상 계산은 여기서 같은 Result를 넘기면 된다.
+	if (StageGameState)
+	{
+		StageGameState->SetStageResult(Result);
+	}
+}
+
+FName AWarriorStageGameMode::GetResolvedStageId() const
+{
+	return StageId.IsNone() ? FName(*UGameplayStatics::GetCurrentLevelName(this)) : StageId;
+}
+
