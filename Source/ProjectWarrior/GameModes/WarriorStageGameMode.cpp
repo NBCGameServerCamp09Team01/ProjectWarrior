@@ -11,10 +11,14 @@
 #include "ProjectWarrior/Stage/States/WarriorStageState_Resting.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_StageCleared.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_StageFailed.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/Components/Upgrade/StageUpgradeComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "TimerManager.h"
+
+
 
 AWarriorStageGameMode::AWarriorStageGameMode()
 {
@@ -274,6 +278,25 @@ void AWarriorStageGameMode::ProcessPendingEvents()
 	}
 }
 
+
+void AWarriorStageGameMode::ResetStageUpgrades()
+{
+	if (!GameState)
+	{
+		return;
+	}
+	for (APlayerState* PS : GameState->PlayerArray)
+	{
+		if (const AWarriorPlayerState* WarriorPS = Cast<AWarriorPlayerState>(PS))
+		{
+			if (UStageUpgradeComponent* UpgradeComp = WarriorPS->GetStageUpgradeComponent())
+			{
+				UpgradeComp->ResetAll();
+			}
+		}
+	}
+}
+
 void AWarriorStageGameMode::BeginRun()
 {
 	//지금은 여기서 RunId를 만든다. GameInstance가 들어오면 그쪽의 한 판 시작 함수에서 발급받고,
@@ -334,3 +357,4 @@ FName AWarriorStageGameMode::GetResolvedStageId() const
 {
 	return StageId.IsNone() ? FName(*UGameplayStatics::GetCurrentLevelName(this)) : StageId;
 }
+

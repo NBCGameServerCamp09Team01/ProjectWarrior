@@ -55,6 +55,9 @@ public:
 	void StopAllWaves();
 	//~ End 상태 객체 전용
 
+	// Stage종료 후 StageUpgrade 원상복구.
+	void ResetStageUpgrades();
+
 protected:
 	//~ Begin AActor Interface.
 	virtual void BeginPlay() override;

@@ -110,3 +110,43 @@ void UWarriorAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCal
 		}
 	}
 }
+
+
+
+void UWarriorAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	// 최대치가 줄어든 경우(강화 리셋 등) 현재값이 넘치지 않게.
+	// SetCurrent* 호출이 PostAttributeChange(Current*)를 다시 부르므로 UI도 거기서 갱신된다.
+	if (Attribute == GetMaxHealthAttribute() && GetCurrentHealth() > NewValue)
+	{
+		SetCurrentHealth(NewValue);
+	}
+	else if (Attribute == GetMaxStaminaAttribute() && GetCurrentStamina() > NewValue)
+	{
+		SetCurrentStamina(NewValue);
+	}
+
+	UPawnUIComponent* PawnUIComponent = FindPawnUIComponent();
+	if (!PawnUIComponent)
+	{
+		return;  // 초기화 중(아바타/UI 컴포넌트 준비 전)에는 건너뛴다
+	}
+
+	if ((Attribute == GetCurrentHealthAttribute() || Attribute == GetMaxHealthAttribute()) && GetMaxHealth() > 0.f)
+	{
+		PawnUIComponent->OnCurrentHealthChanged.Broadcast(GetCurrentHealth() / GetMaxHealth());
+	}
+	else if ((Attribute == GetCurrentStaminaAttribute() || Attribute == GetMaxStaminaAttribute()) && GetMaxStamina() > 0.f)
+	{
+		PawnUIComponent->OnCurrentStaminaChanged.Broadcast(GetCurrentStamina() / GetMaxStamina());
+	}
+}
+
+UPawnUIComponent* UWarriorAttributeSet::FindPawnUIComponent() const
+{
+	const UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
+	const IPawnUIInterface* UIInterface = ASC ? Cast<IPawnUIInterface>(ASC->GetAvatarActor()) : nullptr;
+	return UIInterface ? UIInterface->GetPawnUIComponent() : nullptr;
+}

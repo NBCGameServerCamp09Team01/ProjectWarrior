@@ -33,6 +33,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool UseItem(UDataAsset_Item* InItem);
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory", meta = (ClampMin = "1"))
+	int32 MaxSlotCount = 8;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 GetMaxSlotCount() const { return MaxSlotCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool IsFull() const { return Slots.Num() >= MaxSlotCount; }
+
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	int32 GetItemCount(const UDataAsset_Item* InItem) const;
 
