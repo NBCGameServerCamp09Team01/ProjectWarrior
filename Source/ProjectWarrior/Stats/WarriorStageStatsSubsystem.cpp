@@ -83,6 +83,7 @@ void UWarriorStageStatsSubsystem::Deinitialize()
 		GameState->OnWaveChanged.RemoveDynamic(this, &ThisClass::HandleWaveChanged);
 	}
 	StageGameState.Reset();
+	UnwatchPlayerInventory();
 
 	Super::Deinitialize();
 }
@@ -142,6 +143,7 @@ void UWarriorStageStatsSubsystem::BeginStageRecord(AWarriorStageGameState* InSta
 	StageGameState = InStageGameState;
 	InStageGameState->OnStageStateChanged.AddUniqueDynamic(this, &ThisClass::HandleStageStateChanged);
 	InStageGameState->OnWaveChanged.AddUniqueDynamic(this, &ThisClass::HandleWaveChanged);
+	TryWatchPlayerInventory();
 
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Stats] Stage record started: %s (run %s)"), *Record.StageId.ToString(), *Record.RunId.ToString());
 }
@@ -282,6 +284,12 @@ void UWarriorStageStatsSubsystem::HandleStageStateChanged(const EWarriorStageSta
 
 	AccumulateStateTime();
 	CurrentState = NewState;
+
+	// 스테이지 시작 시점에는 플레이어가 아직 없을 수 있어서, 상태가 바뀔 때마다 인벤토리 구독을 다시 시도한다.
+	if (!WatchedInventory.IsValid())
+	{
+		TryWatchPlayerInventory();
+	}
 
 	switch (NewState)
 	{
@@ -660,4 +668,43 @@ void UWarriorStageStatsSubsystem::HandleStat(const FGameplayTag& InStatTag, cons
 	}
 
 	Record.Stats.AddExtra(InStatTag, InValue, InDimensionKey);
+}
+
+bool UWarriorStageStatsSubsystem::TryWatchPlayerInventory()
+{
+	UPlayerInventoryComponent* Inventory = FindPlayerInventory();
+	if (!Inventory)
+	{
+		return false;
+	}
+	if (WatchedInventory.Get() == Inventory)
+	{
+		return true;
+	}
+
+	UnwatchPlayerInventory();
+	WatchedInventory = Inventory;
+	LastKnownGold = Inventory->GetGold();
+	Inventory->OnGoldChanged.AddUniqueDynamic(this, &ThisClass::HandlePlayerGoldChanged);
+	return true;
+}
+
+void UWarriorStageStatsSubsystem::UnwatchPlayerInventory()
+{
+	if (UPlayerInventoryComponent* Inventory = WatchedInventory.Get())
+	{
+		Inventory->OnGoldChanged.RemoveDynamic(this, &ThisClass::HandlePlayerGoldChanged);
+	}
+	WatchedInventory.Reset();
+}
+
+void UWarriorStageStatsSubsystem::HandlePlayerGoldChanged(const int32 NewGold)
+{
+	const int32 Delta = NewGold - LastKnownGold;
+	LastKnownGold = NewGold;
+
+	if (Delta < 0)
+	{
+		HandleGoldSpent(-Delta);
+	}
 }

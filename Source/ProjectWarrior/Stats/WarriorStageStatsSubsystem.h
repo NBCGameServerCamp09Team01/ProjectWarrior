@@ -134,12 +134,22 @@ private:
 	UFUNCTION()
 	void HandleWaveChanged(int32 WaveNumber, int32 TotalWaveCount, bool bBossWave);
 
+	/** 플레이어 인벤토리 골드 변화를 구독한다. PlayerState가 아직 없으면 false (상태가 바뀔 때마다 다시 시도) */
+	bool TryWatchPlayerInventory();
+	void UnwatchPlayerInventory();
+
+	/** 골드가 줄어든 만큼을 골드 사용량으로 기록한다. 늘어난 쪽은 발생원(스포너 등)이 따로 기록하므로 무시 */
+	UFUNCTION()
+	void HandlePlayerGoldChanged(int32 NewGold);
+
 	static bool IsPlayState(EWarriorStageState InState);
 
 	UPROPERTY(Transient)
 	FWarriorStageRecord Record;
 
 	TWeakObjectPtr<AWarriorStageGameState> StageGameState;
+	TWeakObjectPtr<UPlayerInventoryComponent> WatchedInventory;
+	int32 LastKnownGold = 0;
 
 	EWarriorStageState CurrentState = EWarriorStageState::None;
 	double StageStartWorldTime = 0.0;
