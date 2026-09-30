@@ -115,17 +115,29 @@ AWarriorProjectileBase* UAIGameplayAbility::SpawnUnlaunchedProjectile(TSubclassO
 	return GetWorld()->SpawnActor<AWarriorProjectileBase>(ProjectileClass, SpawnTransform, SpawnParams);
 }
 
+AActor* UAIGameplayAbility::ResolveProjectileTarget(AActor* TargetActor)
+{
+	if (TargetActor)
+	{
+		return TargetActor;
+	}
+
+	if (AWarriorAICharacter* AICharacter = GetAICharacterFromActorInfo())
+	{
+		if (AAIController* AIController = Cast<AAIController>(AICharacter->GetController()))
+		{
+			return AIController->GetFocusActor();
+		}
+	}
+
+	return nullptr;
+}
+
 FVector UAIGameplayAbility::ComputeProjectileLaunchDirection(const FVector& LaunchLocation, AActor* TargetActor, float ProjectileSpeed, bool bPredictTargetMovement)
 {
 	AWarriorAICharacter* AICharacter = GetAICharacterFromActorInfo();
 
-	if (!TargetActor && AICharacter)
-	{
-		if (AAIController* AIController = Cast<AAIController>(AICharacter->GetController()))
-		{
-			TargetActor = AIController->GetFocusActor();
-		}
-	}
+	TargetActor = ResolveProjectileTarget(TargetActor);
 
 	if (!TargetActor)
 	{

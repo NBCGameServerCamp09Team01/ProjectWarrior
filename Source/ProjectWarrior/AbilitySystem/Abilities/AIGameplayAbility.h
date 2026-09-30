@@ -39,6 +39,9 @@ protected:
     // 대기 상태의 투사체를 스폰만 함 (발사는 AWarriorProjectileBase::LaunchProjectile)
     AWarriorProjectileBase* SpawnUnlaunchedProjectile(TSubclassOf<AWarriorProjectileBase> ProjectileClass, const FTransform& SpawnTransform);
 
+    // TargetActor가 비어 있으면 AI 컨트롤러의 Focus 액터 반환
+    AActor* ResolveProjectileTarget(AActor* TargetActor);
+
     // TargetActor가 비어 있으면 AI 컨트롤러의 Focus 액터 사용. 대상이 없으면 캐릭터 정면
     FVector ComputeProjectileLaunchDirection(const FVector& LaunchLocation, AActor* TargetActor, float ProjectileSpeed, bool bPredictTargetMovement);
 
