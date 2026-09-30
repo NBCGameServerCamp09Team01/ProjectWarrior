@@ -2,10 +2,21 @@
 
 
 #include "WarriorStagePlayerController.h"
+#include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
+#include "ProjectWarrior/Widgets/WarriorStageHUDWidget.h"
+#include "ProjectWarrior/Widgets/WarriorStageResultWidget.h"
+
+namespace
+{
+	//뷰포트에 쌓는 순서. 인벤토리 휠(AWarriorPlayerCharacter)이 10을 쓴다.
+	const int32 StageHUDZOrder = 0;
+	const int32 StageResultZOrder = 20;
+}
 
 void AWarriorStagePlayerController::BeginPlay()
 {
@@ -35,6 +46,20 @@ void AWarriorStagePlayerController::BeginPlay()
 	//GameMode와 이 컨트롤러의 BeginPlay 순서는 보장되지 않아, 구독 전에 상태가 이미 바뀌었을 수 있다.
 	//현재 상태를 한 번 직접 적용하고, 이전 레벨의 입력 설정이 뷰포트에 남아 있을 수 있으므로 입력 모드도 강제로 맞춘다.
 	ApplyStatePermission(StageGameState->GetStageState(), true);
+
+	//HUD는 스스로 GameState를 구독해 값을 채우고, 초기화 중과 결과 상태에서는 스스로 숨는다.
+	if (HUDWidgetClass)
+	{
+		HUDWidget = CreateWidget<UWarriorStageHUDWidget>(this, HUDWidgetClass);
+		if (HUDWidget)
+		{
+			HUDWidget->AddToViewport(StageHUDZOrder);
+		}
+	}
+	else
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] HUDWidgetClass is not set. Stage HUD is not shown."));
+	}
 }
 
 void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -52,12 +77,40 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	Super::EndPlay(EndPlayReason);
 }
 
-void AWarriorStagePlayerController::HandleStageStateChanged(EWarriorStageState InNewState, EWarriorStageState InOldState)
+void AWarriorStagePlayerController::RestartStage()
 {
-	ApplyStatePermission(InNewState);
+	//PIE에서는 패키지 이름에 UEDPIE 접두사가 붙으므로 떼고 연다.
+	const FString LevelPath = UWorld::RemovePIEPrefix(GetWorld()->GetOutermost()->GetName());
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Restart stage %s"), *LevelPath);
+
+	//입력 모드는 새로 만들어지는 컨트롤러가 BeginPlay에서 게임 전용으로 맞춘다.
+	UGameplayStatics::OpenLevel(this, FName(*LevelPath));
 }
 
-void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InState, bool bForceInputMode)
+void AWarriorStagePlayerController::ReturnToMainMenu()
+{
+	if (MainMenuLevel.IsNull())
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] MainMenuLevel is not set."));
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Open main menu level %s"), *MainMenuLevel.ToString());
+
+	UGameplayStatics::OpenLevelBySoftObjectPtr(this, MainMenuLevel);
+}
+
+void AWarriorStagePlayerController::HandleStageStateChanged(EWarriorStageState InNewState, EWarriorStageState InOldState)
+{
+	const bool bResultState = InNewState == EWarriorStageState::StageCleared || InNewState == EWarriorStageState::StageFailed;
+
+	//결과 위젯을 먼저 띄워야 UI 입력 모드로 바꿀 때 포커스를 줄 수 있다.
+	UUserWidget* FocusWidget = bResultState ? ShowResult(InNewState) : nullptr;
+	ApplyStatePermission(InNewState, false, FocusWidget);
+}
+
+void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InState, bool bForceInputMode, UUserWidget* InFocusWidget)
 {
 	const AWarriorStageGameState* StageGameState = BoundGameState.Get();
 	if (!StageGameState)
@@ -80,7 +133,7 @@ void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InSt
 
 		if (Permission.bUIInputMode)
 		{
-			UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this);
+			UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, InFocusWidget);
 		}
 		else
 		{
@@ -95,4 +148,44 @@ void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InSt
 		*UEnum::GetValueAsString(InState),
 		Permission.bCanMove ? TEXT("allowed") : TEXT("locked"),
 		Permission.bUIInputMode ? TEXT("UI") : TEXT("Game"));
+}
+
+UWarriorStageResultWidget* AWarriorStagePlayerController::ShowResult(EWarriorStageState InState)
+{
+	if (!ResultWidgetClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] ResultWidgetClass is not set. Result screen is not shown."));
+		return nullptr;
+	}
+
+	if (!ResultWidget)
+	{
+		ResultWidget = CreateWidget<UWarriorStageResultWidget>(this, ResultWidgetClass);
+		if (!ResultWidget)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] Failed to create result widget."));
+			return nullptr;
+		}
+
+		ResultWidget->AddToViewport(StageResultZOrder);
+	}
+
+	//EarnedGold·KillCount는 수집 경로가 정해지면 채운다.
+	FWarriorStageResult Result;
+	Result.bCleared = InState == EWarriorStageState::StageCleared;
+	Result.PlayTimeSeconds = static_cast<float>(GetWorld()->GetRealTimeSeconds());
+	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
+	{
+		Result.ReachedWave = StageGameState->GetWaveNumber();
+		Result.TotalWaveCount = StageGameState->GetTotalWaveCount();
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Show result. %s, Wave %d/%d, PlayTime %.1f s"),
+		Result.bCleared ? TEXT("Cleared") : TEXT("Failed"),
+		Result.ReachedWave,
+		Result.TotalWaveCount,
+		Result.PlayTimeSeconds);
+
+	ResultWidget->SetResult(Result);
+	return ResultWidget;
 }
