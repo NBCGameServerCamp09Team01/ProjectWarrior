@@ -8,6 +8,7 @@
 
 class AWarriorAICharacter;
 class UAICombatComponent;
+class AWarriorProjectileBase;
 
 /**
  * 
@@ -26,6 +27,10 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Warrior|Ability")
     FGameplayEffectSpecHandle MakeAIDamageEffectSpecHandle(TSubclassOf<UGameplayEffect> EffectClass, const FScalableFloat& InDamageScalableFloat);
+
+    // 장착 무기의 소켓에서 대상 방향으로 투사체를 스폰. TargetActor가 비어 있으면 AI 컨트롤러의 Focus 액터를 사용
+    UFUNCTION(BlueprintCallable, Category = "Warrior|Ability", meta = (DeterminesOutputType = "ProjectileClass"))
+    AWarriorProjectileBase* SpawnProjectileFromEquippedWeapon(TSubclassOf<AWarriorProjectileBase> ProjectileClass, FName SpawnSocketName, AActor* TargetActor, const FGameplayEffectSpecHandle& InDamageSpecHandle, bool bPredictTargetMovement = true);
 
 private:
     TWeakObjectPtr<AWarriorAICharacter> CachedAICharacter;

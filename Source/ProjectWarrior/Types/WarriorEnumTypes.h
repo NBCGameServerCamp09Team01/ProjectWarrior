@@ -20,3 +20,12 @@ enum class EWarriorSuccessType : uint8
     Successful,
     Failed
 };
+
+UENUM(BlueprintType)
+enum class EWarriorHitResultType : uint8
+{
+    Hit,
+    Blocked,
+    Dodged,
+    Invalid
+};

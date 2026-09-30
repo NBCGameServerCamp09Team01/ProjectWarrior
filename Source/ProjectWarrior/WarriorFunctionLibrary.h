@@ -55,4 +55,8 @@ public:
     UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
     static bool IsTargetPawnHostile(APawn* QueryPawn, APawn* TargetPawn);
 
+    // 근접/투사체 공통 피격 판정. InDamageCauser가 있으면 막기 방향 판정에 공격자 대신 사용 (예: 화살)
+    UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
+    static EWarriorHitResultType EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser = nullptr, bool bIsAttackUnblockable = false);
+
 };
