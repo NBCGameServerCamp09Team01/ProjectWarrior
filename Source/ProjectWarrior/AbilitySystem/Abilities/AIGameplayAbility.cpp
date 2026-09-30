@@ -51,6 +51,53 @@ FGameplayEffectSpecHandle UAIGameplayAbility::MakeAIDamageEffectSpecHandle(TSubc
 
 AWarriorProjectileBase* UAIGameplayAbility::SpawnProjectileFromEquippedWeapon(TSubclassOf<AWarriorProjectileBase> ProjectileClass, FName SpawnSocketName, AActor* TargetActor, const FGameplayEffectSpecHandle& InDamageSpecHandle, bool bPredictTargetMovement)
 {
+	USceneComponent* SocketParent = GetProjectileSocketParent(false);
+
+	if (!SocketParent)
+	{
+		return nullptr;
+	}
+
+	const FVector SpawnLocation = SocketParent->DoesSocketExist(SpawnSocketName)
+		? SocketParent->GetSocketLocation(SpawnSocketName)
+		: GetAICharacterFromActorInfo()->GetActorLocation() + GetAICharacterFromActorInfo()->GetActorForwardVector() * 100.f;
+
+	AWarriorProjectileBase* Projectile = SpawnUnlaunchedProjectile(ProjectileClass, FTransform(SpawnLocation));
+
+	if (Projectile)
+	{
+		const FVector LaunchDirection = ComputeProjectileLaunchDirection(SpawnLocation, TargetActor, Projectile->GetProjectileMovement()->InitialSpeed, bPredictTargetMovement);
+		Projectile->LaunchProjectile(LaunchDirection, InDamageSpecHandle);
+	}
+
+	return Projectile;
+}
+
+USceneComponent* UAIGameplayAbility::GetProjectileSocketParent(bool bUseCharacterMesh)
+{
+	AWarriorAICharacter* AICharacter = GetAICharacterFromActorInfo();
+
+	if (!AICharacter)
+	{
+		return nullptr;
+	}
+
+	if (!bUseCharacterMesh)
+	{
+		if (AWeaponBase* EquippedWeapon = GetAICombatComponentFromActorInfo()->GetCharacterCurrentEquippedWeapon())
+		{
+			if (UMeshComponent* WeaponMesh = EquippedWeapon->GetWeaponMesh())
+			{
+				return WeaponMesh;
+			}
+		}
+	}
+
+	return AICharacter->GetMesh();
+}
+
+AWarriorProjectileBase* UAIGameplayAbility::SpawnUnlaunchedProjectile(TSubclassOf<AWarriorProjectileBase> ProjectileClass, const FTransform& SpawnTransform)
+{
 	check(ProjectileClass);
 
 	AWarriorAICharacter* AICharacter = GetAICharacterFromActorInfo();
@@ -60,19 +107,19 @@ AWarriorProjectileBase* UAIGameplayAbility::SpawnProjectileFromEquippedWeapon(TS
 		return nullptr;
 	}
 
-	FVector SpawnLocation = AICharacter->GetActorLocation() + AICharacter->GetActorForwardVector() * 100.f;
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = AICharacter;
+	SpawnParams.Instigator = AICharacter;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	if (AWeaponBase* EquippedWeapon = GetAICombatComponentFromActorInfo()->GetCharacterCurrentEquippedWeapon())
-	{
-		UMeshComponent* WeaponMesh = EquippedWeapon->GetWeaponMesh();
+	return GetWorld()->SpawnActor<AWarriorProjectileBase>(ProjectileClass, SpawnTransform, SpawnParams);
+}
 
-		if (WeaponMesh && WeaponMesh->DoesSocketExist(SpawnSocketName))
-		{
-			SpawnLocation = WeaponMesh->GetSocketLocation(SpawnSocketName);
-		}
-	}
+FVector UAIGameplayAbility::ComputeProjectileLaunchDirection(const FVector& LaunchLocation, AActor* TargetActor, float ProjectileSpeed, bool bPredictTargetMovement)
+{
+	AWarriorAICharacter* AICharacter = GetAICharacterFromActorInfo();
 
-	if (!TargetActor)
+	if (!TargetActor && AICharacter)
 	{
 		if (AAIController* AIController = Cast<AAIController>(AICharacter->GetController()))
 		{
@@ -80,36 +127,18 @@ AWarriorProjectileBase* UAIGameplayAbility::SpawnProjectileFromEquippedWeapon(TS
 		}
 	}
 
-	FVector AimLocation = SpawnLocation + AICharacter->GetActorForwardVector() * 1000.f;
-
-	if (TargetActor)
+	if (!TargetActor)
 	{
-		AimLocation = TargetActor->GetActorLocation();
-
-		const float ProjectileSpeed = ProjectileClass->GetDefaultObject<AWarriorProjectileBase>()->GetProjectileMovement()->InitialSpeed;
-
-		if (bPredictTargetMovement && ProjectileSpeed > 0.f)
-		{
-			const float TravelTime = FVector::Dist(SpawnLocation, AimLocation) / ProjectileSpeed;
-			AimLocation += TargetActor->GetVelocity() * TravelTime;
-		}
+		return AICharacter ? AICharacter->GetActorForwardVector() : FVector::ForwardVector;
 	}
 
-	const FTransform SpawnTransform((AimLocation - SpawnLocation).Rotation(), SpawnLocation);
+	FVector AimLocation = TargetActor->GetActorLocation();
 
-	AWarriorProjectileBase* Projectile = GetWorld()->SpawnActorDeferred<AWarriorProjectileBase>(
-		ProjectileClass,
-		SpawnTransform,
-		AICharacter,
-		AICharacter,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn
-	);
-
-	if (Projectile)
+	if (bPredictTargetMovement && ProjectileSpeed > 0.f)
 	{
-		Projectile->ProjectileDamageEffectSpecHandle = InDamageSpecHandle;
-		Projectile->FinishSpawning(SpawnTransform);
+		const float TravelTime = FVector::Dist(LaunchLocation, AimLocation) / ProjectileSpeed;
+		AimLocation += TargetActor->GetVelocity() * TravelTime;
 	}
 
-	return Projectile;
+	return (AimLocation - LaunchLocation).GetSafeNormal();
 }

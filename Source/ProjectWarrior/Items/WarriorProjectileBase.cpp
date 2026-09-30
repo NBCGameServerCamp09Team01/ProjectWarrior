@@ -2,7 +2,7 @@
 
 
 #include "WarriorProjectileBase.h"
-#include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -12,70 +12,140 @@
 
 AWarriorProjectileBase::AWarriorProjectileBase()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// 발사 후에만 틱 (환경 충돌 트레이스)
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
-	InitialLifeSpan = 5.f;
-
-	ProjectileCollision = CreateDefaultSubobject<USphereComponent>(TEXT("ProjectileCollision"));
-	SetRootComponent(ProjectileCollision);
-	ProjectileCollision->InitSphereRadius(5.f);
-	ProjectileCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	ProjectileCollision->SetCollisionObjectType(ECC_WorldDynamic);
-	ProjectileCollision->SetCollisionResponseToAllChannels(ECR_Block);
-	ProjectileCollision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-	ProjectileCollision->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-	ProjectileCollision->SetGenerateOverlapEvents(true);
-	ProjectileCollision->OnComponentHit.AddUniqueDynamic(this, &ThisClass::OnProjectileHit);
-	ProjectileCollision->OnComponentBeginOverlap.AddUniqueDynamic(this, &ThisClass::OnProjectileBeginOverlap);
+	ProjectileRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ProjectileRoot"));
+	SetRootComponent(ProjectileRoot);
 
 	ProjectileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ProjectileMesh"));
 	ProjectileMesh->SetupAttachment(RootComponent);
 	ProjectileMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	ProjectileCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("ProjectileCollision"));
+	ProjectileCollision->SetupAttachment(RootComponent);
+	ProjectileCollision->SetBoxExtent(FVector(25.f, 3.f, 3.f));
+	// 발사 전(대기 상태)에는 충돌하지 않음. LaunchProjectile에서 켬
+	ProjectileCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ProjectileCollision->SetCollisionObjectType(ECC_WorldDynamic);
+	ProjectileCollision->SetCollisionResponseToAllChannels(ECR_Overlap);
+	ProjectileCollision->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	ProjectileCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	ProjectileCollision->SetGenerateOverlapEvents(true);
+	ProjectileCollision->OnComponentBeginOverlap.AddUniqueDynamic(this, &ThisClass::OnProjectileBeginOverlap);
 
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	ProjectileMovement->InitialSpeed = 3000.f;
 	ProjectileMovement->MaxSpeed = 3000.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->ProjectileGravityScale = 0.f;
+	ProjectileMovement->bAutoActivate = false;
 }
 
-void AWarriorProjectileBase::BeginPlay()
+void AWarriorProjectileBase::LaunchProjectile(const FVector& LaunchDirection, const FGameplayEffectSpecHandle& InDamageSpecHandle)
 {
-	Super::BeginPlay();
-
-	// 쏜 캐릭터와 그 캐릭터에 붙은 무기에는 충돌하지 않음
-	if (APawn* InstigatorPawn = GetInstigator())
+	if (bLaunched)
 	{
-		ProjectileCollision->IgnoreActorWhenMoving(InstigatorPawn, true);
-
-		TArray<AActor*> AttachedActors;
-		InstigatorPawn->GetAttachedActors(AttachedActors);
-
-		for (AActor* AttachedActor : AttachedActors)
-		{
-			ProjectileCollision->IgnoreActorWhenMoving(AttachedActor, true);
-		}
-	}
-}
-
-void AWarriorProjectileBase::OnProjectileHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
-{
-	if (APawn* HitPawn = Cast<APawn>(OtherActor))
-	{
-		HandleHitPawn(HitPawn, Hit.ImpactPoint);
 		return;
 	}
 
-	BP_OnProjectileImpact(OtherActor, Hit.ImpactPoint, EWarriorHitResultType::Invalid);
-	Destroy();
+	bLaunched = true;
+
+	if (InDamageSpecHandle.IsValid())
+	{
+		ProjectileDamageEffectSpecHandle = InDamageSpecHandle;
+	}
+
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+	const FVector Direction = LaunchDirection.IsNearlyZero() ? GetActorForwardVector() : LaunchDirection.GetSafeNormal();
+	SetActorRotation(Direction.Rotation());
+
+	LastTraceLocation = GetActorLocation();
+
+	ProjectileCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+	ProjectileMovement->SetUpdatedComponent(ProjectileRoot);
+	ProjectileMovement->Velocity = Direction * ProjectileMovement->InitialSpeed;
+	ProjectileMovement->Activate(true);
+
+	SetActorTickEnabled(true);
+	SetLifeSpan(LifeSpanAfterLaunch);
+}
+
+void AWarriorProjectileBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	const FVector CurrentLocation = GetActorLocation();
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WarriorProjectileTrace), false, this);
+
+	if (APawn* InstigatorPawn = GetInstigator())
+	{
+		QueryParams.AddIgnoredActor(InstigatorPawn);
+
+		TArray<AActor*> AttachedActors;
+		InstigatorPawn->GetAttachedActors(AttachedActors);
+		QueryParams.AddIgnoredActors(AttachedActors);
+	}
+
+	FHitResult Hit;
+
+	// 벽/바닥 등 환경은 Overlap 이벤트를 생성하지 않는 경우가 많아 이동 구간을 트레이스로 검사
+	if (GetWorld()->LineTraceSingleByChannel(Hit, LastTraceLocation, CurrentLocation, ECC_Visibility, QueryParams))
+	{
+		AActor* HitActor = Hit.GetActor();
+
+		if (!ShouldIgnoreActor(HitActor))
+		{
+			if (APawn* HitPawn = Cast<APawn>(HitActor))
+			{
+				HandleHitPawn(HitPawn, Hit.ImpactPoint);
+			}
+			else
+			{
+				BP_OnProjectileImpact(HitActor, Hit.ImpactPoint, EWarriorHitResultType::Invalid);
+				Destroy();
+				return;
+			}
+		}
+	}
+
+	LastTraceLocation = CurrentLocation;
 }
 
 void AWarriorProjectileBase::OnProjectileBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	if (!bLaunched || ShouldIgnoreActor(OtherActor))
+	{
+		return;
+	}
+
 	if (APawn* HitPawn = Cast<APawn>(OtherActor))
 	{
 		HandleHitPawn(HitPawn, bFromSweep ? FVector(SweepResult.ImpactPoint) : GetActorLocation());
 	}
+}
+
+bool AWarriorProjectileBase::ShouldIgnoreActor(AActor* OtherActor) const
+{
+	if (!OtherActor || OtherActor == this || OtherActor->IsA<AWarriorProjectileBase>())
+	{
+		return true;
+	}
+
+	APawn* InstigatorPawn = GetInstigator();
+
+	if (!InstigatorPawn)
+	{
+		return false;
+	}
+
+	return OtherActor == InstigatorPawn
+		|| OtherActor->GetOwner() == InstigatorPawn
+		|| OtherActor->GetAttachParentActor() == InstigatorPawn;
 }
 
 void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& ImpactLocation)

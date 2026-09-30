@@ -89,7 +89,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
-	UE_DEFINE_GAMEPLAY_TAG(AI_Event_FireProjectile, "AI.Event.FireProjectile");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Spawn, "AI.Event.Projectile.Spawn");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Fire, "AI.Event.Projectile.Fire");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Strafing, "AI.Status.Strafing");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_UnderAttack, "AI.Status.UnderAttack");
