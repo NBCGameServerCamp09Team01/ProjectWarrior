@@ -98,5 +98,6 @@ private:
 
 #if WITH_DEV_AUTOMATION_TESTS
 	friend class FWarriorWaveSpawnerTest;
+	friend class FWarriorWaveSpawnerDeathRewardTest;
 #endif
 };
