@@ -1,8 +1,11 @@
 #include "WarriorStageStatsSubsystem.h"
 
+#include "Abilities/GameplayAbility.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
+#include "ProjectWarrior/Characters/WarriorAICharacter.h"
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/GameModes/WarriorFrontGameMode.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameMode.h"
@@ -129,6 +132,7 @@ void UWarriorStageStatsSubsystem::BeginStageRecord(AWarriorStageGameState* InSta
 	CurrentState = InStageGameState->GetStageState();
 	CurrentWaveIndex = INDEX_NONE;
 	bPlayerHitThisWave = false;
+	ResetTracking();
 	bRecording = true;
 	bRecordSubmitted = false;
 
@@ -310,4 +314,285 @@ void UWarriorStageStatsSubsystem::HandleWaveChanged(const int32 WaveNumber, cons
 	}
 
 	OpenWave(WaveNumber, bBossWave);
+}
+
+//~ 기록 처리
+
+bool UWarriorStageStatsSubsystem::IsPlayerActor(const AActor* InActor)
+{
+	const APawn* Pawn = Cast<APawn>(InActor);
+	return Pawn && Pawn->IsPlayerControlled();
+}
+
+FName UWarriorStageStatsSubsystem::GetTypeName(const UObject* InObject)
+{
+	if (!InObject)
+	{
+		return NAME_None;
+	}
+
+	FString ClassName = InObject->GetClass()->GetName();
+	ClassName.RemoveFromEnd(TEXT("_C"));
+	return FName(*ClassName);
+}
+
+void UWarriorStageStatsSubsystem::ResetTracking()
+{
+	AttackSerials.Reset();
+	AttackTracks.Reset();
+	LastHits.Reset();
+	EnemySpawnTimes.Reset();
+}
+
+FWarriorAttackKey UWarriorStageStatsSubsystem::MakeAttackKey(const FGameplayEffectContextHandle& InContext) const
+{
+	const UGameplayAbility* Ability = InContext.GetAbilityInstance_NotReplicated();
+	if (!Ability)
+	{
+		Ability = InContext.GetAbility();
+	}
+
+	FWarriorAttackKey Key;
+	Key.Ability = FObjectKey(Ability);
+	const uint64* Serial = AttackSerials.Find(Key.Ability);
+	// 공격 시도 기록(RecordAttackAttempt)이 아직 연결되지 않았으면 같은 프레임의 타격을 한 공격으로 본다.
+	Key.Serial = Serial ? *Serial : (GFrameCounter | (1ull << 63));
+	return Key;
+}
+
+void UWarriorStageStatsSubsystem::HandleEnemySpawned(AActor* InEnemy)
+{
+	if (!IsRecording() || !InEnemy)
+	{
+		return;
+	}
+
+	++Record.FindOrAddEnemyType(GetTypeName(InEnemy)).Spawned;
+	EnemySpawnTimes.Add(InEnemy, GetStageTimeSeconds());
+}
+
+void UWarriorStageStatsSubsystem::HandleEnemyKilled(AActor* InEnemy, const FName InDeathType)
+{
+	if (!IsRecording() || !InEnemy)
+	{
+		return;
+	}
+
+	const FName EnemyType = GetTypeName(InEnemy);
+	FWarriorEnemyTypeStats& EnemyStats = Record.FindOrAddEnemyType(EnemyType);
+	++EnemyStats.Killed;
+	if (const float* SpawnTime = EnemySpawnTimes.Find(InEnemy))
+	{
+		EnemyStats.TotalTimeToKill += FMath::Max(0.0f, GetStageTimeSeconds() - *SpawnTime);
+	}
+
+	if (FWarriorWaveRecord* Wave = GetMutableCurrentWave())
+	{
+		++Wave->Kills;
+	}
+
+	// 막타가 플레이어였거나, 데미지 기록이 아직 연결되지 않아 알 수 없으면 플레이어 처치로 센다.
+	const FWarriorLastHit* LastHit = LastHits.Find(InEnemy);
+	if (!LastHit || LastHit->bByPlayer)
+	{
+		FWarriorAttackStats& Attack = Record.Stats.Attack;
+		++Attack.Kills;
+		++Attack.KillsByEnemyType.FindOrAdd(EnemyType);
+		if (!InDeathType.IsNone())
+		{
+			++Attack.KillsByDeathType.FindOrAdd(InDeathType);
+		}
+		if (LastHit)
+		{
+			FWarriorAttackTrack& Track = AttackTracks.FindOrAdd(LastHit->AttackKey);
+			++Track.Kills;
+			Attack.MaxKillsPerAttack = FMath::Max(Attack.MaxKillsPerAttack, Track.Kills);
+		}
+	}
+
+	LastHits.Remove(InEnemy);
+	EnemySpawnTimes.Remove(InEnemy);
+}
+
+void UWarriorStageStatsSubsystem::HandleDamage(const FGameplayEffectContextHandle& InContext, AActor* InTarget, const float InDamage, const float InOverkill, const bool bInFatal)
+{
+	if (!IsRecording() || !InTarget || (InDamage <= 0.0f && InOverkill <= 0.0f))
+	{
+		return;
+	}
+
+	AActor* Instigator = InContext.GetInstigator();
+	const bool bByPlayer = IsPlayerActor(Instigator);
+	const FName AbilityName = GetTypeName(InContext.GetAbility());
+
+	// 플레이어 → 적
+	if (Cast<AWarriorAICharacter>(InTarget))
+	{
+		const FWarriorAttackKey AttackKey = MakeAttackKey(InContext);
+		FWarriorLastHit& LastHit = LastHits.FindOrAdd(InTarget);
+		LastHit.AttackKey = AttackKey;
+		LastHit.AbilityName = AbilityName;
+		LastHit.bByPlayer = bByPlayer;
+
+		if (bByPlayer)
+		{
+			FWarriorAttackStats& Attack = Record.Stats.Attack;
+			++Attack.HitsDealt;
+			Attack.DamageDealt += InDamage;
+			Attack.MaxDamageDealt = FMath::Max(Attack.MaxDamageDealt, static_cast<double>(InDamage));
+			if (!AbilityName.IsNone())
+			{
+				Attack.DamageByAbility.FindOrAdd(AbilityName) += InDamage;
+			}
+			if (InOverkill > 0.0f)
+			{
+				Record.Stats.AddExtra(WarriorStatTags::Stat_Combat_Damage_Overkill, InOverkill, GetTypeName(InTarget));
+			}
+
+			FWarriorAttackTrack& Track = AttackTracks.FindOrAdd(AttackKey);
+			if (!Track.bLanded)
+			{
+				Track.bLanded = true;
+				++Attack.AttacksLanded;
+			}
+		}
+		return;
+	}
+
+	// 적(또는 환경) → 플레이어
+	if (IsPlayerActor(InTarget))
+	{
+		FWarriorDefenseStats& Defense = Record.Stats.Defense;
+		++Defense.HitsTaken;
+		Defense.DamageTaken += InDamage;
+		MarkPlayerHitThisWave();
+
+		const FName EnemyType = Cast<AWarriorAICharacter>(Instigator) ? GetTypeName(Instigator) : NAME_None;
+		if (!EnemyType.IsNone())
+		{
+			Defense.DamageTakenByEnemyType.FindOrAdd(EnemyType) += InDamage;
+			Record.FindOrAddEnemyType(EnemyType).DamageToPlayer += InDamage;
+		}
+
+		if (const AWarriorBaseCharacter* Character = Cast<AWarriorBaseCharacter>(InTarget))
+		{
+			const UWarriorAttributeSet* AttributeSet = Character->GetWarriorAttributeSet();
+			if (AttributeSet && AttributeSet->GetMaxHealth() > 0.0f)
+			{
+				Record.Stats.AddExtra(WarriorStatTags::Stat_Defense_Health_MinRatio, AttributeSet->GetCurrentHealth() / AttributeSet->GetMaxHealth());
+			}
+		}
+
+		if (bInFatal)
+		{
+			++Defense.Deaths;
+			FWarriorDeathRecord& Death = Record.Deaths.AddDefaulted_GetRef();
+			Death.KillerEnemyType = EnemyType;
+			Death.KillerAbility = AbilityName;
+			Death.WaveNumber = GetCurrentWaveNumber();
+			Death.TimeSeconds = GetStageTimeSeconds();
+			if (!EnemyType.IsNone())
+			{
+				++Record.FindOrAddEnemyType(EnemyType).PlayerKills;
+			}
+		}
+	}
+}
+
+void UWarriorStageStatsSubsystem::HandleBalanceDamage(const FGameplayEffectContextHandle& InContext, AActor* InTarget, const float InAmount)
+{
+	if (!IsRecording() || InAmount <= 0.0f || !Cast<AWarriorAICharacter>(InTarget) || !IsPlayerActor(InContext.GetInstigator()))
+	{
+		return;
+	}
+
+	Record.Stats.AddExtra(WarriorStatTags::Stat_Combat_Balance_Dealt, InAmount, GetTypeName(InTarget));
+}
+
+void UWarriorStageStatsSubsystem::HandleHeal(const FGameplayEffectContextHandle& InContext, AActor* InTarget, const float InHealed, const float InOverheal)
+{
+	if (!IsRecording() || !IsPlayerActor(InTarget))
+	{
+		return;
+	}
+
+	Record.Stats.Heal.HealAmount += FMath::Max(0.0f, InHealed);
+	Record.Stats.Heal.Overheal += FMath::Max(0.0f, InOverheal);
+}
+
+void UWarriorStageStatsSubsystem::HandleAttackAttempt(const UGameplayAbility* InAbility)
+{
+	if (!IsRecording() || !InAbility || !IsPlayerActor(InAbility->GetAvatarActorFromActorInfo()))
+	{
+		return;
+	}
+
+	++Record.Stats.Attack.AttackAttempts;
+	// 같은 어빌리티 인스턴스가 다시 발동되어도 다른 공격으로 구분되도록 번호를 올린다.
+	++AttackSerials.FindOrAdd(FObjectKey(InAbility));
+}
+
+void UWarriorStageStatsSubsystem::HandleGoldEarned(const int32 InAmount, const FName InSource)
+{
+	if (!IsRecording() || InAmount <= 0)
+	{
+		return;
+	}
+
+	Record.Stats.Economy.GoldEarned += InAmount;
+	Record.Stats.Economy.GoldEarnedBySource.FindOrAdd(InSource.IsNone() ? FName(TEXT("Unknown")) : InSource) += InAmount;
+}
+
+void UWarriorStageStatsSubsystem::HandleGoldSpent(const int32 InAmount)
+{
+	if (!IsRecording() || InAmount <= 0)
+	{
+		return;
+	}
+
+	Record.Stats.Economy.GoldSpent += InAmount;
+}
+
+void UWarriorStageStatsSubsystem::HandlePotionUsed(const FName InItemId)
+{
+	if (!IsRecording())
+	{
+		return;
+	}
+
+	++Record.Stats.Heal.PotionsUsed;
+	if (!InItemId.IsNone())
+	{
+		++Record.Stats.Heal.PotionsUsedByItem.FindOrAdd(InItemId);
+	}
+}
+
+void UWarriorStageStatsSubsystem::HandlePurchase(const FName InItemId, const int32 InCount, const int32 InGoldSpent)
+{
+	if (!IsRecording() || InItemId.IsNone() || InCount <= 0)
+	{
+		return;
+	}
+
+	// 골드 사용량은 인벤토리 골드 감소로 따로 기록하므로(S1-6) 여기서는 구매 이력만 남긴다.
+	FWarriorItemPurchaseStats& Purchase = Record.Stats.Economy.PurchasesByItem.FindOrAdd(InItemId);
+	Purchase.Count += InCount;
+	Purchase.GoldSpent += FMath::Max(0, InGoldSpent);
+
+	FWarriorPurchaseRecord& PurchaseRecord = Record.Purchases.AddDefaulted_GetRef();
+	PurchaseRecord.ItemId = InItemId;
+	PurchaseRecord.Count = InCount;
+	PurchaseRecord.GoldSpent = FMath::Max(0, InGoldSpent);
+	PurchaseRecord.WaveNumber = GetCurrentWaveNumber();
+	PurchaseRecord.TimeSeconds = GetStageTimeSeconds();
+}
+
+void UWarriorStageStatsSubsystem::HandleStat(const FGameplayTag& InStatTag, const double InValue, const FName InDimensionKey)
+{
+	if (!IsRecording())
+	{
+		return;
+	}
+
+	Record.Stats.AddExtra(InStatTag, InValue, InDimensionKey);
 }

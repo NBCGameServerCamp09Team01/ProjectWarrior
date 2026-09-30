@@ -1,13 +1,41 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayEffectTypes.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "UObject/ObjectKey.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 #include "WarriorStatTypes.h"
 #include "WarriorStageStatsSubsystem.generated.h"
 
 class AWarriorStageGameState;
+class UGameplayAbility;
 class UPlayerInventoryComponent;
+
+/** 공격 한 번(어빌리티 발동 1회)을 구분하는 키 */
+struct FWarriorAttackKey
+{
+	FObjectKey Ability;
+	uint64 Serial = 0;
+
+	bool operator==(const FWarriorAttackKey& Other) const { return Ability == Other.Ability && Serial == Other.Serial; }
+	friend uint32 GetTypeHash(const FWarriorAttackKey& Key) { return HashCombine(GetTypeHash(Key.Ability), GetTypeHash(Key.Serial)); }
+};
+
+/** 공격 한 번의 결과 */
+struct FWarriorAttackTrack
+{
+	bool bLanded = false;
+	int32 Kills = 0;
+};
+
+/** 대상이 마지막으로 맞은 공격 (막타 판정용) */
+struct FWarriorLastHit
+{
+	FWarriorAttackKey AttackKey;
+	FName AbilityName = NAME_None;
+	bool bByPlayer = false;
+};
 
 /**
  * 이번 스테이지 통계 기록기 (S1).
@@ -61,6 +89,24 @@ public:
 	/** 이번 웨이브에 플레이어가 맞았음을 표시 (무피격 웨이브 판정용) */
 	void MarkPlayerHitThisWave() { bPlayerHitThisWave = true; }
 
+	//~ 기록 처리 (UWarriorStatsLibrary가 호출). 기록 중이 아니면 아무것도 하지 않는다
+	void HandleEnemySpawned(AActor* InEnemy);
+	void HandleEnemyKilled(AActor* InEnemy, FName InDeathType);
+	void HandleDamage(const FGameplayEffectContextHandle& InContext, AActor* InTarget, float InDamage, float InOverkill, bool bInFatal);
+	void HandleBalanceDamage(const FGameplayEffectContextHandle& InContext, AActor* InTarget, float InAmount);
+	void HandleHeal(const FGameplayEffectContextHandle& InContext, AActor* InTarget, float InHealed, float InOverheal);
+	void HandleAttackAttempt(const UGameplayAbility* InAbility);
+	void HandleGoldEarned(int32 InAmount, FName InSource);
+	void HandleGoldSpent(int32 InAmount);
+	void HandlePotionUsed(FName InItemId);
+	void HandlePurchase(FName InItemId, int32 InCount, int32 InGoldSpent);
+	void HandleStat(const FGameplayTag& InStatTag, double InValue, FName InDimensionKey);
+
+	/** 플레이어가 조종하는 폰이면 true */
+	static bool IsPlayerActor(const AActor* InActor);
+	/** 클래스 이름에서 BP 접미사(_C)를 뺀 이름. 적 종류·어빌리티 이름에 사용 */
+	static FName GetTypeName(const UObject* InObject);
+
 private:
 	void BeginStageRecord(AWarriorStageGameState* InStageGameState);
 	void FinishStageRecord(EWarriorStatOutcome InOutcome);
@@ -71,6 +117,10 @@ private:
 	void CloseCurrentWave(bool bInCleared);
 
 	UPlayerInventoryComponent* FindPlayerInventory() const;
+
+	/** 데미지를 준 공격을 구분한다. 공격 시도 기록이 없으면 같은 프레임의 타격을 한 공격으로 본다 */
+	FWarriorAttackKey MakeAttackKey(const FGameplayEffectContextHandle& InContext) const;
+	void ResetTracking();
 
 	UFUNCTION()
 	void HandleStageStateChanged(EWarriorStageState NewState, EWarriorStageState OldState);
@@ -91,6 +141,12 @@ private:
 	/** Record.Waves 안에서 진행 중인 웨이브 위치. 없으면 INDEX_NONE */
 	int32 CurrentWaveIndex = INDEX_NONE;
 	bool bPlayerHitThisWave = false;
+
+	//~ 추적 (스테이지 동안만)
+	TMap<FObjectKey, uint64> AttackSerials;
+	TMap<FWarriorAttackKey, FWarriorAttackTrack> AttackTracks;
+	TMap<TWeakObjectPtr<AActor>, FWarriorLastHit> LastHits;
+	TMap<TWeakObjectPtr<AActor>, float> EnemySpawnTimes;
 	bool bRecording = false;
 	bool bRecordSubmitted = false;
 
