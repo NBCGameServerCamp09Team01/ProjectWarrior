@@ -8,6 +8,13 @@
 
 class UGameplayEffect;
 
+UENUM(BlueprintType)
+enum class EWarriorUpgradeCostGrowth : uint8
+{
+	Linear,       // BaseCost + CostStep * Level
+	Exponential   // BaseCost * CostMultiplier ^ Level
+};
+
 UCLASS()
 class PROJECTWARRIOR_API UDataAsset_Upgrade : public UPrimaryDataAsset
 {
@@ -39,26 +46,35 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Restore")
 	FGameplayAttribute RestoreAttribute;
 
-	// 레벨별 "누적" 증가량. 인덱스 0 = 1레벨 (예: 5, 10, 16)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
-	TArray<float> ValuePerLevel;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Level", meta = (ClampMin = "1"))
+	int32 MaxLevel = 5;
 
-	// 해당 레벨로 올리는 비용. 인덱스 0 = 0→1레벨 비용 (예: 100, 200, 400)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
-	TArray<int32> CostPerLevel;
+	// 레벨 1당 증가량. 레벨 N의 총 증가량 = ValuePerLevel * N
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Level")
+	float ValuePerLevel = 10.f;
+
+	// 0 → 1레벨 비용
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Cost", meta = (ClampMin = "0"))
+	int32 BaseCost = 100;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Cost")
+	EWarriorUpgradeCostGrowth CostGrowth = EWarriorUpgradeCostGrowth::Linear;
+
+	// Linear: 레벨마다 더해지는 비용
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Cost", meta = (ClampMin = "0", EditCondition = "CostGrowth == EWarriorUpgradeCostGrowth::Linear", EditConditionHides))
+	int32 CostStep = 50;
+
+	// Exponential: 레벨마다 곱해지는 배율
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Cost", meta = (ClampMin = "1.0", EditCondition = "CostGrowth == EWarriorUpgradeCostGrowth::Exponential", EditConditionHides))
+	float CostMultiplier = 1.5f;
 
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
-	int32 GetMaxLevel() const { return FMath::Min(ValuePerLevel.Num(), CostPerLevel.Num()); }
+	int32 GetMaxLevel() const { return MaxLevel; }
 
 	// 현재 레벨에서 다음 레벨로 가는 비용. 최대 레벨이면 -1
 	UFUNCTION(BlueprintPure, Category = "Upgrade")
-	int32 GetNextCost(int32 InCurrentLevel) const
-	{
-		return CostPerLevel.IsValidIndex(InCurrentLevel) && InCurrentLevel < GetMaxLevel() ? CostPerLevel[InCurrentLevel] : -1;
-	}
+	int32 GetNextCost(int32 InCurrentLevel) const;
 
-	float GetValueAtLevel(int32 InLevel) const
-	{
-		return ValuePerLevel.IsValidIndex(InLevel - 1) ? ValuePerLevel[InLevel - 1] : 0.f;
-	}
+	// 레벨 N의 누적 증가량
+	float GetValueAtLevel(int32 InLevel) const;
 };

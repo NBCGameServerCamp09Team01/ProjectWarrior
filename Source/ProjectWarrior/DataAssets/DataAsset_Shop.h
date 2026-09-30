@@ -20,7 +20,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shop")
 	TArray<TObjectPtr<UDataAsset_Item>> Items;
 
-	// 능력치 강화 목록. 비용은 각 강화의 CostPerLevel을 사용
+	// 능력치 강화 목록. 비용은 각 강화의 GetNextCost를 사용
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shop")
 	TArray<TObjectPtr<UDataAsset_Upgrade>> Upgrades;
 };
