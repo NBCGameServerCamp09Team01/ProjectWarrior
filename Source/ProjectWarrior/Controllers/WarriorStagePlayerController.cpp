@@ -13,9 +13,9 @@
 
 namespace
 {
-	//뷰포트에 쌓는 순서. 인벤토리 휠(AWarriorPlayerCharacter)이 10을 쓴다.
+	//뷰포트에 쌓는 순서. 인벤토리 휠(AWarriorPlayerCharacter)이 10, 상점(AWarriorShopActor)이 20을 쓴다.
 	const int32 StageHUDZOrder = 0;
-	const int32 StageResultZOrder = 20;
+	const int32 StageResultZOrder = 30;
 }
 
 void AWarriorStagePlayerController::BeginPlay()
@@ -42,6 +42,7 @@ void AWarriorStagePlayerController::BeginPlay()
 
 	BoundGameState = StageGameState;
 	StageGameState->OnStageStateChanged.AddUniqueDynamic(this, &ThisClass::HandleStageStateChanged);
+	StageGameState->OnStageFinished.AddUniqueDynamic(this, &ThisClass::HandleStageFinished);
 
 	//GameMode와 이 컨트롤러의 BeginPlay 순서는 보장되지 않아, 구독 전에 상태가 이미 바뀌었을 수 있다.
 	//현재 상태를 한 번 직접 적용하고, 이전 레벨의 입력 설정이 뷰포트에 남아 있을 수 있으므로 입력 모드도 강제로 맞춘다.
@@ -71,6 +72,7 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	if (AWarriorStageGameState* StageGameState = BoundGameState.Get())
 	{
 		StageGameState->OnStageStateChanged.RemoveDynamic(this, &ThisClass::HandleStageStateChanged);
+		StageGameState->OnStageFinished.RemoveDynamic(this, &ThisClass::HandleStageFinished);
 	}
 	BoundGameState.Reset();
 
@@ -105,9 +107,14 @@ void AWarriorStagePlayerController::HandleStageStateChanged(EWarriorStageState I
 {
 	const bool bResultState = InNewState == EWarriorStageState::StageCleared || InNewState == EWarriorStageState::StageFailed;
 
-	//결과 위젯을 먼저 띄워야 UI 입력 모드로 바꿀 때 포커스를 줄 수 있다.
-	UUserWidget* FocusWidget = bResultState ? ShowResult(InNewState) : nullptr;
+	//결과 위젯은 OnStageFinished에서 이미 띄워져 있다. UI 입력 모드로 바꿀 때 거기에 포커스를 준다.
+	UUserWidget* FocusWidget = bResultState ? ResultWidget.Get() : nullptr;
 	ApplyStatePermission(InNewState, false, FocusWidget);
+}
+
+void AWarriorStagePlayerController::HandleStageFinished(const FWarriorStageResult& InResult)
+{
+	ShowResult(InResult);
 }
 
 void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InState, bool bForceInputMode, UUserWidget* InFocusWidget)
@@ -150,12 +157,12 @@ void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InSt
 		Permission.bUIInputMode ? TEXT("UI") : TEXT("Game"));
 }
 
-UWarriorStageResultWidget* AWarriorStagePlayerController::ShowResult(EWarriorStageState InState)
+void AWarriorStagePlayerController::ShowResult(const FWarriorStageResult& InResult)
 {
 	if (!ResultWidgetClass)
 	{
 		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] ResultWidgetClass is not set. Result screen is not shown."));
-		return nullptr;
+		return;
 	}
 
 	if (!ResultWidget)
@@ -164,28 +171,17 @@ UWarriorStageResultWidget* AWarriorStagePlayerController::ShowResult(EWarriorSta
 		if (!ResultWidget)
 		{
 			UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] Failed to create result widget."));
-			return nullptr;
+			return;
 		}
 
 		ResultWidget->AddToViewport(StageResultZOrder);
 	}
 
-	//EarnedGold·KillCount는 수집 경로가 정해지면 채운다.
-	FWarriorStageResult Result;
-	Result.bCleared = InState == EWarriorStageState::StageCleared;
-	Result.PlayTimeSeconds = static_cast<float>(GetWorld()->GetRealTimeSeconds());
-	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
-	{
-		Result.ReachedWave = StageGameState->GetWaveNumber();
-		Result.TotalWaveCount = StageGameState->GetTotalWaveCount();
-	}
-
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Show result. %s, Wave %d/%d, PlayTime %.1f s"),
-		Result.bCleared ? TEXT("Cleared") : TEXT("Failed"),
-		Result.ReachedWave,
-		Result.TotalWaveCount,
-		Result.PlayTimeSeconds);
+		InResult.bCleared ? TEXT("Cleared") : TEXT("Failed"),
+		InResult.ReachedWave,
+		InResult.TotalWaveCount,
+		InResult.PlayTimeSeconds);
 
-	ResultWidget->SetResult(Result);
-	return ResultWidget;
+	ResultWidget->SetResult(InResult);
 }

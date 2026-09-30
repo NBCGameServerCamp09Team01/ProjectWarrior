@@ -84,6 +84,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage", meta = (ClampMin = "0.0"))
 	float RestTime = 20.f;
 
+	//결과에 기록되는 스테이지 식별자. 비어 있으면 레벨 이름을 쓴다.
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
+	FName StageId;
+
+	//결과에 기록되는 난이도. 난이도별 적 스탯 차이는 아직 없다.
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage", meta = (ClampMin = "0"))
+	int32 Difficulty = 0;
+
 private:
 	void CreateStates();
 
@@ -96,6 +104,14 @@ private:
 	void HandleStateTimerElapsed();
 
 	void ProcessPendingEvents();
+
+	//한 판 시작. RunId를 정해 GameState에 기록한다. 스테이지가 준비된 순간(StageReady 직전)에 한 번 호출된다.
+	void BeginRun();
+
+	//한 판 끝. 결과를 확정해 GameState에 넘긴다. 끝 상태로 바뀌기 직전에 한 번 호출된다.
+	void FinishRun(bool bInCleared);
+
+	FName GetResolvedStageId() const;
 
 	TWeakObjectPtr<AWarriorStageFlowManager> StageFlowManager;
 
@@ -113,4 +129,11 @@ private:
 	bool bChangingState = false;
 
 	TArray<EWarriorStageEvent> PendingEvents;
+
+	FGuid RunId;
+
+	//BeginRun 시점의 실제 시간(초). 플레이 시간 계산에 쓴다.
+	double RunStartRealTime = 0.0;
+
+	bool bRunFinished = false;
 };

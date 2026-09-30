@@ -10,6 +10,7 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorStageStateChanged, EWarriorStageState, NewState, EWarriorStageState, OldState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWarriorWaveChanged, int32, WaveNumber, int32, TotalWaveCount, bool, bBossWave);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorEnemyCountChanged, int32, AliveCount, int32, TotalCount);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorStageFinished, const FWarriorStageResult&, Result);
 
 /**
  * 스테이지 진행 상태를 보관하고 방송한다.
@@ -56,6 +57,17 @@ public:
 	//스테이지 GameState가 없는 레벨(전투 테스트 맵 등)에서는 항상 true
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stage", meta = (WorldContext = "WorldContextObject"))
 	static bool IsActionAllowed(const UObject* WorldContextObject, EWarriorStageAction InAction);
+
+	//진행 중인 판의 고유 번호. 한 판이 시작되기 전에는 유효하지 않다
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
+	FGuid GetRunId() const { return RunId; }
+
+	//끝 상태(StageCleared·StageFailed)로 바뀌기 직전에 확정된다
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
+	bool HasStageResult() const { return bHasStageResult; }
+
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
+	const FWarriorStageResult& GetStageResult() const { return StageResult; }
 	//~ End 조회
 
 	//Begin 쓰기 (GameMode·FlowManager 전용)
@@ -65,6 +77,11 @@ public:
 	void SetWaveInfo(int32 InWaveNumber, int32 InTotalWaveCount, bool bInBossWave);
 
 	void SetEnemyCount(int32 InAliveCount, int32 InTotalCount);
+
+	void SetRunId(const FGuid& InRunId);
+
+	//결과를 보관하고 OnStageFinished를 방송한다. 한 판에 한 번, 상태가 끝 상태로 바뀌기 직전에 호출된다.
+	void SetStageResult(const FWarriorStageResult& InResult);
 	//~ End 쓰기
 
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
@@ -75,6 +92,10 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
 	FOnWarriorEnemyCountChanged OnEnemyCountChanged;
+
+	//한 판의 결과가 확정됐을 때. 결과 화면은 계산하지 않고 이 값을 그대로 쓴다
+	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
+	FOnWarriorStageFinished OnStageFinished;
 
 protected:
 	//상태별 허용 조작. 생성자에서 기본 표를 채우고, BP 파생에서 덮어쓸 수 있다.
@@ -102,4 +123,11 @@ private:
 
 	//상태가 끝나는 서버 월드 시간. 타이머가 없으면 0
 	float StateEndTime = 0.f;
+
+	FGuid RunId;
+
+	UPROPERTY(Transient)
+	FWarriorStageResult StageResult;
+
+	bool bHasStageResult = false;
 };
