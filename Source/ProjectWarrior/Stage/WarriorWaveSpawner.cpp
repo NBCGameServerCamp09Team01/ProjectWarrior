@@ -2,6 +2,9 @@
 
 #include "Engine/World.h"
 #include "ProjectWarrior/Characters/WarriorAICharacter.h"
+#include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "GameFramework/PlayerController.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "TimerManager.h"
 #include "Components/SceneComponent.h"
@@ -29,6 +32,7 @@ bool AWarriorWaveSpawner::StartWaveFromData(const FWarriorStageWaveData& InWaveD
 	SpawnedEnemyCount = 0;
 	CurrentSpawnAttempts = 0;
 	bWaveClearReported = false;
+	CurrentDropModifier = InWaveData.DropModifier;
 	if (!BuildPendingRequests(InWaveData))
 	{
 		UE_LOG(LogProjectWarrior, Error, TEXT("WaveSpawner %s rejected empty or invalid wave data. No clear event will be emitted."), *GetName());
@@ -60,6 +64,7 @@ void AWarriorWaveSpawner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	StopSpawning();
 	UnbindTrackedEnemies();
 	AliveEnemies.Reset();
+	EnemyRewards.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -121,6 +126,8 @@ bool AWarriorWaveSpawner::BuildPendingRequests(const FWarriorStageWaveData& InWa
 			FWarriorPendingWaveSpawnRequest& Request = PendingRequests.AddDefaulted_GetRef();
 			Request.EnemyClass = EnemyData.EnemyClass;
 			Request.SpawnGroup = EnemyData.SpawnGroup;
+			Request.GoldReward = FMath::Max(0, EnemyData.GoldReward);
+			Request.GoldDropChance = FMath::Clamp(EnemyData.GoldDropChance, 0.0f, 1.0f);
 		}
 	}
 	return true;
@@ -225,6 +232,7 @@ bool AWarriorWaveSpawner::TrySpawnEnemy(const FWarriorPendingWaveSpawnRequest& S
 			continue;
 		}
 		AliveEnemies.Add(Enemy);
+		EnemyRewards.Add(Enemy, FWarriorWaveEnemyReward{ SpawnRequest.GoldReward, SpawnRequest.GoldDropChance });
 		++SpawnedEnemyCount;
 		Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
 		Enemy->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);
@@ -310,6 +318,13 @@ void AWarriorWaveSpawner::CompactAliveEnemies()
 			EnemyIt.RemoveCurrent();
 		}
 	}
+	for (auto RewardIt = EnemyRewards.CreateIterator(); RewardIt; ++RewardIt)
+	{
+		if (!RewardIt.Key().IsValid())
+		{
+			RewardIt.RemoveCurrent();
+		}
+	}
 }
 
 bool AWarriorWaveSpawner::RemoveTrackedEnemy(AWarriorAICharacter* Enemy, const TCHAR* Reason)
@@ -324,6 +339,7 @@ bool AWarriorWaveSpawner::RemoveTrackedEnemy(AWarriorAICharacter* Enemy, const T
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Wave] %s: %s %s. Alive %d, remaining spawns %d"),
 		*GetName(), *GetNameSafe(Enemy), Reason, GetAliveEnemyCount(), GetRemainingSpawnCount());
 
+	EnemyRewards.Remove(Enemy);
 	UnbindEnemy(Enemy);
 	NotifyEnemyCountChanged();
 	TryReportWaveCleared();
@@ -332,7 +348,57 @@ bool AWarriorWaveSpawner::RemoveTrackedEnemy(AWarriorAICharacter* Enemy, const T
 
 void AWarriorWaveSpawner::HandleSpawnedEnemyDied(AWarriorBaseCharacter* DeadCharacter)
 {
-	RemoveTrackedEnemy(Cast<AWarriorAICharacter>(DeadCharacter), TEXT("died"));
+	AWarriorAICharacter* DeadEnemy = Cast<AWarriorAICharacter>(DeadCharacter);
+	if (!DeadEnemy || !AliveEnemies.Contains(DeadEnemy))
+	{
+		return;
+	}
+
+	// 웨이브 클리어 알림 전에 지급해서, 클리어 시점에 골드가 이미 반영되어 있게 한다.
+	GrantEnemyReward(DeadEnemy);
+	RemoveTrackedEnemy(DeadEnemy, TEXT("died"));
+}
+
+int32 AWarriorWaveSpawner::GrantEnemyReward(AWarriorAICharacter* Enemy)
+{
+	const FWarriorWaveEnemyReward* Reward = EnemyRewards.Find(Enemy);
+	if (!Reward || Reward->GoldReward <= 0)
+	{
+		return 0;
+	}
+
+	const float DropChance = FMath::Clamp(Reward->GoldDropChance * CurrentDropModifier.GoldDropChanceMultiplier, 0.0f, 1.0f);
+	if (DropChance <= 0.0f || (DropChance < 1.0f && FMath::FRand() >= DropChance))
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Wave] %s: no gold from %s (chance %.2f)"), *GetName(), *GetNameSafe(Enemy), DropChance);
+		return 0;
+	}
+
+	const int32 Gold = FMath::Max(0, FMath::RoundToInt(Reward->GoldReward * CurrentDropModifier.GoldAmountMultiplier));
+	if (Gold <= 0)
+	{
+		return 0;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Wave] %s: Gold +%d from %s (chance %.2f)"), *GetName(), Gold, *GetNameSafe(Enemy), DropChance);
+	OnEnemyRewarded.Broadcast(Enemy, Gold);
+	GiveGoldToPlayer(Gold);
+	return Gold;
+}
+
+void AWarriorWaveSpawner::GiveGoldToPlayer(const int32 InGold) const
+{
+	// MVP는 싱글 플레이 기준으로 첫 번째 플레이어에게 지급한다. 막타 기준 지급은 가해자 정보가 생긴 뒤 검토.
+	const APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	const AWarriorPlayerState* PlayerState = PlayerController ? PlayerController->GetPlayerState<AWarriorPlayerState>() : nullptr;
+	UPlayerInventoryComponent* Inventory = PlayerState ? PlayerState->GetPlayerInventoryComponent() : nullptr;
+	if (!Inventory)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Wave] %s: no player inventory. %d gold was not given."), *GetName(), InGold);
+		return;
+	}
+
+	Inventory->AddGold(InGold);
 }
 
 void AWarriorWaveSpawner::HandleSpawnedEnemyDestroyed(AActor* DestroyedActor)
