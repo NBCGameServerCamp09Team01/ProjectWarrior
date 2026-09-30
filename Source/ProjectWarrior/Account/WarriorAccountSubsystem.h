@@ -28,7 +28,8 @@ struct FWarriorAccountStatBonus
  *
  * 흐름
  * - 스테이지가 끝나면 통계 서브시스템이 기록을 확정하고 OnStageRecorded를 방송한다.
- *   이 서브시스템이 그것을 받아 보상(경험치 → 레벨 → 스탯 포인트)을 계산한다.
+ *   이 서브시스템이 그것을 받아 경험치를 주고, 경험치가 차면 레벨을 올리며 오른 레벨마다 스탯 포인트를 준다.
+ *   스탯 포인트는 레벨 업으로만 생긴다(클리어·실패가 직접 주지 않는다).
  * - 메인메뉴의 성장 화면이 InvestStatPoint·UnlockSkill을 호출한다.
  * - 스테이지 시작 때 캐릭터가 BuildStatBonuses로 투자 내역을 읽어 GAS에 적용한다(적용은 성장 담당).
  *
@@ -50,8 +51,9 @@ public:
 	struct FRules
 	{
 		int32 MaxLevel = 99;
-		int32 ClearedExp = 100;		//클리어 보상
-		int32 FailedExp = 20;		//실패 보상(아주 적게)
+		//시연용 자리 표시값(2026-10-01). 새 계정의 첫 클리어로 Lv1 → 3(포인트 +4), 두 번째 클리어로 Lv3 → 4(+2)가 된다.
+		int32 ClearedExp = 300;		//클리어 경험치
+		int32 FailedExp = 60;		//실패 경험치(클리어의 1/5)
 		int32 StatPointsPerLevel = 2;
 		//레벨 L에서 다음 레벨까지 필요한 경험치 = ExpBase + (L - 1) * ExpStep
 		int32 ExpBase = 100;

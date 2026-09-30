@@ -55,7 +55,7 @@ struct PROJECTWARRIOR_API FWarriorAccountData
 UENUM(BlueprintType)
 enum class EWarriorAccountLedgerType : uint8
 {
-	StageReward,		// 스테이지 결과로 경험치·포인트를 받음
+	StageReward,		// 스테이지 결과로 경험치를 받음. 그 경험치로 레벨이 오르면 스탯 포인트도 이 종류로 남는다
 	StatInvest,			// 스탯 포인트 투자
 	SkillUnlock,		// 스킬 해금
 	ExternalCurrency	// 외부 재화 변동(서버가 알려 준 값)
@@ -103,7 +103,10 @@ struct PROJECTWARRIOR_API FWarriorAccountLedgerEntry
 	bool bServerConfirmed = false;
 };
 
-/** 스테이지 한 판이 준 보상. 결과 화면이 "레벨 업, 포인트 +n"을 표시할 때 읽는다 */
+/**
+ * 스테이지 한 판이 준 보상. 판이 주는 것은 경험치이고, 스탯 포인트는 그 경험치로 레벨이 올랐을 때만 생긴다.
+ * 결과 화면이 "획득 경험치"와 "레벨 업(레벨 변화, 스탯 포인트)"을 표시할 때 읽는다.
+ */
 USTRUCT(BlueprintType)
 struct PROJECTWARRIOR_API FWarriorStageReward
 {
@@ -125,6 +128,7 @@ struct PROJECTWARRIOR_API FWarriorStageReward
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Account")
 	int32 LevelAfter = 1;
 
+	//레벨 업으로 받은 스탯 포인트(오른 레벨 수 × 레벨당 포인트). 레벨이 오르지 않았으면 0
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Account")
 	int32 StatPointsGained = 0;
 
