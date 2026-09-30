@@ -14,5 +14,6 @@ void UWarriorStageState_StageCleared::OnEnter(EWarriorStageState InPrevState)
 	if (AWarriorStageGameMode* StageGameMode = GetStageGameMode())
 	{
 		StageGameMode->StopAllWaves();
+		StageGameMode->ResetStageUpgrades();
 	}
 }

@@ -11,8 +11,12 @@
 #include "ProjectWarrior/Stage/States/WarriorStageState_Resting.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_StageCleared.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_StageFailed.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/Components/Upgrade/StageUpgradeComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
+
+
 
 AWarriorStageGameMode::AWarriorStageGameMode()
 {
@@ -262,5 +266,23 @@ void AWarriorStageGameMode::ProcessPendingEvents()
 		PendingEvents.RemoveAt(0);
 
 		SendStageEvent(PendingEvent);
+	}
+}
+
+void AWarriorStageGameMode::ResetStageUpgrades()
+{
+	if (!GameState)
+	{
+		return;
+	}
+	for (APlayerState* PS : GameState->PlayerArray)
+	{
+		if (const AWarriorPlayerState* WarriorPS = Cast<AWarriorPlayerState>(PS))
+		{
+			if (UStageUpgradeComponent* UpgradeComp = WarriorPS->GetStageUpgradeComponent())
+			{
+				UpgradeComp->ResetAll();
+			}
+		}
 	}
 }
