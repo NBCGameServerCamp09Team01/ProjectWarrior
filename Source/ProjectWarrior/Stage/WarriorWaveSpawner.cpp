@@ -6,6 +6,7 @@
 #include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/Stats/WarriorStatsLibrary.h"
 #include "TimerManager.h"
 #include "Components/SceneComponent.h"
 
@@ -236,6 +237,7 @@ bool AWarriorWaveSpawner::TrySpawnEnemy(const FWarriorPendingWaveSpawnRequest& S
 		++SpawnedEnemyCount;
 		Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
 		Enemy->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);
+		UWarriorStatsLibrary::RecordEnemySpawned(Enemy);
 		return true;
 	}
 
@@ -354,7 +356,8 @@ void AWarriorWaveSpawner::HandleSpawnedEnemyDied(AWarriorBaseCharacter* DeadChar
 		return;
 	}
 
-	// 웨이브 클리어 알림 전에 지급해서, 클리어 시점에 골드가 이미 반영되어 있게 한다.
+	// 처치 통계와 골드는 웨이브 클리어 알림 전에 반영한다. 클리어 시점에 이번 웨이브 값이 모두 들어가 있게 하기 위함.
+	UWarriorStatsLibrary::RecordEnemyKilled(DeadEnemy, UWarriorStatsLibrary::GetDeathTypeName(DeadEnemy));
 	GrantEnemyReward(DeadEnemy);
 	RemoveTrackedEnemy(DeadEnemy, TEXT("died"));
 }
@@ -383,6 +386,7 @@ int32 AWarriorWaveSpawner::GrantEnemyReward(AWarriorAICharacter* Enemy)
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Wave] %s: Gold +%d from %s (chance %.2f)"), *GetName(), Gold, *GetNameSafe(Enemy), DropChance);
 	OnEnemyRewarded.Broadcast(Enemy, Gold);
 	GiveGoldToPlayer(Gold);
+	UWarriorStatsLibrary::RecordGoldEarned(this, Gold, TEXT("Kill"));
 	return Gold;
 }
 
