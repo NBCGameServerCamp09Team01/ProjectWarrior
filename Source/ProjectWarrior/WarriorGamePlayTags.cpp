@@ -78,6 +78,7 @@ namespace WarriorGameplayTags
 
 	/** AI tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Melee, "AI.Ability.Melee");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Range, "AI.Ability.Range");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Finisher, "AI.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block, "AI.Ability.Block");
 
@@ -90,9 +91,12 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Spawn, "AI.Event.Projectile.Spawn");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Fire, "AI.Event.Projectile.Fire");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Strafing, "AI.Status.Strafing");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_UnderAttack, "AI.Status.UnderAttack");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Aiming, "AI.Status.Aiming");
 
 	/** Shared tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact, "Shared.Ability.HitReact");

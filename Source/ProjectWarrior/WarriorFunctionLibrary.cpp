@@ -141,6 +141,30 @@ bool UWarriorFunctionLibrary::IsValidBlock(AActor* InAttacker, AActor* InDefende
     return DotResult < -0.1f ? true : false;
 }
 
+EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, bool bIsAttackUnblockable)
+{
+    check(InAttacker && InVictim);
+
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher))
+    {
+        return EWarriorHitResultType::Invalid;
+    }
+
+    const bool bIsVictimBlocking = NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Player_Status_Blocking);
+
+    if (bIsVictimBlocking && !bIsAttackUnblockable && IsValidBlock(InDamageCauser ? InDamageCauser : InAttacker, InVictim))
+    {
+        return EWarriorHitResultType::Blocked;
+    }
+
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Dodge))
+    {
+        return EWarriorHitResultType::Dodged;
+    }
+
+    return EWarriorHitResultType::Hit;
+}
+
 bool UWarriorFunctionLibrary::IsTargetPawnHostile(APawn* QueryPawn, APawn* TargetPawn)
 {
     check(QueryPawn && TargetPawn);

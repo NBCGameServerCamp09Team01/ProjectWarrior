@@ -22,6 +22,15 @@ enum class EWarriorSuccessType : uint8
 };
 
 UENUM(BlueprintType)
+enum class EWarriorHitResultType : uint8
+{
+    Hit,
+    Blocked,
+    Dodged,
+    Invalid
+};
+
+UENUM(BlueprintType)
 enum class EWarriorPurchaseResult : uint8
 {
     Success,
