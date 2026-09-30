@@ -76,6 +76,7 @@ namespace WarriorGameplayTags
 
 	/** AI tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Melee, "AI.Ability.Melee");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Range, "AI.Ability.Range");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Finisher, "AI.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block, "AI.Ability.Block");
 
