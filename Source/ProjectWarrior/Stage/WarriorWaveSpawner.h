@@ -6,12 +6,17 @@
 #include "WarriorWaveSpawner.generated.h"
 
 class AWarriorAICharacter;
+class AWarriorBaseCharacter;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(
 	FOnWarriorSpawnerEnemyCountChanged,
 	int32 /* 현재 생존 수 */,
 	int32 /* 생성에 성공한 누적 수 */);
 DECLARE_MULTICAST_DELEGATE(FOnWarriorSpawnerWaveCleared);
+DECLARE_MULTICAST_DELEGATE_TwoParams(
+	FOnWarriorSpawnerEnemyRewarded,
+	AWarriorAICharacter* /* 처치된 적 */,
+	int32 /* 지급한 골드 */);
 
 UCLASS()
 class PROJECTWARRIOR_API AWarriorWaveSpawner : public AActor
@@ -32,6 +37,8 @@ public:
 
 	FOnWarriorSpawnerEnemyCountChanged OnEnemyCountChanged;
 	FOnWarriorSpawnerWaveCleared OnWaveCleared;
+	/** 사망 신호로 처치된 적의 골드 보상이 확정되면 방송한다. Destroy로만 사라진 적은 보상 없음. */
+	FOnWarriorSpawnerEnemyRewarded OnEnemyRewarded;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -59,7 +66,18 @@ private:
 	void TryReportWaveCleared();
 	void CompactAliveEnemies();
 	void UnbindTrackedEnemies();
+	void UnbindEnemy(AWarriorAICharacter* Enemy);
+	/** 생존 목록에서 적을 빼고 수량 알림·클리어 판정을 한다. 이미 빠진 적이면 false. */
+	bool RemoveTrackedEnemy(AWarriorAICharacter* Enemy, const TCHAR* Reason);
+	/** 확률·배율을 적용해 골드를 계산하고, 지급 대상이 있으면 플레이어 인벤토리에 넣는다. 지급액(0이면 미지급)을 반환. */
+	int32 GrantEnemyReward(AWarriorAICharacter* Enemy);
+	void GiveGoldToPlayer(int32 InGold) const;
 
+	/** 사망 연출이 끝나 OnCharacterDied가 방송되면 호출된다. 시체가 남아도 생존 수에서 뺀다. */
+	UFUNCTION()
+	void HandleSpawnedEnemyDied(AWarriorBaseCharacter* DeadCharacter);
+
+	/** 사망 신호 없이 Destroy된 경우(콘솔 삭제, 레벨 정리 등)의 예비 경로. */
 	UFUNCTION()
 	void HandleSpawnedEnemyDestroyed(AActor* DestroyedActor);
 
@@ -67,6 +85,9 @@ private:
 	TArray<FWarriorPendingWaveSpawnRequest> PendingRequests;
 
 	TSet<TWeakObjectPtr<AWarriorAICharacter>> AliveEnemies;
+	TMap<TWeakObjectPtr<AWarriorAICharacter>, FWarriorWaveEnemyReward> EnemyRewards;
+	/** 진행 중 웨이브의 골드 배율. 웨이브 시작 시 복사한다. */
+	FWarriorDropModifier CurrentDropModifier;
 	int32 NextRequestIndex = 0;
 	int32 SpawnedEnemyCount = 0;
 	int32 CurrentSpawnAttempts = 0;
@@ -77,5 +98,6 @@ private:
 
 #if WITH_DEV_AUTOMATION_TESTS
 	friend class FWarriorWaveSpawnerTest;
+	friend class FWarriorWaveSpawnerDeathRewardTest;
 #endif
 };
