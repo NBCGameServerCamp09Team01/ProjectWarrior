@@ -135,4 +135,6 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_WeaponEquipped, "Shared.Status.WeaponEquipped");
 
 	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_AttackPower, "Upgrade.Stage.AttackPower");
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxHealth, "Upgrade.Stage.MaxHealth");
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxStamina, "Upgrade.Stage.MaxStamina");
 }

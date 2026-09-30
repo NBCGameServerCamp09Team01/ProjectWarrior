@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "AttributeSet.h"
 #include "DataAsset_Upgrade.generated.h"
 
 class UGameplayEffect;
@@ -29,6 +30,14 @@ public:
 	// Infinite, SetByCaller(Shared.SetByCaller.Upgrade) Add 모디파이어를 가진 GE
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")
 	TSubclassOf<UGameplayEffect> UpgradeEffect;
+
+	// 이 강화로 늘어나는 최대치 어트리뷰트 (예: MaxHealth). 비워두면 회복 처리 안 함
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Restore")
+	FGameplayAttribute IncreasedAttribute;
+
+	// 최대치가 늘어난 만큼 채워줄 현재값 어트리뷰트 (예: CurrentHealth)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade|Restore")
+	FGameplayAttribute RestoreAttribute;
 
 	// 레벨별 "누적" 증가량. 인덱스 0 = 1레벨 (예: 5, 10, 16)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Upgrade")

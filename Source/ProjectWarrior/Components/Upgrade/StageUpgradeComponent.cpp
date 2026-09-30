@@ -40,7 +40,7 @@ bool UStageUpgradeComponent::IncreaseLevel(const UDataAsset_Upgrade* InUpgrade)
 	++Level;
 	UpgradeAssets.Add(InUpgrade->UpgradeId, InUpgrade);
 
-	ApplyUpgrade(InUpgrade);
+	ApplyUpgrade(InUpgrade, true);
 
 	OnUpgradeChanged.Broadcast(InUpgrade->UpgradeId, Level);
 	return true;
@@ -73,30 +73,53 @@ void UStageUpgradeComponent::ResetAll()
 	OnUpgradesReset.Broadcast();
 }
 
-void UStageUpgradeComponent::ApplyUpgrade(const UDataAsset_Upgrade* InUpgrade)
+void UStageUpgradeComponent::ApplyUpgrade(const UDataAsset_Upgrade* InUpgrade, bool bRestoreIncreasedAmount)
 {
-	// 누적 값 1개로 덮어쓰기: 기존 GE를 지우고 현재 레벨의 누적 수치로 다시 건다
-	RemoveUpgradeEffect(InUpgrade->UpgradeId);
-
 	UWarriorAbilitySystemComponent* ASC = GetOwningASC();
 	if (!ASC)
 	{
 		return;  // 폰이 아직 없으면 레벨만 저장. HandlePawnSet에서 적용된다
 	}
 
-	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-	Context.AddSourceObject(InUpgrade);
-
-	FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(InUpgrade->UpgradeEffect, 1.f, Context);
-	if (!Spec.IsValid())
-	{
-		return;
-	}
+	// 최대치 강화(MaxHealth 등)면 변경 전 값을 기록해 두고, 늘어난 만큼 현재값을 채운다
+	const bool bShouldRestore = bRestoreIncreasedAmount
+		&& InUpgrade->IncreasedAttribute.IsValid() && InUpgrade->RestoreAttribute.IsValid();
+	const float OldMax = bShouldRestore ? ASC->GetNumericAttribute(InUpgrade->IncreasedAttribute) : 0.f;
 
 	const int32 Level = Levels.FindRef(InUpgrade->UpgradeId);
-	Spec.Data->SetSetByCallerMagnitude(WarriorGameplayTags::Shared_SetByCaller_Upgrade, InUpgrade->GetValueAtLevel(Level));
+	const float Value = InUpgrade->GetValueAtLevel(Level);
 
-	ActiveHandles.Add(InUpgrade->UpgradeId, ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get()));
+	// 이미 걸려 있으면 값만 갱신한다.
+	// 지웠다 다시 걸면 그 사이 최대치가 기본값으로 떨어져 PostAttributeChange가 현재값을 잘라버린다.
+	const FActiveGameplayEffectHandle* ExistingHandle = ActiveHandles.Find(InUpgrade->UpgradeId);
+	if (ExistingHandle && ExistingHandle->IsValid())
+	{
+		ASC->UpdateActiveGameplayEffectSetByCallerMagnitude(*ExistingHandle, WarriorGameplayTags::Shared_SetByCaller_Upgrade, Value);
+	}
+	else
+	{
+		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		Context.AddSourceObject(InUpgrade);
+
+		FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(InUpgrade->UpgradeEffect, 1.f, Context);
+		if (!Spec.IsValid())
+		{
+			return;
+		}
+		Spec.Data->SetSetByCallerMagnitude(WarriorGameplayTags::Shared_SetByCaller_Upgrade, Value);
+		ActiveHandles.Add(InUpgrade->UpgradeId, ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get()));
+	}
+
+	if (bShouldRestore)
+	{
+		// 실제로 늘어난 양 (레벨 누적값 차이). 예: Lv1(+100) → Lv2(+110) 이면 10
+		const float Delta = ASC->GetNumericAttribute(InUpgrade->IncreasedAttribute) - OldMax;
+		if (Delta > 0.f)
+		{
+			// BaseValue만 바뀌므로 UI 갱신은 PostAttributeChange가 맡는다
+			ASC->ApplyModToAttribute(InUpgrade->RestoreAttribute, EGameplayModOp::AddBase, Delta);
+		}
+	}
 }
 
 void UStageUpgradeComponent::RemoveUpgradeEffect(FGameplayTag InUpgradeId)
@@ -120,7 +143,7 @@ void UStageUpgradeComponent::HandlePawnSet(APlayerState* InPlayer, APawn* InNewP
 	}
 	for (const TPair<FGameplayTag, TObjectPtr<const UDataAsset_Upgrade>>& Pair : UpgradeAssets)
 	{
-		ApplyUpgrade(Pair.Value);
+		ApplyUpgrade(Pair.Value, true);
 	}
 }
 

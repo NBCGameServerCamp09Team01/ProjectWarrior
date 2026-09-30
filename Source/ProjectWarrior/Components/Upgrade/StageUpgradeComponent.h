@@ -53,7 +53,7 @@ private:
 	UFUNCTION()
 	void HandlePawnSet(APlayerState* InPlayer, APawn* InNewPawn, APawn* InOldPawn);
 
-	void ApplyUpgrade(const UDataAsset_Upgrade* InUpgrade);
+	void ApplyUpgrade(const UDataAsset_Upgrade* InUpgrade, bool bRestoreIncreasedAmount);
 	void RemoveUpgradeEffect(FGameplayTag InUpgradeId);
 
 	UWarriorAbilitySystemComponent* GetOwningASC() const;
