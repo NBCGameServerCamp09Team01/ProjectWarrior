@@ -15,25 +15,17 @@ UPlayerInventoryComponent::UPlayerInventoryComponent()
 
 bool UPlayerInventoryComponent::AddItem(UDataAsset_Item* InItem, int32 InCount)
 {
-	if (!InItem || InCount <= 0)
+	if (!CanAddItem(InItem, InCount))
 	{
 		return false;
 	}
 
 	if (FWarriorInventorySlot* Slot = FindSlot(InItem))
 	{
-		if (Slot->Quantity + InCount > InItem->MaxStack)
-		{
-			return false;
-		}
 		Slot->Quantity += InCount;
 	}
 	else
 	{
-		if (InCount > InItem->MaxStack)
-		{
-			return false;
-		}
 		FWarriorInventorySlot& NewSlot = Slots.AddDefaulted_GetRef();
 		NewSlot.ItemData = InItem;
 		NewSlot.Quantity = InCount;
@@ -49,7 +41,14 @@ bool UPlayerInventoryComponent::CanAddItem(const UDataAsset_Item* InItem, int32 
 	{
 		return false;
 	}
-	return GetItemCount(InItem) + InCount <= InItem->MaxStack;
+
+	const int32 CurrentCount = GetItemCount(InItem);
+
+	if (CurrentCount == 0 && IsFull())
+	{
+		return false;
+	}
+	return CurrentCount + InCount <= InItem->MaxStack;
 }
 
 bool UPlayerInventoryComponent::RemoveItem(UDataAsset_Item* InItem, int32 InCount)
