@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "ProjectWarrior/Account/WarriorAccountTypes.h"
 #include "WarriorMainMenuWidget.generated.h"
 
 class UButton;
@@ -12,7 +13,7 @@ class UTextBlock;
 /**
  * 메인메뉴의 베이스.
  * 계정 요약(계정 레벨, 남은 스탯 포인트)을 표시하고, "성장" 버튼으로 성장 화면을 연다.
- * 계정 값은 GameInstance가 관리한다. 연결 전까지는 기본값을 표시한다.
+ * 계정 값은 UWarriorAccountSubsystem(GameInstance 서브시스템)에서 읽고, 값이 바뀌면(레벨 업, 스탯 투자) 다시 표시한다.
  * 스테이지 시작·종료 버튼은 WBP_MainMenu가 AWarriorFrontPlayerController의 함수를 직접 호출한다.
  */
 UCLASS(Abstract)
@@ -42,6 +43,10 @@ protected:
 
 	UFUNCTION()
 	void HandleGrowthButtonClicked();
+
+	//계정 서브시스템의 OnAccountChanged에 연결
+	UFUNCTION()
+	void HandleAccountChanged(const FWarriorAccountData& InAccountData);
 
 	//~ Begin 없어도 되는 위젯 (WBP에 같은 이름으로 두면 연결된다)
 	//"Lv. 3"
