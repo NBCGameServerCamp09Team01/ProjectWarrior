@@ -67,10 +67,16 @@ void AWarriorWaveSpawner::UnbindTrackedEnemies()
 {
 	for (const TWeakObjectPtr<AWarriorAICharacter>& Enemy : AliveEnemies)
 	{
-		if (Enemy.IsValid())
-		{
-			Enemy->OnDestroyed.RemoveDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);
-		}
+		UnbindEnemy(Enemy.Get());
+	}
+}
+
+void AWarriorWaveSpawner::UnbindEnemy(AWarriorAICharacter* Enemy)
+{
+	if (IsValid(Enemy))
+	{
+		Enemy->OnCharacterDied.RemoveDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
+		Enemy->OnDestroyed.RemoveDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);
 	}
 }
 
@@ -220,6 +226,7 @@ bool AWarriorWaveSpawner::TrySpawnEnemy(const FWarriorPendingWaveSpawnRequest& S
 		}
 		AliveEnemies.Add(Enemy);
 		++SpawnedEnemyCount;
+		Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
 		Enemy->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);
 		return true;
 	}
@@ -305,14 +312,30 @@ void AWarriorWaveSpawner::CompactAliveEnemies()
 	}
 }
 
-void AWarriorWaveSpawner::HandleSpawnedEnemyDestroyed(AActor* DestroyedActor)
+bool AWarriorWaveSpawner::RemoveTrackedEnemy(AWarriorAICharacter* Enemy, const TCHAR* Reason)
 {
-	AWarriorAICharacter* DestroyedEnemy = Cast<AWarriorAICharacter>(DestroyedActor);
-	if (!DestroyedEnemy || AliveEnemies.Remove(DestroyedEnemy) == 0)
+	// 사망 → Destroy 순서로 두 신호가 모두 와도 한 번만 집계한다.
+	if (!Enemy || AliveEnemies.Remove(Enemy) == 0)
 	{
-		return;
+		return false;
 	}
 
+	// 클리어 알림보다 먼저 남겨야 로그 순서가 실제 순서와 맞는다.
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Wave] %s: %s %s. Alive %d, remaining spawns %d"),
+		*GetName(), *GetNameSafe(Enemy), Reason, GetAliveEnemyCount(), GetRemainingSpawnCount());
+
+	UnbindEnemy(Enemy);
 	NotifyEnemyCountChanged();
 	TryReportWaveCleared();
+	return true;
+}
+
+void AWarriorWaveSpawner::HandleSpawnedEnemyDied(AWarriorBaseCharacter* DeadCharacter)
+{
+	RemoveTrackedEnemy(Cast<AWarriorAICharacter>(DeadCharacter), TEXT("died"));
+}
+
+void AWarriorWaveSpawner::HandleSpawnedEnemyDestroyed(AActor* DestroyedActor)
+{
+	RemoveTrackedEnemy(Cast<AWarriorAICharacter>(DestroyedActor), TEXT("destroyed without death signal"));
 }

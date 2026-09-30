@@ -6,6 +6,7 @@
 #include "WarriorWaveSpawner.generated.h"
 
 class AWarriorAICharacter;
+class AWarriorBaseCharacter;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(
 	FOnWarriorSpawnerEnemyCountChanged,
@@ -59,7 +60,15 @@ private:
 	void TryReportWaveCleared();
 	void CompactAliveEnemies();
 	void UnbindTrackedEnemies();
+	void UnbindEnemy(AWarriorAICharacter* Enemy);
+	/** 생존 목록에서 적을 빼고 수량 알림·클리어 판정을 한다. 이미 빠진 적이면 false. */
+	bool RemoveTrackedEnemy(AWarriorAICharacter* Enemy, const TCHAR* Reason);
 
+	/** 사망 연출이 끝나 OnCharacterDied가 방송되면 호출된다. 시체가 남아도 생존 수에서 뺀다. */
+	UFUNCTION()
+	void HandleSpawnedEnemyDied(AWarriorBaseCharacter* DeadCharacter);
+
+	/** 사망 신호 없이 Destroy된 경우(콘솔 삭제, 레벨 정리 등)의 예비 경로. */
 	UFUNCTION()
 	void HandleSpawnedEnemyDestroyed(AActor* DestroyedActor);
 
