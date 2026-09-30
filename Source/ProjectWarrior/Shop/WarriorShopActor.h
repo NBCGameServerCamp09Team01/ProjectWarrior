@@ -27,6 +27,8 @@ public:
 	virtual void Interact(APawn* InInteractor) override;
 	virtual void SetInteractionFocus(bool bInFocoused) override;
 
+	bool IsShopAvailable() const;
+
 	bool IsShopOpen() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Shop")

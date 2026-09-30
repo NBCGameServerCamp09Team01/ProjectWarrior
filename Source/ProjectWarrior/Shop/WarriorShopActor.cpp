@@ -7,6 +7,7 @@
 #include "ProjectWarrior/Widgets/ShopWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
+#include "ProjectWarrior/GameModes/WarriorStageGameState.h"
 
 AWarriorShopActor::AWarriorShopActor()
 {
@@ -25,9 +26,17 @@ AWarriorShopActor::AWarriorShopActor()
 	PromptWidget->SetHiddenInGame(true);
 }
 
+bool AWarriorShopActor::IsShopAvailable() const
+{
+	const UWorld* World = GetWorld();
+	const AWarriorStageGameState* StageGameState = World ? World->GetGameState<AWarriorStageGameState>() : nullptr;
+	return StageGameState && StageGameState->GetStageState() == EWarriorStageState::Resting;
+}
+
+
 bool AWarriorShopActor::CanInteract(APawn* InInteractor) const
 {
-	return InInteractor && InInteractor->IsPlayerControlled() && !IsShopOpen();
+	return InInteractor && InInteractor->IsPlayerControlled() && !IsShopOpen() && IsShopAvailable();
 }
 
 void AWarriorShopActor::Interact(APawn* InInteractor)
