@@ -8,6 +8,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
+#include "ProjectWarrior/DataAssets/DataAsset_Upgrade.h"
+#include "ProjectWarrior/Components/Upgrade/StageUpgradeComponent.h"
+
 
 AWarriorShopActor::AWarriorShopActor()
 {
@@ -30,7 +33,9 @@ bool AWarriorShopActor::IsShopAvailable() const
 {
 	const UWorld* World = GetWorld();
 	const AWarriorStageGameState* StageGameState = World ? World->GetGameState<AWarriorStageGameState>() : nullptr;
-	return StageGameState && StageGameState->GetStageState() == EWarriorStageState::Resting;
+	//return StageGameState && StageGameState->GetStageState() == EWarriorStageState::Resting;
+
+	return true;
 }
 
 
@@ -79,6 +84,33 @@ EWarriorPurchaseResult AWarriorShopActor::PurchaseItem(UPlayerInventoryComponent
 	return EWarriorPurchaseResult::Success;
 }
 
+EWarriorPurchaseResult AWarriorShopActor::PurchaseUpgrade(UPlayerInventoryComponent* InInventory, UStageUpgradeComponent* InUpgradeComp, UDataAsset_Upgrade* InUpgrade)
+{
+	if (!IsShopAvailable() || !InInventory || !InUpgradeComp || !InUpgrade || !ShopData || !ShopData->Upgrades.Contains(InUpgrade))
+	{
+		return EWarriorPurchaseResult::InvalidItem;
+	}
+
+	if (InUpgradeComp->IsMaxLevel(InUpgrade))
+	{
+		return EWarriorPurchaseResult::MaxLevel;
+	}
+
+	const int32 Cost = InUpgrade->GetNextCost(InUpgradeComp->GetLevel(InUpgrade));
+	if (Cost < 0 || Cost > InInventory->GetGold())
+	{
+		return EWarriorPurchaseResult::NotEnoughGold;
+	}
+
+	InInventory->SpendGold(Cost);
+	if (!InUpgradeComp->IncreaseLevel(InUpgrade))
+	{
+		InInventory->AddGold(Cost);  // 방어: 적용 실패 시 환불
+		return EWarriorPurchaseResult::InvalidItem;
+	}
+	return EWarriorPurchaseResult::Success;
+}
+
 void AWarriorShopActor::OpenShop(APlayerController* InPlayerController)
 {
 	if (!InPlayerController || !ShopWidgetClass)
@@ -88,7 +120,9 @@ void AWarriorShopActor::OpenShop(APlayerController* InPlayerController)
 
 	AWarriorPlayerState* PlayerState = InPlayerController->GetPlayerState<AWarriorPlayerState>();
 	UPlayerInventoryComponent* Inventory = PlayerState ? PlayerState->GetPlayerInventoryComponent() : nullptr;
-	if (!Inventory)
+	UStageUpgradeComponent* UpgradeComp = PlayerState ? PlayerState->GetStageUpgradeComponent() : nullptr;
+
+	if (!Inventory || !UpgradeComp)
 	{
 		return;
 	}
@@ -97,7 +131,7 @@ void AWarriorShopActor::OpenShop(APlayerController* InPlayerController)
 	{
 		ShopWidget = CreateWidget<UShopWidget>(InPlayerController, ShopWidgetClass);
 	}
-	ShopWidget->InitShop(this, Inventory);
+	ShopWidget->InitShop(this, Inventory, UpgradeComp);
 	ShopWidget->AddToViewport(20);
 
 	//FInputModeGameAndUI InputMode;

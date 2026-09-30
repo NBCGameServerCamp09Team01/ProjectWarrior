@@ -14,6 +14,9 @@ class UPlayerInventoryComponent;
 class UShopWidget;
 class UStaticMeshComponent;
 class UWidgetComponent;
+class UStageUpgradeComponent;
+class UDataAsset_Upgrade;
+
 
 UCLASS()
 class PROJECTWARRIOR_API AWarriorShopActor : public AActor, public IWarriorInteractableInterface
@@ -33,6 +36,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Shop")
 	EWarriorPurchaseResult PurchaseItem(UPlayerInventoryComponent* InInventory, UDataAsset_Item* InItem, int32 InCount = 1);
+
+	UFUNCTION(BlueprintCallable, Category = "Shop")
+	EWarriorPurchaseResult PurchaseUpgrade(UPlayerInventoryComponent* InInventory, UStageUpgradeComponent* InUpgradeComp, UDataAsset_Upgrade* InUpgrade);
 
 	UFUNCTION(BlueprintCallable, Category = "Shop")
 	void OpenShop(APlayerController* InPlayerController);

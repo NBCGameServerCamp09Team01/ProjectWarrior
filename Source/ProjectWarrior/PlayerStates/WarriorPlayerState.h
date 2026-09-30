@@ -7,6 +7,7 @@
 #include "WarriorPlayerState.generated.h"
 
 class UPlayerInventoryComponent;
+class UStageUpgradeComponent;
 
 /**
  *
@@ -23,7 +24,13 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory", meta = (AllowPrivateAccess = "true"))
 	UPlayerInventoryComponent* PlayerInventoryComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Upgrade", meta = (AllowPrivateAccess = "true"))
+	UStageUpgradeComponent* StageUpgradeComponent;
+
 public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	UPlayerInventoryComponent* GetPlayerInventoryComponent() const { return PlayerInventoryComponent; }
+
+	UFUNCTION(BlueprintPure, Category = "Upgrade")
+	UStageUpgradeComponent* GetStageUpgradeComponent() const { return StageUpgradeComponent; }
 };

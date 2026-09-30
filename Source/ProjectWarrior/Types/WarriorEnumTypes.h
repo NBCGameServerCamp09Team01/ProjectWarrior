@@ -36,5 +36,6 @@ enum class EWarriorPurchaseResult : uint8
     Success,
     InvalidItem,
     NotEnoughGold,
-    InventoryFull
+    InventoryFull,
+    MaxLevel
 };
