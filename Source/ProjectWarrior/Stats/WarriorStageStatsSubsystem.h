@@ -11,6 +11,7 @@
 class AWarriorStageGameState;
 class UGameplayAbility;
 class UPlayerInventoryComponent;
+class UWarriorProfileStatsSubsystem;
 
 /** 공격 한 번(어빌리티 발동 1회)을 구분하는 키 */
 struct FWarriorAttackKey
@@ -94,6 +95,12 @@ public:
 	FWarriorStatBlock* GetMutableStats();
 	/** 진행 중인 웨이브. 웨이브 전이거나 이미 클리어된 웨이브면 nullptr */
 	FWarriorWaveRecord* GetMutableCurrentWave();
+	/**
+	 * 진행 중인 기록을 중도 이탈로 마감해 지정한 보관소에 넘긴다. 기록 중이 아니면 아무것도 하지 않는다.
+	 * 게임(PIE) 종료 시 GameInstance가 월드보다 먼저 정리되므로, 보관소가 자기 Deinitialize에서 먼저 호출한다.
+	 */
+	void FinishAsAbandoned(UWarriorProfileStatsSubsystem* InProfileStats);
+
 	/** 이번 웨이브에 플레이어가 맞았음을 표시 (무피격 웨이브 판정용) */
 	void MarkPlayerHitThisWave() { bPlayerHitThisWave = true; }
 
@@ -117,7 +124,8 @@ public:
 
 private:
 	void BeginStageRecord(AWarriorStageGameState* InStageGameState);
-	void FinishStageRecord(EWarriorStatOutcome InOutcome);
+	/** InProfileStats가 없으면 월드의 GameInstance에서 찾는다 */
+	void FinishStageRecord(EWarriorStatOutcome InOutcome, UWarriorProfileStatsSubsystem* InProfileStats = nullptr);
 
 	/** 이전 상태에서 보낸 시간을 플레이 시간·휴식 시간에 더한다 */
 	void AccumulateStateTime();

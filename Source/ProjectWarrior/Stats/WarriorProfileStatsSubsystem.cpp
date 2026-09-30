@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "Misc/ConfigCacheIni.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "WarriorStageStatsSubsystem.h"
 
 namespace WarriorProfileStats_Private
 {
@@ -50,7 +51,14 @@ FString UWarriorProfileStatsSubsystem::GetBuildVersion()
 
 void UWarriorProfileStatsSubsystem::Deinitialize()
 {
-	// 게임(또는 PIE)을 끌 때 진행 중인 판은 중도 이탈로 마감한다.
+	// 게임(또는 PIE)을 끌 때는 GameInstance가 월드보다 먼저 정리된다.
+	// 진행 중인 스테이지 기록을 먼저 받아 두지 않으면 월드 쪽에서 넘길 곳이 사라진다.
+	if (UWarriorStageStatsSubsystem* StageStats = UWarriorStageStatsSubsystem::Get(GetGameInstance()))
+	{
+		StageStats->FinishAsAbandoned(this);
+	}
+
+	// 진행 중인 판은 중도 이탈로 마감한다. 위에서 스테이지가 넘어왔으면 이미 끝나 있다.
 	EndRun(EWarriorStatOutcome::Abandoned);
 	Super::Deinitialize();
 }

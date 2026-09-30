@@ -726,6 +726,49 @@ bool FWarriorStatsIgnoredOutsideStageTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+//~ 게임 종료 시 중도 이탈
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorStatsAbandonOnShutdownTest, "ProjectWarrior.Stats.S1.AbandonOnShutdown", WARRIOR_STATS_TEST_FLAGS)
+
+bool FWarriorStatsAbandonOnShutdownTest::RunTest(const FString& Parameters)
+{
+	// PIE 종료 시 GameInstance가 월드보다 먼저 정리된다. 보관소가 진행 중인 스테이지를 직접 받아 판을 끝내는지 확인한다.
+	WST::FStageTestWorld Test;
+	UWarriorProfileStatsSubsystem* Profile = WST::MakeProfile();
+	if (!TestNotNull(TEXT("World"), Test.World) || !TestNotNull(TEXT("Stage stats"), Test.Stats) || !TestNotNull(TEXT("Profile"), Profile))
+	{
+		return false;
+	}
+	UWarriorStageStatsSubsystem& Stats = *Test.Stats;
+
+	// 기록 중이 아니면 아무것도 넘기지 않는다.
+	Stats.FinishAsAbandoned(Profile);
+	TestEqual(TEXT("Nothing submitted while not recording"), Profile->GetStageRecords().Num(), 0);
+
+	FWarriorStatsStageTest::BeginFakeStage(Stats);
+	Stats.HandleGoldEarned(5, TEXT("Kill"));
+	Stats.FinishAsAbandoned(Profile);
+
+	FWarriorStageRecord LastStage;
+	if (TestTrue(TEXT("Abandoned stage stored"), Profile->GetLastStageRecord(LastStage)))
+	{
+		TestTrue(TEXT("Stage outcome"), LastStage.Outcome == EWarriorStatOutcome::Abandoned);
+		TestEqual(TEXT("Stage stats kept"), LastStage.Stats.Economy.GoldEarned, 5);
+	}
+	FWarriorRunRecord LastRun;
+	if (TestTrue(TEXT("Run ended"), Profile->GetLastRunRecord(LastRun)))
+	{
+		TestTrue(TEXT("Run outcome"), LastRun.Outcome == EWarriorStatOutcome::Abandoned);
+		TestEqual(TEXT("Run includes the stage"), LastRun.StagesPlayed, 1);
+	}
+	TestFalse(TEXT("Not recording after abandon"), Stats.IsRecording());
+
+	// 두 번 불려도 한 번만 넘긴다.
+	Stats.FinishAsAbandoned(Profile);
+	TestEqual(TEXT("Submitted once"), Profile->GetStageRecords().Num(), 1);
+	return true;
+}
+
 #undef WARRIOR_STATS_TEST_FLAGS
 
 #endif // WITH_DEV_AUTOMATION_TESTS

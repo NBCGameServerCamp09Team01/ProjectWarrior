@@ -165,7 +165,12 @@ void UWarriorStageStatsSubsystem::BeginStageRecord(AWarriorStageGameState* InSta
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Stats] Stage record started: %s (run %s)"), *Record.StageId.ToString(), *Record.RunId.ToString());
 }
 
-void UWarriorStageStatsSubsystem::FinishStageRecord(const EWarriorStatOutcome InOutcome)
+void UWarriorStageStatsSubsystem::FinishAsAbandoned(UWarriorProfileStatsSubsystem* InProfileStats)
+{
+	FinishStageRecord(EWarriorStatOutcome::Abandoned, InProfileStats);
+}
+
+void UWarriorStageStatsSubsystem::FinishStageRecord(const EWarriorStatOutcome InOutcome, UWarriorProfileStatsSubsystem* InProfileStats)
 {
 	if (!IsRecording())
 	{
@@ -192,7 +197,8 @@ void UWarriorStageStatsSubsystem::FinishStageRecord(const EWarriorStatOutcome In
 	// 먼저 표시해 두어 넘기는 도중 다시 불려도 두 번 넘기지 않게 한다.
 	bRecordSubmitted = true;
 
-	if (UWarriorProfileStatsSubsystem* ProfileStats = UWarriorProfileStatsSubsystem::Get(GetWorld()))
+	UWarriorProfileStatsSubsystem* ProfileStats = InProfileStats ? InProfileStats : UWarriorProfileStatsSubsystem::Get(GetWorld());
+	if (ProfileStats)
 	{
 		ProfileStats->AddStageRecord(Record);
 	}
