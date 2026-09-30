@@ -20,3 +20,12 @@ enum class EWarriorSuccessType : uint8
     Successful,
     Failed
 };
+
+UENUM(BlueprintType)
+enum class EWarriorPurchaseResult : uint8
+{
+    Success,
+    InvalidItem,
+    NotEnoughGold,
+    InventoryFull
+};

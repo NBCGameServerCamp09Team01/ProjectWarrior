@@ -24,6 +24,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool AddItem(UDataAsset_Item* InItem, int32 InCount = 1);
 
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool CanAddItem(const UDataAsset_Item* InItem, int32 InCount = 1) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool RemoveItem(UDataAsset_Item* InItem, int32 InCount = 1);
 

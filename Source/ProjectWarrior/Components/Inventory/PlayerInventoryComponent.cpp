@@ -43,6 +43,15 @@ bool UPlayerInventoryComponent::AddItem(UDataAsset_Item* InItem, int32 InCount)
 	return true;
 }
 
+bool UPlayerInventoryComponent::CanAddItem(const UDataAsset_Item* InItem, int32 InCount) const
+{
+	if (!InItem || InCount <= 0)
+	{
+		return false;
+	}
+	return GetItemCount(InItem) + InCount <= InItem->MaxStack;
+}
+
 bool UPlayerInventoryComponent::RemoveItem(UDataAsset_Item* InItem, int32 InCount)
 {
 	if (!InItem || InCount <= 0)

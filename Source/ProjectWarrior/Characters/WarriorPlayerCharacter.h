@@ -14,6 +14,7 @@ class UPlayerCombatComponent;
 class UPlayerUIComponent;
 class UPlayerInventoryComponent;
 class UInventoryWheelWidget;
+class UPlayerInteractionComponent;
 
 struct FInputActionValue;
 /**
@@ -41,12 +42,6 @@ public:
 
 	// 테스트용 콘솔 명령
 	UFUNCTION(Exec)
-	void DebugAddItem(const FString& InItemPath, int32 InCount = 1);
-
-	UFUNCTION(Exec)
-	void DebugUseItem(const FString& InItemPath);
-
-	UFUNCTION(Exec)
 	void DebugAddGold(int32 InAmount);
 
 protected:
@@ -70,7 +65,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
 	UPlayerUIComponent* PlayerUIComponent;
-
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (AllowPrivateAccess = "true"))
+	UPlayerInteractionComponent* PlayerInteractionComponent;
 #pragma endregion
 
 #pragma region Inputs
@@ -116,6 +113,9 @@ private:
 
 	UFUNCTION()
 	void Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue);
+
+	UFUNCTION()
+	void Input_Interact(const FInputActionValue& InputActionValue);
 
 #pragma endregion
 
