@@ -5,10 +5,44 @@
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
 #include "ProjectWarrior/Widgets/ShopWidget.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/WidgetComponent.h"
 
 AWarriorShopActor::AWarriorShopActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	ShopMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ShopMesh"));
+	SetRootComponent(ShopMesh);
+	ShopMesh->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
+
+	PromptWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("PromptWidget"));
+	PromptWidget->SetupAttachment(ShopMesh);
+	PromptWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	PromptWidget->SetDrawAtDesiredSize(true);
+	PromptWidget->SetRelativeLocation(FVector(0.f, 0.f, 150.f));
+	PromptWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PromptWidget->SetHiddenInGame(true);
+}
+
+bool AWarriorShopActor::CanInteract(APawn* InInteractor) const
+{
+	return InInteractor && InInteractor->IsPlayerControlled() && !IsShopOpen();
+}
+
+void AWarriorShopActor::Interact(APawn* InInteractor)
+{
+	OpenShop(InInteractor->GetController<APlayerController>());
+}
+
+void AWarriorShopActor::SetInteractionFocus(bool bInFocused)
+{
+	PromptWidget->SetHiddenInGame(!bInFocused);
+}
+
+bool AWarriorShopActor::IsShopOpen() const
+{
+	return ShopWidget && ShopWidget->IsInViewport();
 }
 
 EWarriorPurchaseResult AWarriorShopActor::PurchaseItem(UPlayerInventoryComponent* InInventory, UDataAsset_Item* InItem, int32 InCount)
@@ -57,7 +91,8 @@ void AWarriorShopActor::OpenShop(APlayerController* InPlayerController)
 	ShopWidget->InitShop(this, Inventory);
 	ShopWidget->AddToViewport(20);
 
-	FInputModeGameAndUI InputMode;
+	//FInputModeGameAndUI InputMode;
+	FInputModeUIOnly InputMode;
 	InputMode.SetWidgetToFocus(ShopWidget->TakeWidget());
 	InPlayerController->SetInputMode(InputMode);
 	InPlayerController->SetShowMouseCursor(true);
