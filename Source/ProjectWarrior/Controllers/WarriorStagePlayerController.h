@@ -47,8 +47,12 @@ protected:
 	//InFocusWidget은 UI 입력 모드로 바꿀 때 포커스를 줄 위젯
 	void ApplyStatePermission(EWarriorStageState InState, bool bForceInputMode = false, UUserWidget* InFocusWidget = nullptr);
 
-	//결과 위젯을 만들어(처음 한 번) 결과를 채우고 띄운다. 띄우지 못하면 nullptr
-	UWarriorStageResultWidget* ShowResult(EWarriorStageState InState);
+	//GameState의 OnStageFinished에 연결. 상태가 끝 상태로 바뀌기 직전에 온다
+	UFUNCTION()
+	void HandleStageFinished(const FWarriorStageResult& InResult);
+
+	//결과 위젯을 만들어(처음 한 번) GameState가 확정한 결과를 넘기고 띄운다
+	void ShowResult(const FWarriorStageResult& InResult);
 
 	//스테이지 HUD (BP_StagePlayerController에서 WBP_StageHUD 지정)
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")

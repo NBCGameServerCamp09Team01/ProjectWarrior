@@ -4,6 +4,7 @@
 #include "WarriorStageGameState.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "ProjectWarrior/ProjectWarrior.h"
 
 AWarriorStageGameState::AWarriorStageGameState()
 {
@@ -79,7 +80,7 @@ void AWarriorStageGameState::SetStageState(EWarriorStageState InNewState, float 
 	StageState = InNewState;
 	StateEndTime = InDuration > 0.f ? GetServerWorldTimeSeconds() + InDuration : 0.f;
 
-	UE_LOG(LogTemp, Log, TEXT("[Stage] State %s -> %s (Duration %.1f)"),
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] State %s -> %s (Duration %.1f)"),
 		*UEnum::GetValueAsString(OldState),
 		*UEnum::GetValueAsString(InNewState),
 		InDuration);
@@ -107,4 +108,17 @@ void AWarriorStageGameState::SetEnemyCount(int32 InAliveCount, int32 InTotalCoun
 	TotalEnemyCount = FMath::Max(0, InTotalCount);
 
 	OnEnemyCountChanged.Broadcast(AliveEnemyCount, TotalEnemyCount);
+}
+
+void AWarriorStageGameState::SetRunId(const FGuid& InRunId)
+{
+	RunId = InRunId;
+}
+
+void AWarriorStageGameState::SetStageResult(const FWarriorStageResult& InResult)
+{
+	StageResult = InResult;
+	bHasStageResult = true;
+
+	OnStageFinished.Broadcast(StageResult);
 }
