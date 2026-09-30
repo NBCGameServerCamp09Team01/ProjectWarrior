@@ -94,6 +94,23 @@ float UWarriorStageStatsSubsystem::GetStageTimeSeconds() const
 	return bRecording && World ? static_cast<float>(World->GetTimeSeconds() - StageStartWorldTime) : 0.0f;
 }
 
+float UWarriorStageStatsSubsystem::GetLivePlayTimeSeconds() const
+{
+	const UWorld* World = GetWorld();
+	if (!bRecording || !World)
+	{
+		return Record.Stats.PlayTimeSeconds;
+	}
+	const double Pending = IsPlayState(CurrentState) ? FMath::Max(0.0, World->GetTimeSeconds() - StateEnterWorldTime) : 0.0;
+	return static_cast<float>(Record.Stats.PlayTimeSeconds + Pending);
+}
+
+int32 UWarriorStageStatsSubsystem::GetCurrentGold() const
+{
+	const UPlayerInventoryComponent* Inventory = WatchedInventory.Get();
+	return Inventory ? Inventory->GetGold() : -1;
+}
+
 int32 UWarriorStageStatsSubsystem::GetCurrentWaveNumber() const
 {
 	return Record.Waves.IsValidIndex(CurrentWaveIndex) ? Record.Waves[CurrentWaveIndex].WaveNumber : 0;

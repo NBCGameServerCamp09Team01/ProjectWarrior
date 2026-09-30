@@ -77,6 +77,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stats")
 	float GetStageTimeSeconds() const;
 
+	/** 현재 상태에 머문 시간까지 포함한 실시간 플레이 시간. 기록의 PlayTimeSeconds는 상태 전환 때만 갱신된다 */
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stats")
+	float GetLivePlayTimeSeconds() const;
+
+	/** 감시 중인 플레이어 인벤토리의 현재 골드. 감시 전이면 -1 */
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stats")
+	int32 GetCurrentGold() const;
+
 	/** 진행 중인 웨이브 번호. 웨이브 전이면 0 */
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stats")
 	int32 GetCurrentWaveNumber() const;
