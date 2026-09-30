@@ -122,6 +122,12 @@ private:
 	FWarriorAttackKey MakeAttackKey(const FGameplayEffectContextHandle& InContext) const;
 	void ResetTracking();
 
+	/** 적의 사망 태그가 붙는 순간 사망 방식을 기억한다. 사망 신호 시점에는 태그가 이미 지워졌을 수 있기 때문 */
+	void WatchDeathTags(AActor* InEnemy);
+	void HandleEnemyDeathTagChanged(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AActor> InEnemy);
+	/** 우선순위: Finisher > Knockback > Normal. 둘 다 None이면 None */
+	static FName PickDeathType(FName InA, FName InB);
+
 	UFUNCTION()
 	void HandleStageStateChanged(EWarriorStageState NewState, EWarriorStageState OldState);
 
@@ -147,6 +153,7 @@ private:
 	TMap<FWarriorAttackKey, FWarriorAttackTrack> AttackTracks;
 	TMap<TWeakObjectPtr<AActor>, FWarriorLastHit> LastHits;
 	TMap<TWeakObjectPtr<AActor>, float> EnemySpawnTimes;
+	TMap<TWeakObjectPtr<AActor>, FName> EnemyDeathTypes;
 	bool bRecording = false;
 	bool bRecordSubmitted = false;
 

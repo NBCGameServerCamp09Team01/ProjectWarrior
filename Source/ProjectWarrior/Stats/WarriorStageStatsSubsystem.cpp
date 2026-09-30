@@ -1,5 +1,7 @@
 #include "WarriorStageStatsSubsystem.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "Abilities/GameplayAbility.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -11,6 +13,7 @@
 #include "ProjectWarrior/GameModes/WarriorStageGameMode.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
 #include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "WarriorProfileStatsSubsystem.h"
 #include "WarriorStatTags.h"
 
@@ -342,6 +345,62 @@ void UWarriorStageStatsSubsystem::ResetTracking()
 	AttackTracks.Reset();
 	LastHits.Reset();
 	EnemySpawnTimes.Reset();
+	EnemyDeathTypes.Reset();
+}
+
+FName UWarriorStageStatsSubsystem::PickDeathType(const FName InA, const FName InB)
+{
+	static const FName Finisher(TEXT("Finisher"));
+	static const FName Knockback(TEXT("Knockback"));
+	static const FName Normal(TEXT("Normal"));
+	auto Rank = [&](const FName Type) { return Type == Finisher ? 3 : Type == Knockback ? 2 : Type == Normal ? 1 : 0; };
+	return Rank(InA) >= Rank(InB) ? InA : InB;
+}
+
+void UWarriorStageStatsSubsystem::WatchDeathTags(AActor* InEnemy)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InEnemy);
+	if (!ASC)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<AActor> WeakEnemy(InEnemy);
+	for (const FGameplayTag& DeathTag : {
+		WarriorGameplayTags::Shared_Status_Death_Normal.GetTag(),
+		WarriorGameplayTags::Shared_Status_Death_Knockback.GetTag(),
+		WarriorGameplayTags::Shared_Status_Death_Finisher.GetTag(),
+		// 플레이어 처형(GA_Player_Finisher)으로 죽는 적은 Death.* 태그 없이 처형 상태 태그만 붙을 수 있다.
+		WarriorGameplayTags::Shared_Status_Finisher.GetTag() })
+	{
+		ASC->RegisterGameplayTagEvent(DeathTag, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleEnemyDeathTagChanged, WeakEnemy);
+	}
+}
+
+void UWarriorStageStatsSubsystem::HandleEnemyDeathTagChanged(const FGameplayTag InTag, const int32 InNewCount, TWeakObjectPtr<AActor> InEnemy)
+{
+	if (InNewCount <= 0 || !InEnemy.IsValid())
+	{
+		return;
+	}
+
+	FName TagType = NAME_None;
+	if (InTag == WarriorGameplayTags::Shared_Status_Death_Finisher || InTag == WarriorGameplayTags::Shared_Status_Finisher)
+	{
+		TagType = TEXT("Finisher");
+	}
+	else if (InTag == WarriorGameplayTags::Shared_Status_Death_Knockback)
+	{
+		TagType = TEXT("Knockback");
+	}
+	else if (InTag == WarriorGameplayTags::Shared_Status_Death_Normal)
+	{
+		TagType = TEXT("Normal");
+	}
+
+	FName& Stored = EnemyDeathTypes.FindOrAdd(InEnemy);
+	Stored = PickDeathType(Stored, TagType);
 }
 
 FWarriorAttackKey UWarriorStageStatsSubsystem::MakeAttackKey(const FGameplayEffectContextHandle& InContext) const
@@ -369,6 +428,7 @@ void UWarriorStageStatsSubsystem::HandleEnemySpawned(AActor* InEnemy)
 
 	++Record.FindOrAddEnemyType(GetTypeName(InEnemy)).Spawned;
 	EnemySpawnTimes.Add(InEnemy, GetStageTimeSeconds());
+	WatchDeathTags(InEnemy);
 }
 
 void UWarriorStageStatsSubsystem::HandleEnemyKilled(AActor* InEnemy, const FName InDeathType)
@@ -398,10 +458,14 @@ void UWarriorStageStatsSubsystem::HandleEnemyKilled(AActor* InEnemy, const FName
 		FWarriorAttackStats& Attack = Record.Stats.Attack;
 		++Attack.Kills;
 		++Attack.KillsByEnemyType.FindOrAdd(EnemyType);
-		if (!InDeathType.IsNone())
+		// 사망 신호 시점의 태그와 미리 기억해 둔 태그 중 우선순위가 높은 쪽. 둘 다 없으면 Unknown으로 세어 합계가 Kills와 맞게 한다.
+		const FName* StoredDeathType = EnemyDeathTypes.Find(InEnemy);
+		FName DeathType = PickDeathType(InDeathType, StoredDeathType ? *StoredDeathType : NAME_None);
+		if (DeathType.IsNone())
 		{
-			++Attack.KillsByDeathType.FindOrAdd(InDeathType);
+			DeathType = TEXT("Unknown");
 		}
+		++Attack.KillsByDeathType.FindOrAdd(DeathType);
 		if (LastHit)
 		{
 			FWarriorAttackTrack& Track = AttackTracks.FindOrAdd(LastHit->AttackKey);
@@ -412,6 +476,7 @@ void UWarriorStageStatsSubsystem::HandleEnemyKilled(AActor* InEnemy, const FName
 
 	LastHits.Remove(InEnemy);
 	EnemySpawnTimes.Remove(InEnemy);
+	EnemyDeathTypes.Remove(InEnemy);
 }
 
 void UWarriorStageStatsSubsystem::HandleDamage(const FGameplayEffectContextHandle& InContext, AActor* InTarget, const float InDamage, const float InOverkill, const bool bInFatal)

@@ -1,7 +1,8 @@
 #include "WarriorStatsLibrary.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
 #include "Abilities/GameplayAbility.h"
-#include "ProjectWarrior/WarriorFunctionLibrary.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "WarriorProfileStatsSubsystem.h"
 #include "WarriorStageStatsSubsystem.h"
@@ -138,19 +139,22 @@ FName UWarriorStatsLibrary::GetEnemyTypeName(const AActor* Enemy)
 
 FName UWarriorStatsLibrary::GetDeathTypeName(AActor* DeadActor)
 {
-	if (!DeadActor)
+	// ASC가 없는 액터에서도 안전하도록 WarriorFunctionLibrary(CastChecked) 대신 직접 조회한다.
+	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(DeadActor);
+	if (!ASC)
 	{
 		return NAME_None;
 	}
-	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(DeadActor, WarriorGameplayTags::Shared_Status_Death_Finisher))
+	if (ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death_Finisher)
+		|| ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Finisher))
 	{
 		return TEXT("Finisher");
 	}
-	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(DeadActor, WarriorGameplayTags::Shared_Status_Death_Knockback))
+	if (ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death_Knockback))
 	{
 		return TEXT("Knockback");
 	}
-	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(DeadActor, WarriorGameplayTags::Shared_Status_Death_Normal))
+	if (ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death_Normal))
 	{
 		return TEXT("Normal");
 	}
