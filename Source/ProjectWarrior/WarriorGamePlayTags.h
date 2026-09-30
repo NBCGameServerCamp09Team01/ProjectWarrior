@@ -29,6 +29,8 @@ namespace WarriorGameplayTags
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_InventoryWheel);
 
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Interact);
+
 	/** Player tags **/
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Equip_Weapon_Katana);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Unequip_Weapon_Katana);

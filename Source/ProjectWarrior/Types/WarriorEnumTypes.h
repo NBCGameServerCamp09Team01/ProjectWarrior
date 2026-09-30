@@ -29,3 +29,12 @@ enum class EWarriorHitResultType : uint8
     Dodged,
     Invalid
 };
+
+UENUM(BlueprintType)
+enum class EWarriorPurchaseResult : uint8
+{
+    Success,
+    InvalidItem,
+    NotEnoughGold,
+    InventoryFull
+};
