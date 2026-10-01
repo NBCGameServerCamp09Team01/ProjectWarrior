@@ -292,7 +292,7 @@ void UWarriorAccountSubsystem::HandleStageRecorded(const FWarriorStageRecord& In
 	LastReward = Reward;
 	bHasLastReward = true;
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Reward for %s: %s, Exp +%d, Level %d -> %d, StatPoints +%d (now %d)"),
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Reward for %s: %s, Exp +%d, Level %d -> %d, StatPoints +%d from level up (now %d)"),
 		*InStageRecord.RecordId.ToString(),
 		bCleared ? TEXT("Cleared") : TEXT("Failed"),
 		Reward.ExpGained, Reward.LevelBefore, Reward.LevelAfter, Reward.StatPointsGained, Data.StatPoints);
