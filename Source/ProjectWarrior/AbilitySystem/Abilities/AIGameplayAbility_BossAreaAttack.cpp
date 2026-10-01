@@ -11,6 +11,14 @@
 #include "Engine/OverlapResult.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "NavigationSystem.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimNotifies/AnimNotify.h"
+#include "Animation/AnimNotifies/AnimNotifyState.h"
+#include "Character/ALSBaseCharacter.h"
+#include "DrawDebugHelpers.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 
 namespace
@@ -30,6 +38,8 @@ UAIGameplayAbility_BossAreaAttack::UAIGameplayAbility_BossAreaAttack()
 {
 	// 보스 범위 공격은 플레이어의 Light 쿨다운을 무시하고 항상 반응하도록 Heavy
 	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Heavy;
+
+	MontageImpactEventTag = WarriorGameplayTags::AI_Event_Boss_AreaImpact;
 }
 
 void UAIGameplayAbility_BossAreaAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
@@ -95,22 +105,192 @@ void UAIGameplayAbility_BossAreaAttack::BeginDefaultAreaTelegraph(AActor* Target
 	BeginAreaTelegraph(DefaultAreaData, TargetActor, TelegraphDuration);
 }
 
+bool UAIGameplayAbility_BossAreaAttack::BeginMontageAreaTelegraph(UAnimMontage* Montage, AActor* TargetActor, bool bFaceTarget, float TelegraphDuration)
+{
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+
+	if (!OwnerCharacter || !Montage)
+	{
+		return false;
+	}
+
+	float ImpactTime = 0.f;
+
+	if (!FindMontageEventTime(Montage, MontageImpactEventTag, ImpactTime))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[BossAreaAttack] %s: notify with %s not found in %s."), *GetName(), *MontageImpactEventTag.ToString(), *Montage->GetName());
+		return false;
+	}
+
+	if (bFaceTarget)
+	{
+		FaceAreaTarget(TargetActor);
+	}
+
+	// 이미 재생 중이면 현재 위치부터 (그 사이 이동한 만큼은 이미 액터 위치에 반영됨)
+	float CurrentPosition = 0.f;
+	float PlayRate = 1.f;
+
+	if (const UAnimInstance* AnimInstance = OwnerCharacter->GetMesh() ? OwnerCharacter->GetMesh()->GetAnimInstance() : nullptr)
+	{
+		if (AnimInstance->Montage_IsPlaying(Montage))
+		{
+			CurrentPosition = AnimInstance->Montage_GetPosition(Montage);
+			PlayRate = FMath::Abs(AnimInstance->Montage_GetPlayRate(Montage));
+		}
+	}
+
+	PlayRate *= FMath::Max(Montage->RateScale, KINDA_SMALL_NUMBER);
+
+	const FRotator OwnerYawRotation(0.f, OwnerCharacter->GetActorRotation().Yaw, 0.f);
+	FTransform ImpactAnchor(OwnerYawRotation, OwnerCharacter->GetActorLocation());
+
+	if (ImpactTime > CurrentPosition && Montage->HasRootMotion())
+	{
+		// 메시 기준 루트 모션 -> 월드 이동량 (메시의 회전 오프셋 반영)
+		const FTransform LocalRootMotion = Montage->ExtractRootMotionFromTrackRange(CurrentPosition, ImpactTime, FAnimExtractContext());
+		const FTransform WorldDelta = OwnerCharacter->GetMesh()->ConvertLocalRootMotionToWorld(LocalRootMotion);
+
+		const FVector DeltaTranslation(WorldDelta.GetTranslation().X, WorldDelta.GetTranslation().Y, 0.f);
+		const float ImpactYaw = (WorldDelta.GetRotation() * OwnerYawRotation.Quaternion()).Rotator().Yaw;
+
+		ImpactAnchor = FTransform(FRotator(0.f, ImpactYaw, 0.f), OwnerCharacter->GetActorLocation() + DeltaTranslation);
+	}
+
+	if (TelegraphDuration < 0.f)
+	{
+		TelegraphDuration = FMath::Max(ImpactTime - CurrentPosition, 0.f) / PlayRate;
+	}
+
+	// Owner 앵커면 보스를 따라가 버리므로 고정 앵커로 강제
+	FWarriorAttackAreaData MontageAreaData = DefaultAreaData;
+	MontageAreaData.Anchor = EWarriorAttackAreaAnchor::OwnerSnapshot;
+
+	BeginAreaTelegraphAtAnchor(MontageAreaData, ImpactAnchor, TelegraphDuration);
+
+#if ENABLE_DRAW_DEBUG
+	if (bDrawDebugArea)
+	{
+		DrawDebugLine(GetWorld(), OwnerCharacter->GetActorLocation(), ImpactAnchor.GetLocation(), FColor::Cyan, false, FMath::Max(TelegraphDuration, 0.1f), 0, 2.f);
+		DrawDebugSphere(GetWorld(), ImpactAnchor.GetLocation(), 30.f, 12, FColor::Cyan, false, FMath::Max(TelegraphDuration, 0.1f), 0, 2.f);
+	}
+#endif
+
+	return true;
+}
+
+bool UAIGameplayAbility_BossAreaAttack::FaceAreaTarget(AActor* TargetActor)
+{
+	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
+	const AActor* ResolvedTarget = ResolveAreaTarget(TargetActor);
+
+	if (!AvatarActor || !ResolvedTarget)
+	{
+		return false;
+	}
+
+	const FVector ToTarget = (ResolvedTarget->GetActorLocation() - AvatarActor->GetActorLocation()).GetSafeNormal2D();
+
+	if (!ToTarget.IsNearlyZero())
+	{
+		SetOwnerFacingRotation(ToTarget.Rotation());
+	}
+
+	return true;
+}
+
+void UAIGameplayAbility_BossAreaAttack::SetOwnerFacingRotation(const FRotator& NewRotation) const
+{
+	APawn* OwnerPawn = Cast<APawn>(GetAvatarActorFromActorInfo());
+
+	if (!OwnerPawn)
+	{
+		return;
+	}
+
+	if (AALSBaseCharacter* ALSCharacter = Cast<AALSBaseCharacter>(OwnerPawn))
+	{
+		ALSCharacter->SetActorLocationAndTargetRotation(ALSCharacter->GetActorLocation(), NewRotation);
+	}
+	else
+	{
+		OwnerPawn->SetActorRotation(NewRotation);
+	}
+
+	if (AController* Controller = OwnerPawn->GetController())
+	{
+		Controller->SetControlRotation(NewRotation);
+	}
+}
+
+bool UAIGameplayAbility_BossAreaAttack::FindMontageEventTime(const UAnimMontage* InMontage, const FGameplayTag& InEventTag, float& OutTime)
+{
+	if (!InMontage || !InEventTag.IsValid())
+	{
+		return false;
+	}
+
+	for (const FAnimNotifyEvent& NotifyEvent : InMontage->Notifies)
+	{
+		const UObject* NotifyObject = NotifyEvent.Notify ? static_cast<const UObject*>(NotifyEvent.Notify) : static_cast<const UObject*>(NotifyEvent.NotifyStateClass);
+
+		if (!NotifyObject)
+		{
+			continue;
+		}
+
+		// BP 노티파이의 이벤트 태그 변수 이름은 제각각이므로 GameplayTag 변수 값을 모두 비교
+		for (TFieldIterator<FStructProperty> It(NotifyObject->GetClass()); It; ++It)
+		{
+			if (It->Struct != FGameplayTag::StaticStruct())
+			{
+				continue;
+			}
+
+			if (*It->ContainerPtrToValuePtr<FGameplayTag>(NotifyObject) == InEventTag)
+			{
+				OutTime = NotifyEvent.GetTriggerTime();
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGameplayEffectSpecHandle& InDamageSpecHandle, bool bClearTelegraph)
+{
+	TArray<AActor*> HitActors;
+
+	if (bHasActiveArea)
+	{
+		const FTransform AreaTransform = GetCurrentAreaTransform();
+
+		if (bDrawDebugArea)
+		{
+			CurrentAreaData.DrawDebug(GetWorld(), AreaTransform, FColor::Red, 1.f);
+		}
+
+		HitActors = ApplyAreaDamageAt(CurrentAreaData, AreaTransform, InDamageSpecHandle, nullptr);
+	}
+
+	if (bClearTelegraph)
+	{
+		ClearAreaTelegraph();
+	}
+
+	return HitActors;
+}
+
+TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamageAt(const FWarriorAttackAreaData& InAreaData, const FTransform& InAreaTransform, const FGameplayEffectSpecHandle& InDamageSpecHandle, TSet<TWeakObjectPtr<AActor>>* InOutProcessedActors)
 {
 	TArray<AActor*> HitActors;
 
 	APawn* AttackerPawn = Cast<APawn>(GetAvatarActorFromActorInfo());
 
-	if (!bHasActiveArea || !AttackerPawn || !AttackerPawn->HasAuthority())
+	if (!AttackerPawn || !AttackerPawn->HasAuthority())
 	{
 		return HitActors;
-	}
-
-	const FTransform AreaTransform = GetCurrentAreaTransform();
-
-	if (bDrawDebugArea)
-	{
-		CurrentAreaData.DrawDebug(GetWorld(), AreaTransform, FColor::Red, 1.f);
 	}
 
 	TArray<FOverlapResult> OverlapResults;
@@ -118,10 +298,10 @@ TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGamepl
 
 	GetWorld()->OverlapMultiByObjectType(
 		OverlapResults,
-		AreaTransform.GetLocation(),
+		InAreaTransform.GetLocation(),
 		FQuat::Identity,
 		FCollisionObjectQueryParams(ECC_Pawn),
-		FCollisionShape::MakeSphere(CurrentAreaData.GetBoundingRadius()),
+		FCollisionShape::MakeSphere(InAreaData.GetBoundingRadius()),
 		QueryParams
 	);
 
@@ -131,7 +311,7 @@ TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGamepl
 	{
 		APawn* HitPawn = Cast<APawn>(OverlapResult.GetActor());
 
-		if (!HitPawn || ProcessedPawns.Contains(HitPawn))
+		if (!HitPawn || ProcessedPawns.Contains(HitPawn) || (InOutProcessedActors && InOutProcessedActors->Contains(HitPawn)))
 		{
 			continue;
 		}
@@ -151,16 +331,21 @@ TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGamepl
 			HitCharacter->GetCapsuleComponent()->GetScaledCapsuleSize(CapsuleRadius, CapsuleHalfHeight);
 		}
 
-		if (!CurrentAreaData.IsInside(AreaTransform, HitPawn->GetActorLocation(), CapsuleRadius, CapsuleHalfHeight))
+		if (!InAreaData.IsInside(InAreaTransform, HitPawn->GetActorLocation(), CapsuleRadius, CapsuleHalfHeight))
 		{
 			continue;
+		}
+
+		if (InOutProcessedActors)
+		{
+			InOutProcessedActors->Add(HitPawn);
 		}
 
 		FGameplayEventData EventData;
 		EventData.Instigator = AttackerPawn;
 		EventData.Target = HitPawn;
 
-		switch (UWarriorFunctionLibrary::EvaluateHitResult(AttackerPawn, HitPawn, nullptr, CurrentAreaData.bUnblockable))
+		switch (UWarriorFunctionLibrary::EvaluateHitResult(AttackerPawn, HitPawn, nullptr, InAreaData.bUnblockable))
 		{
 		case EWarriorHitResultType::Blocked:
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Player_Event_Successful_Block, EventData);
@@ -189,12 +374,40 @@ TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGamepl
 		}
 	}
 
-	if (bClearTelegraph)
+	return HitActors;
+}
+
+FVector UAIGameplayAbility_BossAreaAttack::AdjustPointToNavigation(const FVector& InStartPoint, const FVector& InDesiredPoint, const FVector& InProjectExtent) const
+{
+	UNavigationSystemV1* NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+
+	if (!NavSystem)
 	{
-		ClearAreaTelegraph();
+		return InDesiredPoint;
 	}
 
-	return HitActors;
+	FNavLocation ProjectedStart;
+	FNavLocation ProjectedDesired;
+
+	if (!NavSystem->ProjectPointToNavigation(InDesiredPoint, ProjectedDesired, InProjectExtent))
+	{
+		return InDesiredPoint;
+	}
+
+	FVector AdjustedPoint = ProjectedDesired.Location;
+
+	// 시작점 -> 목표 사이 내비메시가 끊겨 있으면(벽, 낭떠러지) 끊긴 지점까지로 줄임
+	if (NavSystem->ProjectPointToNavigation(InStartPoint, ProjectedStart, InProjectExtent))
+	{
+		FVector HitLocation;
+
+		if (UNavigationSystemV1::NavigationRaycast(GetWorld(), ProjectedStart.Location, AdjustedPoint, HitLocation))
+		{
+			AdjustedPoint = HitLocation;
+		}
+	}
+
+	return AdjustedPoint;
 }
 
 void UAIGameplayAbility_BossAreaAttack::ClearAreaTelegraph()

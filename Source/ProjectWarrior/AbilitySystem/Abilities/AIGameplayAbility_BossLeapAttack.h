@@ -84,9 +84,6 @@ protected:
 	bool bFaceLeapDirectionOnTakeoff = true;
 
 private:
-	// 내비메시 투영·장애물 확인을 거친 착지 지점. 실패하면 InDesiredLanding 그대로
-	FVector AdjustLandingToNavigation(const FVector& InStartFeet, const FVector& InDesiredLanding) const;
-
 	void RemoveLeapWarpTarget();
 
 	FVector LandingLocation = FVector::ZeroVector;

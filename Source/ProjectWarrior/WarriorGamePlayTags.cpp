@@ -90,6 +90,8 @@ namespace WarriorGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Katana, "AI.Weapon.Katana");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Axe, "AI.Weapon.Axe");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Shield, "AI.Weapon.Shield");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Death_PoseReached, "AI.Event.Death.PoseReached");
@@ -102,7 +104,11 @@ namespace WarriorGameplayTags
 
 	/** Boss tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss, "AI.Ability.Boss");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Melee_1, "AI.Ability.Boss.Melee.1");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Melee_2, "AI.Ability.Boss.Melee.2");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_LeapSlam, "AI.Ability.Boss.LeapSlam");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Charge, "AI.Ability.Boss.Charge");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Sweep, "AI.Ability.Boss.Sweep");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_Telegraph, "AI.Event.Boss.Telegraph");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_AreaImpact, "AI.Event.Boss.AreaImpact");

@@ -14,7 +14,8 @@ struct PROJECTWARRIOR_API FWarriorBossPatternData
 	GENERATED_BODY()
 
 	// 발동할 어빌리티 태그. 보스 StartUpData로 부여한 어빌리티의 AbilityTags와 일치해야 함
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pattern", meta = (Categories = "AI.Ability.Boss"))
+	// 보스 전용 패턴(AI.Ability.Boss.*) 외에 일반 근접 공격(AI.Ability.Melee) 등도 선택 가능
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pattern", meta = (Categories = "AI.Ability"))
 	FGameplayTag AbilityTag;
 
 	// 사용 가능한 대상 거리 (UBossPatternComponent의 거리 기준 설정을 따름)

@@ -91,6 +91,9 @@ namespace WarriorGameplayTags
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Katana);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Bow);
+	// 보스 무기. 도끼는 장착 무기(충돌 토글 대상), 방패는 장착 무기가 아님 (방패 공격은 범위 판정으로 처리)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Axe);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Shield);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Finisher);
 	// 사망 몽타주 노티파이 -> 사망/처형 어빌리티: 죽은 자세 도달 (Loop 구간 시작). 이 시점에 어빌리티 종료
@@ -106,12 +109,15 @@ namespace WarriorGameplayTags
 	/** Boss tags **/
 	// 보스 패턴 어빌리티의 상위 태그. 패턴 어빌리티는 AI.Ability.Boss.* 로 등록
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_Melee_1);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_Melee_2);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_LeapSlam);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_Charge);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_Sweep);
 
 	// 몽타주 노티파이 -> 범위 공격 어빌리티: 위험 범위 표시 시작 / 판정 시점
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_Telegraph);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_AreaImpact);
-	// 몽타주 노티파이 -> 점프 공격 어빌리티: 이륙 시점 (BeginLeapMovement)
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_LeapTakeoff);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_Blocking);

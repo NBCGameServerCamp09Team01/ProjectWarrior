@@ -8,6 +8,7 @@
 #include "AIGameplayAbility_BossAreaAttack.generated.h"
 
 class AWarriorAttackIndicator;
+class UAnimMontage;
 
 /**
  * 위험 범위를 표시한 뒤 그 영역에 판정하는 보스 범위 공격.
@@ -43,6 +44,18 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Ability|AreaAttack")
 	TArray<AActor*> ApplyAreaDamage(const FGameplayEffectSpecHandle& InDamageSpecHandle, bool bClearTelegraph = true);
 
+	// 루트 모션으로 이동하는 몽타주용. 몽타주의 ImpactEventTag 노티파이 시점까지의 루트 모션을 미리 계산해,
+	// 그 시점의 보스 위치·방향에 DefaultAreaData 영역을 고정 표시 (Anchor 설정과 무관하게 고정)
+	// 몽타주 재생 전에 호출하면 처음부터, 재생 중에 호출하면 현재 위치부터 계산
+	// bFaceTarget: 계산 전에 대상 방향으로 즉시 회전 (TargetActor가 비어 있으면 Focus -> 블랙보드 TargetActor)
+	// TelegraphDuration < 0 이면 판정 시점까지 남은 시간으로 자동 설정. 노티파이를 찾지 못하면 false
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Ability|AreaAttack", meta = (AdvancedDisplay = "TelegraphDuration"))
+	bool BeginMontageAreaTelegraph(UAnimMontage* Montage, AActor* TargetActor = nullptr, bool bFaceTarget = true, float TelegraphDuration = -1.f);
+
+	// 대상 방향으로 즉시 회전 (ALS 목표 회전·컨트롤 회전 포함). 대상을 찾지 못하면 false
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Ability|AreaAttack")
+	bool FaceAreaTarget(AActor* TargetActor = nullptr);
+
 	// 표시를 제거하고 영역을 비움
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Ability|AreaAttack")
 	void ClearAreaTelegraph();
@@ -65,6 +78,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "AreaAttack")
 	bool bSendHitReactEvent = true;
 
+	// BeginMontageAreaTelegraph가 판정 시점으로 찾을 노티파이의 이벤트 태그
+	// (노티파이 객체에 이 값을 가진 GameplayTag 변수가 있으면 해당 노티파이로 인식. 예: AN_SendGameplayEventToOwner의 Event Tag)
+	UPROPERTY(EditDefaultsOnly, Category = "AreaAttack")
+	FGameplayTag MontageImpactEventTag;
+
 	UPROPERTY(EditDefaultsOnly, Category = "AreaAttack|Debug")
 	bool bDrawDebugArea = false;
 
@@ -73,6 +91,21 @@ protected:
 
 	// 앵커 트랜스폼(오프셋 적용 전)을 직접 지정해 위험 범위를 표시. 이미 표시 중이면 교체
 	void BeginAreaTelegraphAtAnchor(const FWarriorAttackAreaData& InAreaData, const FTransform& AnchorTransform, float TelegraphDuration);
+
+	// 지정한 영역·트랜스폼(오프셋 적용 후)으로 즉시 판정. 피격(Hit)된 대상 목록 반환
+	// InOutProcessedActors가 있으면 이미 들어 있는 대상은 건너뛰고, 판정한 대상(막기·회피 포함)을 추가 (연속 판정에서 1회만 맞게)
+	TArray<AActor*> ApplyAreaDamageAt(const FWarriorAttackAreaData& InAreaData, const FTransform& InAreaTransform, const FGameplayEffectSpecHandle& InDamageSpecHandle, TSet<TWeakObjectPtr<AActor>>* InOutProcessedActors = nullptr);
+
+	// InDesiredPoint를 내비메시 위로 투영하고, InStartPoint -> 목표 사이가 끊겨 있으면(벽, 낭떠러지) 끊긴 지점까지로 줄임
+	// 내비게이션이 없거나 투영 실패 시 InDesiredPoint 그대로
+	FVector AdjustPointToNavigation(const FVector& InStartPoint, const FVector& InDesiredPoint, const FVector& InProjectExtent) const;
+
+	// 공격자 회전 설정. ALS는 TargetRotation으로 되돌리려 하고, LookingDirection 모드는 컨트롤 회전과 어긋나면
+	// 제자리 회전으로 되돌리므로 둘 다 함께 갱신
+	void SetOwnerFacingRotation(const FRotator& NewRotation) const;
+
+	// 몽타주 노티파이 중 InEventTag 값을 가진 GameplayTag 변수를 가진 첫 노티파이의 시간
+	static bool FindMontageEventTime(const UAnimMontage* InMontage, const FGameplayTag& InEventTag, float& OutTime);
 
 private:
 	// 앵커 기준(오프셋 적용 전) 트랜스폼. 수평 방향만 사용

@@ -6,7 +6,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "MotionWarpingComponent.h"
-#include "NavigationSystem.h"
 #include "DrawDebugHelpers.h"
 #include "Character/ALSBaseCharacter.h"
 #include "Library/ALSCharacterEnumLibrary.h"
@@ -67,7 +66,7 @@ bool UAIGameplayAbility_BossLeapAttack::BeginLeap(AActor* TargetActor, float Tel
 
 	if (bProjectLandingToNavMesh)
 	{
-		LandingLocation = AdjustLandingToNavigation(OwnerFeet, LandingLocation);
+		LandingLocation = AdjustPointToNavigation(OwnerFeet, LandingLocation, NavProjectExtent);
 	}
 
 	if (UMotionWarpingComponent* MotionWarpingComponent = OwnerCharacter->FindComponentByClass<UMotionWarpingComponent>())
@@ -190,39 +189,6 @@ void UAIGameplayAbility_BossLeapAttack::EndLeapMovement()
 			}
 		}
 	}
-}
-
-FVector UAIGameplayAbility_BossLeapAttack::AdjustLandingToNavigation(const FVector& InStartFeet, const FVector& InDesiredLanding) const
-{
-	UNavigationSystemV1* NavSystem = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-
-	if (!NavSystem)
-	{
-		return InDesiredLanding;
-	}
-
-	FNavLocation ProjectedStart;
-	FNavLocation ProjectedLanding;
-
-	if (!NavSystem->ProjectPointToNavigation(InDesiredLanding, ProjectedLanding, NavProjectExtent))
-	{
-		return InDesiredLanding;
-	}
-
-	FVector AdjustedLanding = ProjectedLanding.Location;
-
-	// 보스 -> 착지 지점 사이 내비메시가 끊겨 있으면(벽, 낭떠러지) 끊긴 지점까지로 줄임
-	if (NavSystem->ProjectPointToNavigation(InStartFeet, ProjectedStart, NavProjectExtent))
-	{
-		FVector HitLocation;
-
-		if (UNavigationSystemV1::NavigationRaycast(GetWorld(), ProjectedStart.Location, AdjustedLanding, HitLocation))
-		{
-			AdjustedLanding = HitLocation;
-		}
-	}
-
-	return AdjustedLanding;
 }
 
 void UAIGameplayAbility_BossLeapAttack::RemoveLeapWarpTarget()
