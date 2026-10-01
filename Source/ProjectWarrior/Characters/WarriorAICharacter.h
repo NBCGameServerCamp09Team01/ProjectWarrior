@@ -30,6 +30,9 @@ public:
 	virtual UAIUIComponent* GetAIUIComponent() const override;
 	//~ End PawnUIInterface Interface
 
+	// 사망 처리 시작(OnDeathAbilityStart)에서 호출됨. 사망 알림 후 AI 회전·이동을 멈춤
+	virtual void OnCharacterDiedEvent_Implementation() override;
+
 protected:
 	virtual void BeginPlay() override;
 

@@ -39,7 +39,13 @@ public:
 private:
 	TArray<FGameplayAbilitySpecHandle> GrantedAbilitySpecHandles;
 
+	// 주인 캐릭터가 제거되면(시체가 SetLifeSpan으로 사라질 때 등) 무기도 함께 제거. 장착 여부와 무관
+	UFUNCTION()
+	void HandleOwningActorDestroyed(AActor* DestroyedActor);
+
 protected:
+	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapons")
 	UMeshComponent* WeaponMesh;
 
