@@ -35,7 +35,7 @@ namespace WarriorSkillTests_Private
 	}
 }
 
-namespace WST = WarriorSkillTests_Private;
+namespace WSKT = WarriorSkillTests_Private;
 
 #define WARRIOR_SKILL_TEST_FLAGS (EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -62,57 +62,57 @@ bool FWarriorSkillRequirementProgressTest::RunTest(const FString& Parameters)
 	using EType = EWarriorSkillRequirementType;
 	auto Eval = [&](const FWarriorSkillRequirement& Requirement) { return UWarriorSkillLibrary::EvaluateRequirement(Requirement, Context); };
 
-	FWarriorSkillRequirementProgress P = Eval(WST::MakeRequirement(EType::AccountLevel, 3));
+	FWarriorSkillRequirementProgress P = Eval(WSKT::MakeRequirement(EType::AccountLevel, 3));
 	TestEqual(TEXT("Level current"), P.Current, 3.0);
 	TestTrue(TEXT("Level 3 >= 3"), P.bMet);
 
-	P = Eval(WST::MakeRequirement(EType::AccountLevel, 5));
+	P = Eval(WSKT::MakeRequirement(EType::AccountLevel, 5));
 	TestFalse(TEXT("Level 3 < 5"), P.bMet);
 	TestEqual(TEXT("Level ratio"), P.GetRatio(), 0.6);
 
-	P = Eval(WST::MakeRequirement(EType::TotalKills, 30));
+	P = Eval(WSKT::MakeRequirement(EType::TotalKills, 30));
 	TestEqual(TEXT("Total kills"), P.Current, 42.0);
 	TestTrue(TEXT("Total kills met"), P.bMet);
 	TestEqual(TEXT("Ratio is clamped"), P.GetRatio(), 1.0);
 
-	P = Eval(WST::MakeRequirement(EType::TotalKills, 50, TEXT("BP_SamuraiAI")));
+	P = Eval(WSKT::MakeRequirement(EType::TotalKills, 50, TEXT("BP_SamuraiAI")));
 	TestEqual(TEXT("Kills by enemy type"), P.Current, 30.0);
 	TestFalse(TEXT("Kills by enemy type not met"), P.bMet);
 
-	P = Eval(WST::MakeRequirement(EType::TotalKills, 1, TEXT("BP_ArcherAI")));
+	P = Eval(WSKT::MakeRequirement(EType::TotalKills, 1, TEXT("BP_ArcherAI")));
 	TestEqual(TEXT("Unknown enemy type is 0"), P.Current, 0.0);
 
-	P = Eval(WST::MakeRequirement(EType::KillsByDeathType, 10, TEXT("Finisher")));
+	P = Eval(WSKT::MakeRequirement(EType::KillsByDeathType, 10, TEXT("Finisher")));
 	TestEqual(TEXT("Finisher kills"), P.Current, 7.0);
 	TestFalse(TEXT("Finisher 7 < 10"), P.bMet);
 
-	TestTrue(TEXT("Stages cleared"), Eval(WST::MakeRequirement(EType::StagesCleared, 2)).bMet);
-	TestTrue(TEXT("Play time"), Eval(WST::MakeRequirement(EType::PlayTimeSeconds, 600)).bMet);
-	TestTrue(TEXT("Max wave"), Eval(WST::MakeRequirement(EType::MaxWaveReached, 5)).bMet);
-	TestFalse(TEXT("Damage is 0 until damage is recorded"), Eval(WST::MakeRequirement(EType::TotalDamage, 1)).bMet);
+	TestTrue(TEXT("Stages cleared"), Eval(WSKT::MakeRequirement(EType::StagesCleared, 2)).bMet);
+	TestTrue(TEXT("Play time"), Eval(WSKT::MakeRequirement(EType::PlayTimeSeconds, 600)).bMet);
+	TestTrue(TEXT("Max wave"), Eval(WSKT::MakeRequirement(EType::MaxWaveReached, 5)).bMet);
+	TestFalse(TEXT("Damage is 0 until damage is recorded"), Eval(WSKT::MakeRequirement(EType::TotalDamage, 1)).bMet);
 
-	FWarriorSkillRequirement NoHit = WST::MakeRequirement(EType::ExtraStat, 2);
+	FWarriorSkillRequirement NoHit = WSKT::MakeRequirement(EType::ExtraStat, 2);
 	NoHit.StatTag = WarriorStatTags::Stat_Defense_Wave_NoHit;
 	P = Eval(NoHit);
 	TestEqual(TEXT("Extra stat sum"), P.Current, 2.0);
 	TestTrue(TEXT("Extra stat met"), P.bMet);
 
 	// 이하 조건: 기록이 없으면 미충족
-	P = Eval(WST::MakeRequirement(EType::BestClearTime, 300));
+	P = Eval(WSKT::MakeRequirement(EType::BestClearTime, 300));
 	TestFalse(TEXT("No clear record"), P.bHasValue);
 	TestFalse(TEXT("No clear record is not met"), P.bMet);
 
 	Context.Lifetime.BestStageClearTimeSeconds = 280.0f;
-	P = Eval(WST::MakeRequirement(EType::BestClearTime, 300));
+	P = Eval(WSKT::MakeRequirement(EType::BestClearTime, 300));
 	TestTrue(TEXT("280 <= 300"), P.bMet);
 	TestEqual(TEXT("Upper bound ratio is 0 or 1"), P.GetRatio(), 1.0);
 
 	Context.Lifetime.BestStageClearTimeSeconds = 312.0f;
-	TestFalse(TEXT("312 > 300"), Eval(WST::MakeRequirement(EType::BestClearTime, 300)).bMet);
+	TestFalse(TEXT("312 > 300"), Eval(WSKT::MakeRequirement(EType::BestClearTime, 300)).bMet);
 
 	// 기본 문구
-	TestFalse(TEXT("Default text is generated"), WST::MakeRequirement(EType::TotalKills, 30).GetDisplayText().IsEmpty());
-	FWarriorSkillRequirement Custom = WST::MakeRequirement(EType::TotalKills, 30);
+	TestFalse(TEXT("Default text is generated"), WSKT::MakeRequirement(EType::TotalKills, 30).GetDisplayText().IsEmpty());
+	FWarriorSkillRequirement Custom = WSKT::MakeRequirement(EType::TotalKills, 30);
 	Custom.DisplayText = FText::FromString(TEXT("Custom"));
 	TestEqual(TEXT("Custom text is kept"), Custom.GetDisplayText().ToString(), FString(TEXT("Custom")));
 	return true;
@@ -129,9 +129,9 @@ bool FWarriorSkillStateTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	FWarriorSkillDefinition Skill = WST::MakeSkill(SKILL_B, 2);
-	Skill.Requirements.Add(WST::MakeRequirement(EWarriorSkillRequirementType::AccountLevel, 3));
-	Skill.Requirements.Add(WST::MakeRequirement(EWarriorSkillRequirementType::TotalKills, 30));
+	FWarriorSkillDefinition Skill = WSKT::MakeSkill(SKILL_B, 2);
+	Skill.Requirements.Add(WSKT::MakeRequirement(EWarriorSkillRequirementType::AccountLevel, 3));
+	Skill.Requirements.Add(WSKT::MakeRequirement(EWarriorSkillRequirementType::TotalKills, 30));
 	Skill.Prerequisites.Add(SKILL_A);
 
 	FWarriorSkillEvalContext Context;
@@ -183,7 +183,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorSkillPointsOnlyTest, "ProjectWarrior.Sk
 
 bool FWarriorSkillPointsOnlyTest::RunTest(const FString& Parameters)
 {
-	const FWarriorSkillDefinition Skill = WST::MakeSkill(SKILL_A, 2);
+	const FWarriorSkillDefinition Skill = WSKT::MakeSkill(SKILL_A, 2);
 	FWarriorSkillEvalContext Context;
 
 	Context.StatPoints = 0;
@@ -194,7 +194,7 @@ bool FWarriorSkillPointsOnlyTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("No requirements, enough points → Unlockable"),
 		UWarriorSkillLibrary::EvaluateSkill(Skill, Context).State == EWarriorSkillState::Unlockable);
 
-	const FWarriorSkillDefinition FreeSkill = WST::MakeSkill(SKILL_B, 0);
+	const FWarriorSkillDefinition FreeSkill = WSKT::MakeSkill(SKILL_B, 0);
 	Context.StatPoints = 0;
 	TestTrue(TEXT("Zero cost → Unlockable"),
 		UWarriorSkillLibrary::EvaluateSkill(FreeSkill, Context).State == EWarriorSkillState::Unlockable);
@@ -208,8 +208,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorSkillTreeTest, "ProjectWarrior.Skill.SK
 bool FWarriorSkillTreeTest::RunTest(const FString& Parameters)
 {
 	UDataAsset_SkillTree* Tree = NewObject<UDataAsset_SkillTree>(GetTransientPackage());
-	FWarriorSkillDefinition A = WST::MakeSkill(SKILL_A, 1);
-	FWarriorSkillDefinition B = WST::MakeSkill(SKILL_B, 1);
+	FWarriorSkillDefinition A = WSKT::MakeSkill(SKILL_A, 1);
+	FWarriorSkillDefinition B = WSKT::MakeSkill(SKILL_B, 1);
 	B.Prerequisites.Add(SKILL_A);
 	Tree->Skills = { A, B };
 
