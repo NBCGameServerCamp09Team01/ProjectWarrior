@@ -157,6 +157,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Account")
 	FOnWarriorStageRewarded OnStageRewarded;
 
+	UFUNCTION(BlueprintPure, Category = "Warrior|Account")
+	int32 GetStatMaxPoints(FGameplayTag StatTag) const;
+
+	UFUNCTION(BlueprintPure, Category = "Warrior|Account")
+	float GetStatBonusPerPoint(FGameplayTag StatTag) const;
+
 	const FRules& GetRules() const { return Rules; }
 
 private:
