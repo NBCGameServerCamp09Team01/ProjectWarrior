@@ -32,6 +32,24 @@ TArray<FGameplayAbilitySpecHandle> AWeaponBase::GetGrantedAbilitySpecHandles() c
 	return GrantedAbilitySpecHandles;
 }
 
+void AWeaponBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 스폰 시 지정한 Instigator(주인 캐릭터)를 따라 제거됨. 없으면 Owner 사용
+	AActor* OwningActor = GetInstigator() ? GetInstigator() : GetOwner();
+
+	if (OwningActor)
+	{
+		OwningActor->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleOwningActorDestroyed);
+	}
+}
+
+void AWeaponBase::HandleOwningActorDestroyed(AActor* DestroyedActor)
+{
+	Destroy();
+}
+
 void AWeaponBase::OnCollisionBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	APawn* WeaponOwningPawn = GetInstigator<APawn>();
@@ -40,6 +58,12 @@ void AWeaponBase::OnCollisionBoxBeginOverlap(UPrimitiveComponent* OverlappedComp
 
 	if (APawn* HitPawn = Cast<APawn>(OtherActor))
 	{
+		// 죽은 대상(시체)은 맞지 않음. 플레이어 근접 공격은 EvaluateHitResult를 거치지 않으므로 여기서 걸러야 함
+		if (UWarriorFunctionLibrary::IsActorDead(HitPawn))
+		{
+			return;
+		}
+
 		if (UWarriorFunctionLibrary::IsTargetPawnHostile(WeaponOwningPawn, HitPawn))
 		{
 			OnWeaponHitTarget.ExecuteIfBound(OtherActor);

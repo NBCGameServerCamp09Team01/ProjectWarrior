@@ -54,9 +54,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
 	UProjectileMovementComponent* ProjectileMovement;
 
-	// 명중 시 대상에게 Shared.Event.HitReact를 보낼지 (근접 공격 어빌리티와 동일한 흐름)
+	// 명중 시 대상에게 히트리액션 이벤트를 보낼지 (근접 공격 어빌리티와 동일한 흐름)
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile")
 	bool bSendHitReactEvent = true;
+
+	// 보낼 히트리액션 이벤트. 플레이어는 Light/Heavy를 구분해서 반응하고, 적은 강도와 무관하게 반응함
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile", meta = (Categories = "Shared.Event.HitReact", EditCondition = "bSendHitReactEvent"))
+	FGameplayTag HitReactEventTag;
 
 	UFUNCTION()
 	virtual void OnProjectileBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);

@@ -26,6 +26,12 @@ namespace
 	}
 }
 
+UAIGameplayAbility_BossAreaAttack::UAIGameplayAbility_BossAreaAttack()
+{
+	// 보스 범위 공격은 플레이어의 Light 쿨다운을 무시하고 항상 반응하도록 Heavy
+	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Heavy;
+}
+
 void UAIGameplayAbility_BossAreaAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	// 판정 전에 취소(그로기 등)되어도 표시가 남지 않도록 제거
@@ -172,7 +178,7 @@ TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGamepl
 
 			if (bSendHitReactEvent)
 			{
-				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Shared_Event_HitReact, EventData);
+				UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, HitReactEventTag.IsValid() ? HitReactEventTag : WarriorGameplayTags::Shared_Event_HitReact_Heavy, EventData);
 			}
 
 			HitActors.Add(HitPawn);

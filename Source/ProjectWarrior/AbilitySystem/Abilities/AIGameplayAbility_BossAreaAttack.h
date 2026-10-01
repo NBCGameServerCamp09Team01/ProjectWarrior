@@ -20,6 +20,9 @@ class PROJECTWARRIOR_API UAIGameplayAbility_BossAreaAttack : public UAIGameplayA
 {
 	GENERATED_BODY()
 
+public:
+	UAIGameplayAbility_BossAreaAttack();
+
 protected:
 	//~ Begin GameplayAbility Interface.
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
@@ -58,6 +61,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "AreaAttack")
 	TSubclassOf<AWarriorAttackIndicator> IndicatorClass;
 
+	// 피격 대상에게 HitReactEventTag(부모 UAIGameplayAbility, 범위 공격 기본 Heavy)를 보낼지
 	UPROPERTY(EditDefaultsOnly, Category = "AreaAttack")
 	bool bSendHitReactEvent = true;
 

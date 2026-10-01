@@ -16,6 +16,8 @@ AWarriorProjectileBase::AWarriorProjectileBase()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 
+	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Light;
+
 	ProjectileRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ProjectileRoot"));
 	SetRootComponent(ProjectileRoot);
 
@@ -194,7 +196,7 @@ void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& Impact
 
 		if (bSendHitReactEvent)
 		{
-			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Shared_Event_HitReact, EventData);
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, HitReactEventTag.IsValid() ? HitReactEventTag : WarriorGameplayTags::Shared_Event_HitReact_Light, EventData);
 		}
 		break;
 

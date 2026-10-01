@@ -41,8 +41,9 @@ void UPlayerGameplayAbility_TargetLock::OnTargetLockTick(float DeltaTime)
 	FGameplayTagContainer TagContainer;
 	TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Shared.Status.Death")));
 
-	if (!CurrentLockedActor 
-		|| UWarriorFunctionLibrary::NativeDoesActorHaveTag(CurrentLockedActor, WarriorGameplayTags::Shared_Ability_Death) 
+	// 대상이 죽으면(Shared.Status.Death 하위 태그) 해제. Shared.Ability.Death는 어빌리티 식별 태그라 캐릭터에 붙지 않음
+	if (!CurrentLockedActor
+		|| UWarriorFunctionLibrary::IsActorDead(CurrentLockedActor)
 		|| UWarriorFunctionLibrary::NativeDoesActorHaveAnyTag(GetPlayerCharacterFromActorInfo(), TagContainer)
 		)
 	{
@@ -154,7 +155,8 @@ void UPlayerGameplayAbility_TargetLock::GetAvailableActorsToLock()
 	{
 		if (AActor* HitActor = TraceHit.GetActor())
 		{
-			if (HitActor != GetPlayerCharacterFromActorInfo())
+			// 처형 직후 등 시체가 남아 있어도 다시 잡지 않도록 죽은 대상은 제외
+			if (HitActor != GetPlayerCharacterFromActorInfo() && !UWarriorFunctionLibrary::IsActorDead(HitActor))
 			{
 				AvailableActorsToLock.AddUnique(HitActor);
 			}

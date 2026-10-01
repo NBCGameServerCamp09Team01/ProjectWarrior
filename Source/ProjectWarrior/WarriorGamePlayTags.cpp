@@ -75,6 +75,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_RegenStamina, "Player.Status.RegenStamina");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Cooldown_Block, "Player.Cooldown.Block");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Cooldown_HitReact_Light, "Player.Cooldown.HitReact.Light");
 
 	/** AI tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Melee, "AI.Ability.Melee");
@@ -91,6 +92,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Death_PoseReached, "AI.Event.Death.PoseReached");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Spawn, "AI.Event.Projectile.Spawn");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Fire, "AI.Event.Projectile.Fire");
 
@@ -111,6 +113,7 @@ namespace WarriorGameplayTags
 
 	/** Shared tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact, "Shared.Ability.HitReact");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact_Light, "Shared.Ability.HitReact.Light");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_Death, "Shared.Ability.Death");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_Stagger, "Shared.Ability.Stagger");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_RotateToTarget, "Shared.Ability.RotateToTarget");
@@ -118,6 +121,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_MeleeHit, "Shared.Event.MeleeHit");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact, "Shared.Event.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact_KnockBack, "Shared.Event.HitReact.KnockBack");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact_Light, "Shared.Event.HitReact.Light");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact_Heavy, "Shared.Event.HitReact.Heavy");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Equip_Weapon, "Shared.Event.Equip.Weapon");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Unequip_Weapon, "Shared.Event.Unequip.Weapon");
@@ -131,6 +136,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Heal, "Shared.SetByCaller.Heal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Upgrade, "Shared.SetByCaller.Upgrade");
 
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death, "Shared.Status.Death");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Normal, "Shared.Status.Death.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Finisher, "Shared.Status.Death.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Knockback, "Shared.Status.Death.Knockback");

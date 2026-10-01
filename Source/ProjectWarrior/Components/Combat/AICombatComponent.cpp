@@ -19,6 +19,12 @@ void UAICombatComponent::OnHitTargetActor(AActor* HitActor)
 	EventData.Instigator = GetOwningPawn();
 	EventData.Target = HitActor;
 
+	// 무기 충돌 노티파이가 지정한 히트리액션 강도를 전달. UAIGameplayAbility::ResolveHitReactEventTag에서 꺼냄
+	if (CurrentHitReactEventTag.IsValid())
+	{
+		EventData.InstigatorTags.AddTag(CurrentHitReactEventTag);
+	}
+
 	switch (UWarriorFunctionLibrary::EvaluateHitResult(GetOwningPawn(), HitActor))
 	{
 	case EWarriorHitResultType::Blocked:
