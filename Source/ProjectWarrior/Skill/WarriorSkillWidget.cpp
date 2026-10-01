@@ -1,12 +1,23 @@
 #include "WarriorSkillWidget.h"
 
 #include "DataAsset_SkillTree.h"
+#include "WarriorSkillEntryWidget.h"
 #include "WarriorSkillLibrary.h"
+#include "Components/Button.h"
+#include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 
 #define LOCTEXT_NAMESPACE "WarriorSkill"
+
+UWarriorSkillWidget::UWarriorSkillWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	AccountLevelFormat = LOCTEXT("AccountLevelFormat", "계정 레벨 {0}");
+	StatPointsFormat = LOCTEXT("StatPointsFormat", "스탯 포인트 {0}");
+}
 
 void UWarriorSkillWidget::NativeOnInitialized()
 {
@@ -25,6 +36,11 @@ void UWarriorSkillWidget::NativeConstruct()
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[Skill] %s has no SkillTree. Set DA_SkillTree in the widget defaults."), *GetClass()->GetName());
 	}
 
+	if (Button_Back)
+	{
+		Button_Back->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackButtonClicked);
+	}
+
 	if (UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this))
 	{
 		Account->OnAccountChanged.AddUniqueDynamic(this, &ThisClass::HandleAccountChanged);
@@ -34,6 +50,11 @@ void UWarriorSkillWidget::NativeConstruct()
 
 void UWarriorSkillWidget::NativeDestruct()
 {
+	if (Button_Back)
+	{
+		Button_Back->OnClicked.RemoveDynamic(this, &ThisClass::HandleBackButtonClicked);
+	}
+
 	if (UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this))
 	{
 		Account->OnAccountChanged.RemoveDynamic(this, &ThisClass::HandleAccountChanged);
@@ -48,7 +69,54 @@ void UWarriorSkillWidget::Refresh()
 	UWarriorSkillLibrary::MakeEvalContext(this, Context);
 	SkillViews = UWarriorSkillLibrary::EvaluateSkillTree(SkillTree, Context);
 
+	UpdateSummaryTexts(Context.AccountLevel, Context.StatPoints);
+	UpdateEntries();
 	BP_OnSkillsRefreshed(SkillViews, Context.AccountLevel, Context.StatPoints);
+}
+
+void UWarriorSkillWidget::UpdateSummaryTexts(const int32 AccountLevel, const int32 StatPoints)
+{
+	if (Text_AccountLevel)
+	{
+		Text_AccountLevel->SetText(FText::Format(AccountLevelFormat, AccountLevel));
+	}
+
+	if (Text_StatPoints)
+	{
+		Text_StatPoints->SetText(FText::Format(StatPointsFormat, StatPoints));
+	}
+}
+
+void UWarriorSkillWidget::UpdateEntries()
+{
+	if (!SkillList || !EntryWidgetClass)
+	{
+		return;
+	}
+
+	for (int32 Index = 0; Index < SkillViews.Num(); ++Index)
+	{
+		if (!EntryWidgets.IsValidIndex(Index))
+		{
+			UWarriorSkillEntryWidget* NewEntry = CreateWidget<UWarriorSkillEntryWidget>(this, EntryWidgetClass);
+			if (!NewEntry)
+			{
+				return;
+			}
+			SkillList->AddChild(NewEntry);
+			EntryWidgets.Add(NewEntry);
+		}
+
+		UWarriorSkillEntryWidget* Entry = EntryWidgets[Index];
+		Entry->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		Entry->SetView(SkillViews[Index], this);
+	}
+
+	// DA에서 스킬이 줄어든 경우 남는 줄은 숨긴다.
+	for (int32 Index = SkillViews.Num(); Index < EntryWidgets.Num(); ++Index)
+	{
+		EntryWidgets[Index]->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 bool UWarriorSkillWidget::RequestUnlock(FGameplayTag SkillTag)
@@ -90,6 +158,11 @@ bool UWarriorSkillWidget::FindSkillView(FGameplayTag SkillTag, FWarriorSkillView
 void UWarriorSkillWidget::HandleAccountChanged(const FWarriorAccountData& InAccountData)
 {
 	Refresh();
+}
+
+void UWarriorSkillWidget::HandleBackButtonClicked()
+{
+	RequestBack();
 }
 
 FText UWarriorSkillWidget::GetStateText(const EWarriorSkillState State)
