@@ -40,11 +40,21 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Warrior|Combat")
     void ToggleWeaponCollision(bool bShouldEnable, EToggleDamageType ToggleDamageType = EToggleDamageType::CurrentEquippedWeapon);
 
+    // 현재 무기 충돌 구간의 히트리액션 강도(Shared.Event.HitReact.Light/Heavy). 무기 충돌 노티파이가 켤 때 설정하고,
+    // 충돌을 끄면 비워짐. 비어 있으면 공격 어빌리티의 기본 강도를 사용
+    UFUNCTION(BlueprintCallable, Category = "Warrior|Combat")
+    void SetCurrentHitReactEventTag(UPARAM(meta = (Categories = "Shared.Event.HitReact")) FGameplayTag InHitReactEventTag);
+
+    UFUNCTION(BlueprintPure, Category = "Warrior|Combat")
+    FGameplayTag GetCurrentHitReactEventTag() const { return CurrentHitReactEventTag; }
+
     virtual void OnHitTargetActor(AActor* HitActor);
     virtual void OnWeaponPulledFromTargetActor(AActor* InteractedActor);
 
 protected:
     TArray<AActor*> OverlappedActors;
+
+    FGameplayTag CurrentHitReactEventTag;
 
 
 private:

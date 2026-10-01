@@ -11,6 +11,24 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AIController.h"
 
+UAIGameplayAbility::UAIGameplayAbility()
+{
+    HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Light;
+}
+
+FGameplayTag UAIGameplayAbility::ResolveHitReactEventTag(const FGameplayEventData& InPayload) const
+{
+    for (const FGameplayTag& PayloadTag : InPayload.InstigatorTags)
+    {
+        if (PayloadTag.MatchesTag(WarriorGameplayTags::Shared_Event_HitReact))
+        {
+            return PayloadTag;
+        }
+    }
+
+    return HitReactEventTag.IsValid() ? HitReactEventTag : WarriorGameplayTags::Shared_Event_HitReact_Light;
+}
+
 AWarriorAICharacter* UAIGameplayAbility::GetAICharacterFromActorInfo()
 {
     if (!CachedAICharacter.IsValid())

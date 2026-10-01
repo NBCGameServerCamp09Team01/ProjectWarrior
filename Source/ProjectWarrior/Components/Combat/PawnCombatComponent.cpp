@@ -68,6 +68,17 @@ void UPawnCombatComponent::ToggleWeaponCollision(bool bShouldEnable, EToggleDama
             OverlappedActors.Empty();
         }
     }
+
+    // 충돌 구간이 끝나면 강도도 초기화 (다음 구간에 이전 값이 남지 않도록)
+    if (!bShouldEnable)
+    {
+        CurrentHitReactEventTag = FGameplayTag();
+    }
+}
+
+void UPawnCombatComponent::SetCurrentHitReactEventTag(FGameplayTag InHitReactEventTag)
+{
+    CurrentHitReactEventTag = InHitReactEventTag;
 }
 
 void UPawnCombatComponent::OnHitTargetActor(AActor* HitActor)
