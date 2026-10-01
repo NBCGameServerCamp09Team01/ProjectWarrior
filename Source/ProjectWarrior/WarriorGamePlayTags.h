@@ -101,10 +101,13 @@ namespace WarriorGameplayTags
 	/** Boss tags **/
 	// 보스 패턴 어빌리티의 상위 태그. 패턴 어빌리티는 AI.Ability.Boss.* 로 등록
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_LeapSlam);
 
 	// 몽타주 노티파이 -> 범위 공격 어빌리티: 위험 범위 표시 시작 / 판정 시점
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_Telegraph);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_AreaImpact);
+	// 몽타주 노티파이 -> 점프 공격 어빌리티: 이륙 시점 (BeginLeapMovement)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_LeapTakeoff);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_Blocking);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_SuperArmor);
@@ -149,4 +152,4 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Upgrade_Stage_AttackPower);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Upgrade_Stage_MaxHealth);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Upgrade_Stage_MaxStamina);
-}
+}

@@ -18,6 +18,7 @@ public class ProjectWarrior : ModuleRules
             "GameplayTasks",
             "GameplayAbilities",
             "AIModule",
+            "NavigationSystem",
             "UMG",
             "AnimGraphRuntime",
             "MotionWarping",

@@ -100,9 +100,11 @@ namespace WarriorGameplayTags
 
 	/** Boss tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss, "AI.Ability.Boss");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_LeapSlam, "AI.Ability.Boss.LeapSlam");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_Telegraph, "AI.Event.Boss.Telegraph");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_AreaImpact, "AI.Event.Boss.AreaImpact");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_LeapTakeoff, "AI.Event.Boss.LeapTakeoff");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Blocking, "AI.Status.Boss.Blocking");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_SuperArmor, "AI.Status.Boss.SuperArmor");
@@ -146,4 +148,4 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_AttackPower, "Upgrade.Stage.AttackPower");
 	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxHealth, "Upgrade.Stage.MaxHealth");
 	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxStamina, "Upgrade.Stage.MaxStamina");
-}
+}

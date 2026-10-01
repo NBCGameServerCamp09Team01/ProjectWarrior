@@ -36,6 +36,16 @@ void UAIGameplayAbility_BossAreaAttack::EndAbility(const FGameplayAbilitySpecHan
 
 void UAIGameplayAbility_BossAreaAttack::BeginAreaTelegraph(const FWarriorAttackAreaData& InAreaData, AActor* TargetActor, float TelegraphDuration)
 {
+	if (!GetAvatarActorFromActorInfo())
+	{
+		return;
+	}
+
+	BeginAreaTelegraphAtAnchor(InAreaData, ComputeAnchorTransform(InAreaData.Anchor, TargetActor), TelegraphDuration);
+}
+
+void UAIGameplayAbility_BossAreaAttack::BeginAreaTelegraphAtAnchor(const FWarriorAttackAreaData& InAreaData, const FTransform& AnchorTransform, float TelegraphDuration)
+{
 	ClearAreaTelegraph();
 
 	AActor* AvatarActor = GetAvatarActorFromActorInfo();
@@ -48,7 +58,6 @@ void UAIGameplayAbility_BossAreaAttack::BeginAreaTelegraph(const FWarriorAttackA
 	CurrentAreaData = InAreaData;
 	bHasActiveArea = true;
 
-	const FTransform AnchorTransform = ComputeAnchorTransform(InAreaData.Anchor, TargetActor);
 	SnapshotAreaTransform = FTransform(AnchorTransform.GetRotation(), AnchorTransform.TransformPositionNoScale(InAreaData.LocalOffset));
 
 	if (IndicatorClass)
@@ -208,6 +217,16 @@ FTransform UAIGameplayAbility_BossAreaAttack::GetCurrentAreaTransform() const
 	return SnapshotAreaTransform;
 }
 
+AActor* UAIGameplayAbility_BossAreaAttack::ResolveAreaTarget(AActor* TargetActor)
+{
+	if (AActor* ResolvedTarget = ResolveProjectileTarget(TargetActor))
+	{
+		return ResolvedTarget;
+	}
+
+	return GetBlackboardTargetActor(GetAvatarActorFromActorInfo());
+}
+
 FTransform UAIGameplayAbility_BossAreaAttack::ComputeAnchorTransform(EWarriorAttackAreaAnchor InAnchor, AActor* TargetActor)
 {
 	const AActor* AvatarActor = GetAvatarActorFromActorInfo();
@@ -218,13 +237,7 @@ FTransform UAIGameplayAbility_BossAreaAttack::ComputeAnchorTransform(EWarriorAtt
 
 	if (InAnchor == EWarriorAttackAreaAnchor::TargetSnapshot)
 	{
-		// 대상 우선순위: 직접 넘긴 대상 -> AI 컨트롤러 Focus -> 블랙보드 TargetActor
-		AActor* ResolvedTarget = ResolveProjectileTarget(TargetActor);
-
-		if (!ResolvedTarget)
-		{
-			ResolvedTarget = GetBlackboardTargetActor(AvatarActor);
-		}
+		AActor* ResolvedTarget = ResolveAreaTarget(TargetActor);
 
 		if (!ResolvedTarget)
 		{

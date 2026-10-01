@@ -64,6 +64,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "AreaAttack|Debug")
 	bool bDrawDebugArea = false;
 
+	// 대상 우선순위: 직접 넘긴 대상 -> AI 컨트롤러 Focus -> 블랙보드 TargetActor. 없으면 nullptr
+	AActor* ResolveAreaTarget(AActor* TargetActor);
+
+	// 앵커 트랜스폼(오프셋 적용 전)을 직접 지정해 위험 범위를 표시. 이미 표시 중이면 교체
+	void BeginAreaTelegraphAtAnchor(const FWarriorAttackAreaData& InAreaData, const FTransform& AnchorTransform, float TelegraphDuration);
+
 private:
 	// 앵커 기준(오프셋 적용 전) 트랜스폼. 수평 방향만 사용
 	FTransform ComputeAnchorTransform(EWarriorAttackAreaAnchor InAnchor, AActor* TargetActor);
