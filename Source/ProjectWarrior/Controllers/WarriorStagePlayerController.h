@@ -63,6 +63,13 @@ protected:
 	UFUNCTION()
 	void HandleStageFinished(const FWarriorStageResult& InResult);
 
+	//GameState의 OnWaveChanged에 연결. 웨이브는 InProgress에 들어갈 때만 바뀐다(웨이브 0은 초기화 알림)
+	UFUNCTION()
+	void HandleWaveChanged(int32 InWaveNumber, int32 InTotalWaveCount, bool bInBossWave);
+
+	//상태에 맞는 음악 상황을 알리고 상태 전환 소리를 낸다. 결과 음악은 ShowResult·RevealResult가 맡는다
+	void PlayStageStateSound(EWarriorStageState InState);
+
 	//결과 위젯을 만들어(처음 한 번) GameState가 확정한 결과를 넘기고 띄운다.
 	//실패이고 FailedResultDelay가 있으면 위젯은 지금 만들되 숨겨 두고, 지연 뒤 RevealResult로 보인다
 	void ShowResult(const FWarriorStageResult& InResult);

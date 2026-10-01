@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
+#include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
 #include "ProjectWarrior/Widgets/WarriorStageHUDWidget.h"
 #include "ProjectWarrior/Widgets/WarriorStageResultWidget.h"
@@ -43,10 +45,19 @@ void AWarriorStagePlayerController::BeginPlay()
 	BoundGameState = StageGameState;
 	StageGameState->OnStageStateChanged.AddUniqueDynamic(this, &ThisClass::HandleStageStateChanged);
 	StageGameState->OnStageFinished.AddUniqueDynamic(this, &ThisClass::HandleStageFinished);
+	StageGameState->OnWaveChanged.AddUniqueDynamic(this, &ThisClass::HandleWaveChanged);
 
 	//GameMode와 이 컨트롤러의 BeginPlay 순서는 보장되지 않아, 구독 전에 상태가 이미 바뀌었을 수 있다.
 	//현재 상태를 한 번 직접 적용하고, 이전 레벨의 입력 설정이 뷰포트에 남아 있을 수 있으므로 입력 모드도 강제로 맞춘다.
-	ApplyStatePermission(StageGameState->GetStageState(), true);
+	const EWarriorStageState CurrentState = StageGameState->GetStageState();
+	ApplyStatePermission(CurrentState, true);
+
+	//음악도 현재 상태로 한 번 맞춘다. 이미 웨이브가 진행 중이면 그 웨이브의 곡으로.
+	PlayStageStateSound(CurrentState);
+	if (CurrentState == EWarriorStageState::InProgress)
+	{
+		HandleWaveChanged(StageGameState->GetWaveNumber(), StageGameState->GetTotalWaveCount(), StageGameState->IsBossWave());
+	}
 
 	//HUD는 스스로 GameState를 구독해 값을 채우고, 초기화 중과 결과 상태에서는 스스로 숨는다.
 	if (HUDWidgetClass)
@@ -55,6 +66,11 @@ void AWarriorStagePlayerController::BeginPlay()
 		if (HUDWidget)
 		{
 			HUDWidget->AddToViewport(StageHUDZOrder);
+
+			if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+			{
+				Sound->ApplyButtonSounds(HUDWidget);
+			}
 		}
 	}
 	else
@@ -73,6 +89,7 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	{
 		StageGameState->OnStageStateChanged.RemoveDynamic(this, &ThisClass::HandleStageStateChanged);
 		StageGameState->OnStageFinished.RemoveDynamic(this, &ThisClass::HandleStageFinished);
+		StageGameState->OnWaveChanged.RemoveDynamic(this, &ThisClass::HandleWaveChanged);
 	}
 	BoundGameState.Reset();
 
@@ -112,11 +129,58 @@ void AWarriorStagePlayerController::HandleStageStateChanged(EWarriorStageState I
 	//결과 위젯은 OnStageFinished에서 이미 띄워져 있다. UI 입력 모드로 바꿀 때 거기에 포커스를 준다.
 	UUserWidget* FocusWidget = bResultState ? ResultWidget.Get() : nullptr;
 	ApplyStatePermission(InNewState, false, FocusWidget);
+
+	PlayStageStateSound(InNewState);
 }
 
 void AWarriorStagePlayerController::HandleStageFinished(const FWarriorStageResult& InResult)
 {
 	ShowResult(InResult);
+}
+
+void AWarriorStagePlayerController::HandleWaveChanged(int32 InWaveNumber, int32 InTotalWaveCount, bool bInBossWave)
+{
+	//웨이브 0은 스테이지 초기화 때의 알림이라 음악을 바꾸지 않는다.
+	if (InWaveNumber <= 0)
+	{
+		return;
+	}
+
+	if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+	{
+		Sound->SetMusicState(bInBossWave ? WarriorSoundTags::Music_Stage_Boss : WarriorSoundTags::Music_Stage_Normal);
+	}
+}
+
+void AWarriorStagePlayerController::PlayStageStateSound(EWarriorStageState InState)
+{
+	switch (InState)
+	{
+	//웨이브 사이(초기화·준비·쉬는 시간)는 준비 상황. 표에 칸이 없으면 부모(Music.Stage) 칸을 따른다.
+	case EWarriorStageState::Initializing:
+	case EWarriorStageState::Preparing:
+	case EWarriorStageState::Resting:
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->SetMusicState(WarriorSoundTags::Music_Stage_Prepare);
+		}
+		break;
+
+	//마지막 웨이브도 WaveCleared를 거쳐 StageCleared로 가므로, 결과 음악과 겹치지 않게 마지막 웨이브는 뺀다.
+	case EWarriorStageState::WaveCleared:
+		if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
+		{
+			if (StageGameState->GetWaveNumber() < StageGameState->GetTotalWaveCount())
+			{
+				UWarriorSoundSubsystem::PlaySound2D(this, WarriorSoundTags::Sound_UI_Stage_WaveCleared);
+			}
+		}
+		break;
+
+	//웨이브 진행 중 음악은 HandleWaveChanged, 끝 상태의 음악은 ShowResult·RevealResult가 정한다.
+	default:
+		break;
+	}
 }
 
 void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InState, bool bForceInputMode, UUserWidget* InFocusWidget)
@@ -177,6 +241,11 @@ void AWarriorStagePlayerController::ShowResult(const FWarriorStageResult& InResu
 		}
 
 		ResultWidget->AddToViewport(StageResultZOrder);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(ResultWidget);
+		}
 	}
 
 	const bool bDelayReveal = !InResult.bCleared && FailedResultDelay > 0.f;
@@ -202,6 +271,11 @@ void AWarriorStagePlayerController::ShowResult(const FWarriorStageResult& InResu
 
 		GetWorldTimerManager().SetTimer(ResultRevealTimer, this, &ThisClass::RevealResult, FailedResultDelay, false);
 	}
+	else if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+	{
+		//클리어는 바로, 실패는 결과 화면이 보일 때(RevealResult) 결과 음악으로 바꾼다.
+		Sound->SetMusicState(InResult.bCleared ? WarriorSoundTags::Music_Result_Cleared : WarriorSoundTags::Music_Result_Failed);
+	}
 }
 
 void AWarriorStagePlayerController::RevealResult()
@@ -219,5 +293,11 @@ void AWarriorStagePlayerController::RevealResult()
 	if (bAppliedUIInputMode)
 	{
 		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, ResultWidget);
+	}
+
+	//지연은 실패 결과에만 쓰므로 실패 음악으로 바꾼다.
+	if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+	{
+		Sound->SetMusicState(WarriorSoundTags::Music_Result_Failed);
 	}
 }

@@ -58,6 +58,9 @@ protected:
 	TSoftObjectPtr<UWorld> StageLevel;
 
 private:
+	//화면이 바뀐 뒤 음악 상황을 알리고 전환 소리를 낸다(어떤 소리인지는 사운드 표가 정함)
+	void PlayScreenSound(EWarriorFrontScreen InPreviousScreen, EWarriorFrontScreen InNextScreen);
+
 	//한 번 만든 화면 위젯을 보관해 다시 보여 줄 때 재사용
 	UPROPERTY(Transient)
 	TMap<EWarriorFrontScreen, TObjectPtr<UUserWidget>> ScreenWidgets;
