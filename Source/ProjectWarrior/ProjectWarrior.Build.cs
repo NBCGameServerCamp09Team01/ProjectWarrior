@@ -25,7 +25,8 @@ public class ProjectWarrior : ModuleRules
             "ALSV4_CPP"
     });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		// 사운드 틀(Audio/): 프로젝트 설정(DeveloperSettings), MetaSound 입력(AudioExtensions), 버튼 소리(SlateCore)
+		PrivateDependencyModuleNames.AddRange(new string[] { "DeveloperSettings", "AudioExtensions", "SlateCore" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
