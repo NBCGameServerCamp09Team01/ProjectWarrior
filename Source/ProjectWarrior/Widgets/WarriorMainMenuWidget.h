@@ -32,6 +32,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void RequestOpenGrowth();
 
+	//스킬 화면을 연다. 소유 컨트롤러의 ShowScreen(Skill)을 호출한다
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void RequestOpenSkill();
+
 protected:
 	//~ Begin UUserWidget Interface.
 	virtual void NativeConstruct() override;
@@ -43,6 +47,9 @@ protected:
 
 	UFUNCTION()
 	void HandleGrowthButtonClicked();
+
+	UFUNCTION()
+	void HandleSkillButtonClicked();
 
 	//계정 서브시스템의 OnAccountChanged에 연결
 	UFUNCTION()
@@ -59,6 +66,9 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Growth;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Skill;
 	//~ End 없어도 되는 위젯
 
 	//{0} 계정 레벨

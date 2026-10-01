@@ -13,4 +13,11 @@ namespace WarriorAccountTags
 
 	// 해금 가능한 스킬
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Account_Skill_Combo4, "Account.Skill.Combo4", "콤보 4타 해금");
+
+	// 조건 해금 스킬 (SK, 목록은 DA_SkillTree)
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Account_Skill_HeavyAttack, "Account.Skill.HeavyAttack", "강공격 해금");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Account_Skill_HeavyAttackPlus, "Account.Skill.HeavyAttackPlus", "강공격 강화 해금");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Account_Skill_FinisherMastery, "Account.Skill.FinisherMastery", "처형 숙련 해금");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Account_Skill_DodgeMastery, "Account.Skill.DodgeMastery", "회피 숙련 해금");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Account_Skill_CounterPlus, "Account.Skill.CounterPlus", "반격 강화 해금");
 }

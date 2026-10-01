@@ -189,6 +189,37 @@ bool UWarriorAccountSubsystem::UnlockSkill(FGameplayTag SkillTag)
 	return true;
 }
 
+bool UWarriorAccountSubsystem::UnlockSkillWithCost(FGameplayTag SkillTag, int32 Cost)
+{
+	if (!SkillTag.IsValid() || Cost < 0)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Unlock ignored. Invalid skill %s or cost %d."), *SkillTag.ToString(), Cost);
+		return false;
+	}
+
+	if (IsSkillUnlocked(SkillTag))
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock ignored. %s is already unlocked."), *SkillTag.ToString());
+		return false;
+	}
+
+	if (Data.StatPoints < Cost)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock rejected. Need %d points, have %d."), Cost, Data.StatPoints);
+		return false;
+	}
+
+	//TODO(server): UnlockSkill과 같이, 서버 연동 뒤에는 서버에 요청하고 응답 스냅샷을 적용한다.
+	Data.StatPoints -= Cost;
+	Data.UnlockedSkills.AddTag(SkillTag);
+	AddLedgerEntry(EWarriorAccountLedgerType::SkillUnlock, StatPointName, -Cost, SkillTag);
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlocked %s for %d points. %d points left."), *SkillTag.ToString(), Cost, Data.StatPoints);
+
+	BroadcastAccountChanged();
+	return true;
+}
+
 void UWarriorAccountSubsystem::ApplyServerSnapshot(const FWarriorAccountData& InServerData)
 {
 	Data = InServerData;

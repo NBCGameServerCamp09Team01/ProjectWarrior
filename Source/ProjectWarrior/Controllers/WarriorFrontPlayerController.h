@@ -15,7 +15,8 @@ enum class EWarriorFrontScreen : uint8
 	None,
 	Title,
 	MainMenu,
-	Growth		// 성장 화면(스탯 투자, 스킬 해금). 메인메뉴에서 연다
+	Growth,		// 성장 화면(스탯 투자, 스킬 해금). 메인메뉴에서 연다
+	Skill		// 스킬 화면(스킬 해금). 메인메뉴에서 연다
 };
 
 /**
