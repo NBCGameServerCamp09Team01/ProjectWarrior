@@ -21,6 +21,7 @@
 #include "ProjectWarrior/Components/Interact/PlayerInteractionComponent.h"
 #include "ProjectWarrior/DataAssets/DataAsset_Item.h"
 #include "ProjectWarrior/Widgets/InventoryWheelWidget.h"
+#include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 
 
 AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -87,6 +88,9 @@ void AWarriorPlayerCharacter::PossessedBy(AController* NewController)
             LoadedData->GiveToAbilitySystemComponent(WarriorAbilitySystemComponent);
         }
     }
+
+    // 스타트업 GE로 기본값이 잡힌 뒤에 계정 보너스를 추가.
+    ApplyAccountStatBonuses();
 }
 
 void AWarriorPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -275,4 +279,35 @@ void AWarriorPlayerCharacter::DebugAddGold(int32 InAmount)
         Inventory->AddGold(InAmount);
         UE_LOG(LogTemp, Log, TEXT("DebugAddGold: +%d -> %d"), InAmount, Inventory->GetGold());
     }
+}
+
+void AWarriorPlayerCharacter::ApplyAccountStatBonuses()
+{
+    const UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this);
+    if (!Account || !AccountStatEffect || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+
+    FGameplayEffectContextHandle Context = WarriorAbilitySystemComponent->MakeEffectContext();
+    Context.AddSourceObject(this);
+
+    FGameplayEffectSpecHandle Spec = WarriorAbilitySystemComponent->MakeOutgoingSpec(AccountStatEffect, 1.f, Context);
+    if (!Spec.IsValid())
+    {
+        return;
+    }
+
+    // 투자하지 않은 스탯도 0으로 넣는다. SetByCaller 값이 빠지면 GAS가 에러 로그를 남긴다
+    for (const FGameplayTag& StatTag : Account->GetInvestableStats())
+    {
+        Spec.Data->SetSetByCallerMagnitude(StatTag, Account->GetStatBonus(StatTag));
+    }
+    WarriorAbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+
+    // 스테이지는 가득 찬 상태로 시작한다 (늘어난 최대치만큼 현재값 채우기)
+    WarriorAbilitySystemComponent->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute(),
+        WarriorAbilitySystemComponent->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute()));
+    WarriorAbilitySystemComponent->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentStaminaAttribute(),
+        WarriorAbilitySystemComponent->GetNumericAttribute(UWarriorAttributeSet::GetMaxStaminaAttribute()));
 }
