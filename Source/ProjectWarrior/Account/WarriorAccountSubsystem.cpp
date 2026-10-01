@@ -252,6 +252,18 @@ void UWarriorAccountSubsystem::SetExternalCurrencyFromServer(FName InCurrency, i
 	BroadcastAccountChanged();
 }
 
+int32 UWarriorAccountSubsystem::GetStatMaxPoints(FGameplayTag StatTag) const
+{
+	const FStatDefinition* Definition = FindStatDefinition(StatTag);
+	return Definition ? Definition->MaxPoints : 0;
+}
+
+float UWarriorAccountSubsystem::GetStatBonusPerPoint(FGameplayTag StatTag) const
+{
+	const FStatDefinition* Definition = FindStatDefinition(StatTag);
+	return Definition ? Definition->BonusPerPoint : 0.f;
+}
+
 void UWarriorAccountSubsystem::HandleStageRecorded(const FWarriorStageRecord& InStageRecord)
 {
 	//중도 이탈은 보상이 없다.
@@ -292,7 +304,7 @@ void UWarriorAccountSubsystem::HandleStageRecorded(const FWarriorStageRecord& In
 	LastReward = Reward;
 	bHasLastReward = true;
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Reward for %s: %s, Exp +%d, Level %d -> %d, StatPoints +%d (now %d)"),
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Reward for %s: %s, Exp +%d, Level %d -> %d, StatPoints +%d from level up (now %d)"),
 		*InStageRecord.RecordId.ToString(),
 		bCleared ? TEXT("Cleared") : TEXT("Failed"),
 		Reward.ExpGained, Reward.LevelBefore, Reward.LevelAfter, Reward.StatPointsGained, Data.StatPoints);
@@ -317,7 +329,7 @@ void UWarriorAccountSubsystem::BuildDefinitions()
 
 	AddStat(WarriorAccountTags::Account_Stat_MaxHealth.GetTag(), UWarriorAttributeSet::GetMaxHealthAttribute(), 10.f, 10);
 	AddStat(WarriorAccountTags::Account_Stat_MaxStamina.GetTag(), UWarriorAttributeSet::GetMaxStaminaAttribute(), 5.f, 10);
-	AddStat(WarriorAccountTags::Account_Stat_AttackPower.GetTag(), UWarriorAttributeSet::GetAttackPowerAttribute(), 2.f, 10);
+	AddStat(WarriorAccountTags::Account_Stat_AttackPower.GetTag(), UWarriorAttributeSet::GetAttackPowerAttribute(), 0.5f, 10);
 	AddStat(WarriorAccountTags::Account_Stat_DefensePower.GetTag(), UWarriorAttributeSet::GetDefensePowerAttribute(), 1.f, 10);
 
 	SkillCosts.Reset();

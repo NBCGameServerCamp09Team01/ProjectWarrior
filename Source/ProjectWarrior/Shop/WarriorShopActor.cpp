@@ -33,9 +33,9 @@ bool AWarriorShopActor::IsShopAvailable() const
 {
 	const UWorld* World = GetWorld();
 	const AWarriorStageGameState* StageGameState = World ? World->GetGameState<AWarriorStageGameState>() : nullptr;
-	//return StageGameState && StageGameState->GetStageState() == EWarriorStageState::Resting;
-
-	return true;
+	return StageGameState && (StageGameState->GetStageState() == EWarriorStageState::Resting || StageGameState->GetStageState() == EWarriorStageState::Preparing);
+	
+	//return true;
 }
 
 

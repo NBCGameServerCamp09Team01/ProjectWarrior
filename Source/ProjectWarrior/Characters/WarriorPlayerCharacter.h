@@ -15,6 +15,7 @@ class UPlayerUIComponent;
 class UPlayerInventoryComponent;
 class UInventoryWheelWidget;
 class UPlayerInteractionComponent;
+class UGameplayEffect;
 
 struct FInputActionValue;
 /**
@@ -137,4 +138,12 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	AActor* GetCurrentLockedActor() const { return CurrentLockedActor; }
+
+protected:
+	// 계정 성장(메인메뉴에서 투자한 스탯)을 적용하는 GE. Infinite, Account.Stat.* SetByCaller 모디파이어
+	UPROPERTY(EditDefaultsOnly, Category = "Account")
+	TSubclassOf<UGameplayEffect> AccountStatEffect;
+
+private:
+	void ApplyAccountStatBonuses();
 };
