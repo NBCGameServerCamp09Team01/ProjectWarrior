@@ -16,6 +16,8 @@ class PROJECTWARRIOR_API UWarriorGrowthWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UWarriorGrowthWidget(const FObjectInitializer& ObjectInitializer);
+
 	//스탯 하나에 1포인트 투자. 포인트 부족·최대치면 false
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Growth")
 	bool RequestInvest(FGameplayTag StatTag);
