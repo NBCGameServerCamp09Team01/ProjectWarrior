@@ -26,6 +26,11 @@ void UWarriorMainMenuWidget::NativeConstruct()
 		Button_Growth->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleGrowthButtonClicked);
 	}
 
+	if (Button_Skill)
+	{
+		Button_Skill->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSkillButtonClicked);
+	}
+
 	//성장 화면에서 돌아오면 이 위젯이 다시 구성되므로 투자 뒤의 값이 여기서 반영되고,
 	//화면이 떠 있는 동안 값이 바뀌어도(서버 값 적용 등) 알림으로 갱신한다.
 	if (UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this))
@@ -40,6 +45,11 @@ void UWarriorMainMenuWidget::NativeDestruct()
 	if (Button_Growth)
 	{
 		Button_Growth->OnClicked.RemoveDynamic(this, &ThisClass::HandleGrowthButtonClicked);
+	}
+
+	if (Button_Skill)
+	{
+		Button_Skill->OnClicked.RemoveDynamic(this, &ThisClass::HandleSkillButtonClicked);
 	}
 
 	if (UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this))
@@ -74,6 +84,17 @@ void UWarriorMainMenuWidget::RequestOpenGrowth()
 	UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] %s: owning player is not AWarriorFrontPlayerController. Growth screen is not opened."), *GetName());
 }
 
+void UWarriorMainMenuWidget::RequestOpenSkill()
+{
+	if (AWarriorFrontPlayerController* FrontPlayerController = GetOwningPlayer<AWarriorFrontPlayerController>())
+	{
+		FrontPlayerController->ShowScreen(EWarriorFrontScreen::Skill);
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] %s: owning player is not AWarriorFrontPlayerController. Skill screen is not opened."), *GetName());
+}
+
 void UWarriorMainMenuWidget::RefreshAccountSummary()
 {
 	//계정 서브시스템이 없으면(GameInstance 설정이 다른 경우) 새 계정의 값(레벨 1, 포인트 0)을 표시한다.
@@ -84,6 +105,11 @@ void UWarriorMainMenuWidget::RefreshAccountSummary()
 void UWarriorMainMenuWidget::HandleGrowthButtonClicked()
 {
 	RequestOpenGrowth();
+}
+
+void UWarriorMainMenuWidget::HandleSkillButtonClicked()
+{
+	RequestOpenSkill();
 }
 
 void UWarriorMainMenuWidget::HandleAccountChanged(const FWarriorAccountData& InAccountData)
