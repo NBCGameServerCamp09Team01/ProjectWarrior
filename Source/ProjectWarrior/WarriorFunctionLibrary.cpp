@@ -141,11 +141,25 @@ bool UWarriorFunctionLibrary::IsValidBlock(AActor* InAttacker, AActor* InDefende
     return DotResult < -0.1f ? true : false;
 }
 
+bool UWarriorFunctionLibrary::IsActorDead(AActor* InActor)
+{
+    if (!IsValid(InActor))
+    {
+        // 이미 제거된 대상은 죽은 것으로 취급
+        return true;
+    }
+
+    const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InActor);
+
+    return ASC && ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death);
+}
+
 EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, bool bIsAttackUnblockable)
 {
     check(InAttacker && InVictim);
 
-    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher))
+    // 처형 연출 중이거나 이미 죽은 대상은 판정하지 않음 (투사체·범위 공격 포함)
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher) || IsActorDead(InVictim))
     {
         return EWarriorHitResultType::Invalid;
     }

@@ -17,6 +17,8 @@ class PROJECTWARRIOR_API UShopWidget : public UWarriorWidgetBase
 	GENERATED_BODY()
 
 public:
+	UShopWidget(const FObjectInitializer& ObjectInitializer);
+
 	void InitShop(AWarriorShopActor* InShop, UPlayerInventoryComponent* InInventory, UStageUpgradeComponent* InUpgradeComp);
 
 protected:

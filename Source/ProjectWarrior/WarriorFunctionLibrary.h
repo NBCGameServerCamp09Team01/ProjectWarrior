@@ -59,4 +59,8 @@ public:
     UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
     static EWarriorHitResultType EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser = nullptr, bool bIsAttackUnblockable = false);
 
+    // 사망 상태(Shared.Status.Death 하위 태그)인지. ASC가 없거나 이미 제거 중인 액터도 안전하게 처리 (false 또는 true)
+    UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
+    static bool IsActorDead(AActor* InActor);
+
 };
