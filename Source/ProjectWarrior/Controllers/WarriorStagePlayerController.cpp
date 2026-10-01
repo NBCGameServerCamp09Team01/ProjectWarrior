@@ -76,6 +76,8 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	}
 	BoundGameState.Reset();
 
+	GetWorldTimerManager().ClearTimer(ResultRevealTimer);
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -177,11 +179,45 @@ void AWarriorStagePlayerController::ShowResult(const FWarriorStageResult& InResu
 		ResultWidget->AddToViewport(StageResultZOrder);
 	}
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Show result. %s, Wave %d/%d, PlayTime %.1f s"),
+	const bool bDelayReveal = !InResult.bCleared && FailedResultDelay > 0.f;
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Show result. %s, Wave %d/%d, PlayTime %.1f s, Reveal in %.1f s"),
 		InResult.bCleared ? TEXT("Cleared") : TEXT("Failed"),
 		InResult.ReachedWave,
 		InResult.TotalWaveCount,
-		InResult.PlayTimeSeconds);
+		InResult.PlayTimeSeconds,
+		bDelayReveal ? FailedResultDelay : 0.f);
 
 	ResultWidget->SetResult(InResult);
+
+	//결과 위젯은 지금 만들어 두어야 같은 프레임에 오는 통계·보상 알림(OnStageRecorded, OnStageRewarded)을 받는다.
+	//그래서 생성은 그대로 두고, 실패일 때 보이는 시점만 늦춰 플레이어 사망 연출을 보여 준다.
+	if (bDelayReveal)
+	{
+		if (!GetWorldTimerManager().IsTimerActive(ResultRevealTimer))
+		{
+			ResultVisibilityBeforeHide = ResultWidget->GetVisibility();
+			ResultWidget->SetVisibility(ESlateVisibility::Hidden);
+		}
+
+		GetWorldTimerManager().SetTimer(ResultRevealTimer, this, &ThisClass::RevealResult, FailedResultDelay, false);
+	}
+}
+
+void AWarriorStagePlayerController::RevealResult()
+{
+	if (!ResultWidget)
+	{
+		return;
+	}
+
+	ResultWidget->SetVisibility(ResultVisibilityBeforeHide);
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Reveal result after %.1f s"), FailedResultDelay);
+
+	//숨겨 둔 동안 결과 상태 진입(ApplyStatePermission)이 준 포커스는 보이지 않는 위젯에 갔으므로 다시 준다.
+	if (bAppliedUIInputMode)
+	{
+		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, ResultWidget);
+	}
 }

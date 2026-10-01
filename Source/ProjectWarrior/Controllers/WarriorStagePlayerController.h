@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "WarriorPlayerController.h"
+#include "Components/SlateWrapperTypes.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 #include "WarriorStagePlayerController.generated.h"
 
@@ -51,8 +52,12 @@ protected:
 	UFUNCTION()
 	void HandleStageFinished(const FWarriorStageResult& InResult);
 
-	//결과 위젯을 만들어(처음 한 번) GameState가 확정한 결과를 넘기고 띄운다
+	//결과 위젯을 만들어(처음 한 번) GameState가 확정한 결과를 넘기고 띄운다.
+	//실패이고 FailedResultDelay가 있으면 위젯은 지금 만들되 숨겨 두고, 지연 뒤 RevealResult로 보인다
 	void ShowResult(const FWarriorStageResult& InResult);
+
+	//숨겨 둔 결과 위젯을 보이고, UI 입력 모드면 포커스를 다시 준다
+	void RevealResult();
 
 	//스테이지 HUD (BP_StagePlayerController에서 WBP_StageHUD 지정)
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
@@ -66,6 +71,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWorld> MainMenuLevel;
 
+	//실패 결과 화면을 보이기까지 기다리는 시간(초). 플레이어 사망 연출을 보여 주기 위함. 0이면 바로 보인다.
+	//값은 사망 몽타주 길이에 맞춰 BP_StagePlayerController에서 정한다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage", meta = (ClampMin = "0.0", Units = "s"))
+	float FailedResultDelay = 0.f;
+
 private:
 	TWeakObjectPtr<AWarriorStageGameState> BoundGameState;
 
@@ -74,6 +84,11 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorStageResultWidget> ResultWidget;
+
+	//결과 위젯을 숨기기 전의 표시 상태. RevealResult에서 되돌린다
+	ESlateVisibility ResultVisibilityBeforeHide = ESlateVisibility::SelfHitTestInvisible;
+
+	FTimerHandle ResultRevealTimer;
 
 	//마지막으로 적용한 UI 입력 모드 값
 	bool bAppliedUIInputMode = false;
