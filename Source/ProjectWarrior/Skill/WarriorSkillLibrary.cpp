@@ -171,15 +171,8 @@ bool UWarriorSkillLibrary::TryUnlockSkill(const UObject* WorldContextObject, con
 		return false;
 	}
 
-	// 포인트 차감과 해금 기록은 계정이 한다. 계정에 등록된 비용과 스킬 정의의 비용이 다르면 알린다 (SK-6에서 한 곳으로 합침).
-	const int32 AccountCost = Account->GetSkillCost(SkillTag);
-	if (AccountCost >= 0 && AccountCost != Definition->StatPointCost)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Skill] Cost mismatch for %s. Skill tree %d, account %d. The account cost is used."),
-			*SkillTag.ToString(), Definition->StatPointCost, AccountCost);
-	}
-
-	const bool bUnlocked = Account->UnlockSkill(SkillTag);
+	// 비용은 스킬 정의(DA_SkillTree)가 기준이다. 포인트 차감과 해금 기록은 계정이 한다.
+	const bool bUnlocked = Account->UnlockSkillWithCost(SkillTag, Definition->StatPointCost);
 	if (bUnlocked)
 	{
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Skill] Unlocked %s."), *SkillTag.ToString());

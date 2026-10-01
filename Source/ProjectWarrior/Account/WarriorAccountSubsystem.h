@@ -131,6 +131,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Account")
 	bool UnlockSkill(FGameplayTag SkillTag);
 
+	//비용을 호출하는 쪽에서 정하는 스킬 해금 (조건 해금 스킬, 비용은 DA_SkillTree 기준).
+	//SkillCosts에 없는 스킬도 해금한다. 해금 조건 검사는 호출하는 쪽(UWarriorSkillLibrary)이 한다.
+	//이미 해금했거나 포인트가 모자라면 false
+	bool UnlockSkillWithCost(FGameplayTag SkillTag, int32 Cost);
+
 	//~ 서버 연동 준비 (지금은 임시 구현)
 	//서버가 내려 준 계정 데이터로 통째로 덮어쓴다. 서버가 최종 기준이므로 로컬 값보다 항상 우선한다.
 	//TODO(server): 서버 응답을 받는 웹 통신 서브시스템이 호출한다. 지금은 호출하는 곳이 없다.
