@@ -4,6 +4,13 @@
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/Components/Upgrade/StageUpgradeComponent.h"
 
+UShopWidget::UShopWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	//UI 전용 입력 모드에서 이 위젯에 포커스를 주므로 켜 둔다. WBP에서 체크를 빠뜨려도 Non-Focusable 경고가 나지 않는다.
+	SetIsFocusable(true);
+}
+
 void UShopWidget::InitShop(AWarriorShopActor* InShop, UPlayerInventoryComponent* InInventory, UStageUpgradeComponent* InUpgradeComp)
 {
 	if (CachedInventory.IsValid())
