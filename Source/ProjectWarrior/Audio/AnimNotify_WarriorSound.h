@@ -13,8 +13,9 @@
  * 그래서 소리를 바꿀 때 몽타주를 다시 저장할 필요가 없다.
  * 애니메이션 에디터 미리 보기에서도 설정의 표를 읽어 소리를 들려준다.
  *
- * 주의: 플레이어와 몬스터가 같은 몽타주를 쓰는 곳(예: GhostSamurai_APose_Attack01_1_ALL_Root_Montage)에
- * 넣으면 양쪽에서 같은 소리가 난다. 그런 곳은 코드(전투 컴포넌트)에서 태그를 나눠 부른다.
+ * 주의: 플레이어와 몬스터가 함께 쓰는 몽타주에 넣으면 양쪽에서 같은 소리가 난다.
+ * 넣기 전에 몽타주를 누가 쓰는지(참조) 확인하고, 함께 쓰면 각자의 어빌리티·코드에서 태그를 나눠 부른다.
+ * (10/1 확인: 플레이어 콤보 몽타주 Combo1~4Attack과 몬스터 공격 몽타주는 서로 따로 쓴다)
  */
 UCLASS(meta = (DisplayName = "Warrior Sound"))
 class PROJECTWARRIOR_API UAnimNotify_WarriorSound : public UAnimNotify
