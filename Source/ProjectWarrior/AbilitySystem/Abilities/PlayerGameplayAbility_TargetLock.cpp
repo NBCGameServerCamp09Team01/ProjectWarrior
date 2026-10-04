@@ -39,7 +39,7 @@ void UPlayerGameplayAbility_TargetLock::EndAbility(const FGameplayAbilitySpecHan
 void UPlayerGameplayAbility_TargetLock::OnTargetLockTick(float DeltaTime)
 {
 	FGameplayTagContainer TagContainer;
-	TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Shared.Status.Death")));
+	TagContainer.AddTag(WarriorGameplayTags::Shared_Status_Death);
 
 	// 대상이 죽으면(Shared.Status.Death 하위 태그) 해제. Shared.Ability.Death는 어빌리티 식별 태그라 캐릭터에 붙지 않음
 	if (!CurrentLockedActor

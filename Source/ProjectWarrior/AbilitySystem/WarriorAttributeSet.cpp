@@ -75,7 +75,7 @@ void UWarriorAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCal
 		//TODO::Handle character death
 		if (GetCurrentHealth() == 0.f)
 		{
-			FGameplayTag CheckKnockBack = FGameplayTag::RequestGameplayTag(FName("Shared.Event.HitReact.KnockBack"));
+			const FGameplayTag CheckKnockBack = WarriorGameplayTags::Shared_Event_HitReact_KnockBack;
 
 			if (Data.EffectSpec.GetDynamicAssetTags().HasTag(CheckKnockBack))
 			{
