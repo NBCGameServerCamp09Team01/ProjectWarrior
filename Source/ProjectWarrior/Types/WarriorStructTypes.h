@@ -29,10 +29,10 @@ struct FWarriorPlayerWeaponData
     GENERATED_BODY()
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    EALSOverlayState WeaponOverlayState;
+    EALSOverlayState WeaponOverlayState = EALSOverlayState::Default;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-    UInputMappingContext* WeaponInputMappingContext;
+    UInputMappingContext* WeaponInputMappingContext = nullptr;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (TitleProperty = "InputTag"))
     TArray<FWarriorPlayerAbilitySet> DefaultWeaponAbilities;
