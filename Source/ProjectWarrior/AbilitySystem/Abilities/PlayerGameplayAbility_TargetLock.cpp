@@ -39,17 +39,49 @@ void UPlayerGameplayAbility_TargetLock::EndAbility(const FGameplayAbilitySpecHan
 void UPlayerGameplayAbility_TargetLock::OnTargetLockTick(float DeltaTime)
 {
 	FGameplayTagContainer TagContainer;
-	TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Shared.Status.Death")));
+	TagContainer.AddTag(WarriorGameplayTags::Shared_Status_Death);
 
-	// 대상이 죽으면(Shared.Status.Death 하위 태그) 해제. Shared.Ability.Death는 어빌리티 식별 태그라 캐릭터에 붙지 않음
+	// 플레이어가 죽으면(Shared.Status.Death 하위 태그) 해제. Shared.Ability.Death는 어빌리티 식별 태그라 캐릭터에 붙지 않음
 	if (!CurrentLockedActor
-		|| UWarriorFunctionLibrary::IsActorDead(CurrentLockedActor)
 		|| UWarriorFunctionLibrary::NativeDoesActorHaveAnyTag(GetPlayerCharacterFromActorInfo(), TagContainer)
 		)
 	{
 		CancelTargetLockAbility();
 
 		return;
+	}
+
+	// 대상이 죽으면 주변 대상으로 전환(왼쪽 우선, 없으면 오른쪽)하고, 잡을 대상이 없으면 해제.
+	// GA_AIDeath_Base도 사망 어빌리티가 끝날 때 SwitchTarget.Left를 보내지만 그 시점이 늦어 여기서 바로 전환한다
+	if (UWarriorFunctionLibrary::IsActorDead(CurrentLockedActor))
+	{
+		GetAvailableActorsToLock();
+
+		TArray<AActor*> ActorsOnLeft;
+		TArray<AActor*> ActorsOnRight;
+		GetAvailableActorsAroundTarget(ActorsOnLeft, ActorsOnRight);
+
+		// 후보가 하나도 없으면 GetAvailableActorsAroundTarget 안에서 이미 해제됐다
+		if (!IsActive())
+		{
+			return;
+		}
+
+		AActor* NewTargetToLock = GetNearestTargetFromAvailableActors(ActorsOnLeft);
+		if (!NewTargetToLock)
+		{
+			NewTargetToLock = GetNearestTargetFromAvailableActors(ActorsOnRight);
+		}
+
+		if (!NewTargetToLock)
+		{
+			CancelTargetLockAbility();
+
+			return;
+		}
+
+		CurrentLockedActor = NewTargetToLock;
+		GetPlayerCharacterFromActorInfo()->SetCurrentLockedActor(CurrentLockedActor);
 	}
 
 	SetTargetLockWidgetPosition();

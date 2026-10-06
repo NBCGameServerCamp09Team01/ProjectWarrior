@@ -166,7 +166,7 @@ void AWarriorPlayerCharacter::Input_MoveCompleted(const FInputActionValue& Input
 
         FGameplayTagContainer TagContainer;
 
-        TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Player.Ability.Dodge")));
+        TagContainer.AddTag(WarriorGameplayTags::Player_Ability_Dodge);
 
         WarriorAbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
     }
@@ -213,7 +213,7 @@ void AWarriorPlayerCharacter::Input_LeftButton(const FInputActionValue& InputAct
 
     FGameplayTagContainer TagContainer;
 
-    TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Player.Ability.Attack")));
+    TagContainer.AddTag(WarriorGameplayTags::Player_Ability_Attack);
 
     WarriorAbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
 }

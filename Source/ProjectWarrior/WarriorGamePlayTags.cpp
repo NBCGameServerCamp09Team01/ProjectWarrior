@@ -42,6 +42,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Finisher, "Player.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Counter, "Player.Ability.Counter");
 
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack, "Player.Ability.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack_Katana_Light_1, "Player.Ability.Attack.Katana.Light.1");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack_Katana_Light_2, "Player.Ability.Attack.Katana.Light.2");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack_Katana_Light_3, "Player.Ability.Attack.Katana.Light.3");
