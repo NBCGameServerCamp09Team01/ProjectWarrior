@@ -73,7 +73,22 @@ protected:
     // TargetActor가 비어 있으면 AI 컨트롤러의 Focus 액터 사용. 대상이 없으면 캐릭터 정면
     FVector ComputeProjectileLaunchDirection(const FVector& LaunchLocation, AActor* TargetActor, float ProjectileSpeed, bool bPredictTargetMovement);
 
+    // 처형(AI.Event.Finisher, Shared.Status.Finisher)이나 사망(Shared.Status.Death)이 시작되면 이 어빌리티를 취소하도록 감시
+    // 회피·가드처럼 반응 지연이나 대기 중에 처형 몽타주를 덮어쓰면 안 되는 어빌리티의 ActivateAbility에서 호출
+    void WatchForFinisherOrDeath();
+
+    // 피격 경직·스태거·처형·사망 중이면 true (회피·가드를 시작하지 않음)
+    static bool IsOwnerIncapacitated(const UAbilitySystemComponent* ASC);
+
 private:
+    UFUNCTION()
+    void HandleFinisherOrDeathEvent(FGameplayEventData Payload);
+
+    UFUNCTION()
+    void HandleFinisherOrDeathTag();
+
+    void CancelForFinisherOrDeath();
+
     // 토큰 풀이 지정돼 있고 보스가 아니면 true
     bool UsesAttackToken(const FGameplayAbilityActorInfo* ActorInfo) const;
 

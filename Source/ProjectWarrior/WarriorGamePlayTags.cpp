@@ -57,6 +57,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Successful_Dodge, "Player.Event.Successful.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Finisher, "Player.Event.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Counter, "Player.Event.Counter");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Event_AttackBlocked, "Player.Event.AttackBlocked");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_SwitchTarget_Left, "Player.Event.SwitchTarget.Left");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_SwitchTarget_Right, "Player.Event.SwitchTarget.Right");
@@ -83,6 +84,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Range, "AI.Ability.Range");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Finisher, "AI.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block, "AI.Ability.Block");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block_Counter, "AI.Ability.Block.Counter");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Dodge, "AI.Ability.Dodge");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Equip_Weapon_Katana, "AI.Ability.Equip.Weapon.Katana");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Unequip_Weapon_Katana, "AI.Ability.Unequip.Weapon.Katana");
@@ -98,10 +101,15 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Death_PoseReached, "AI.Event.Death.PoseReached");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Spawn, "AI.Event.Projectile.Spawn");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Fire, "AI.Event.Projectile.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_IncomingAttack, "AI.Event.IncomingAttack");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_GuardHit, "AI.Event.GuardHit");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Strafing, "AI.Status.Strafing");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_UnderAttack, "AI.Status.UnderAttack");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Aiming, "AI.Status.Aiming");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Dodging, "AI.Status.Dodging");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Guarding, "AI.Status.Guarding");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_SuperArmor, "AI.Status.SuperArmor");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken, "AI.AttackToken");
 	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken_Melee, "AI.AttackToken.Melee");

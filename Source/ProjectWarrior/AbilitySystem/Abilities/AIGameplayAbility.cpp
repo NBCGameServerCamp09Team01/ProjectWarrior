@@ -12,6 +12,8 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayTag.h"
 #include "ProjectWarrior/Components/Combat/AttackTokenComponent.h"
 
 UAIGameplayAbility::UAIGameplayAbility()
@@ -24,6 +26,25 @@ bool UAIGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Han
     if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
     {
         return false;
+    }
+
+    if (const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
+    {
+        const FGameplayTagContainer& OwnAssetTags = GetAssetTags();
+
+        // 슈퍼아머 중에는 피격 경직이 발동하지 않음 (가드 반격 등이 끊기지 않게)
+        if (OwnAssetTags.HasTag(WarriorGameplayTags::Shared_Ability_HitReact) && ASC->HasMatchingGameplayTag(WarriorGameplayTags::AI_Status_SuperArmor))
+        {
+            return false;
+        }
+
+        // 회피·가드 중에는 공격하지 않음
+        static const FGameplayTagContainer AttackAbilityTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ WarriorGameplayTags::AI_Ability_Melee, WarriorGameplayTags::AI_Ability_Range });
+        static const FGameplayTagContainer DefensiveStatusTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ WarriorGameplayTags::AI_Status_Dodging, WarriorGameplayTags::AI_Status_Guarding });
+        if (OwnAssetTags.HasAny(AttackAbilityTags) && ASC->HasAnyMatchingGameplayTags(DefensiveStatusTags))
+        {
+            return false;
+        }
     }
 
     // 토큰이 없으면 발동 실패 -> BT 태스크도 실패하므로 다른 행동(스트레이프 등)으로 넘어감
@@ -71,6 +92,69 @@ void UAIGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, con
     HeldAttackTokenComponent.Reset();
 
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UAIGameplayAbility::WatchForFinisherOrDeath()
+{
+    // 처형은 이벤트(AI.Event.Finisher)가 태그(Shared.Status.Finisher)보다 먼저 오므로 둘 다 감시
+    UAbilityTask_WaitGameplayEvent* FinisherEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, WarriorGameplayTags::AI_Event_Finisher, nullptr, true, true);
+    FinisherEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleFinisherOrDeathEvent);
+    FinisherEventTask->ReadyForActivation();
+
+    // FNativeGameplayTag는 복사할 수 없으므로 FGameplayTag 배열로 변환해 순회
+    const FGameplayTag WatchedStatusTags[] = { WarriorGameplayTags::Shared_Status_Finisher, WarriorGameplayTags::Shared_Status_Death };
+    for (const FGameplayTag& Tag : WatchedStatusTags)
+    {
+        UAbilityTask_WaitGameplayTagAdded* TagTask = UAbilityTask_WaitGameplayTagAdded::WaitGameplayTagAdd(this, Tag, nullptr, true);
+        TagTask->Added.AddDynamic(this, &ThisClass::HandleFinisherOrDeathTag);
+        TagTask->ReadyForActivation();
+    }
+}
+
+bool UAIGameplayAbility::IsOwnerIncapacitated(const UAbilitySystemComponent* ASC)
+{
+    if (!ASC)
+    {
+        return false;
+    }
+
+    static const FGameplayTagContainer IncapacitatedStatusTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{
+        WarriorGameplayTags::Shared_Status_Finisher, WarriorGameplayTags::Shared_Status_Death });
+    if (ASC->HasAnyMatchingGameplayTags(IncapacitatedStatusTags))
+    {
+        return true;
+    }
+
+    static const FGameplayTagContainer IncapacitatedAbilityTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{
+        WarriorGameplayTags::Shared_Ability_HitReact, WarriorGameplayTags::Shared_Ability_Stagger, WarriorGameplayTags::AI_Ability_Finisher });
+    for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+    {
+        if (Spec.IsActive() && Spec.Ability && Spec.Ability->GetAssetTags().HasAny(IncapacitatedAbilityTags))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void UAIGameplayAbility::HandleFinisherOrDeathEvent(FGameplayEventData Payload)
+{
+    CancelForFinisherOrDeath();
+}
+
+void UAIGameplayAbility::HandleFinisherOrDeathTag()
+{
+    CancelForFinisherOrDeath();
+}
+
+void UAIGameplayAbility::CancelForFinisherOrDeath()
+{
+    // 처형·사망 몽타주는 그쪽 어빌리티가 재생하므로 이 어빌리티만 취소
+    if (IsActive())
+    {
+        CancelAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true);
+    }
 }
 
 bool UAIGameplayAbility::UsesAttackToken(const FGameplayAbilityActorInfo* ActorInfo) const
