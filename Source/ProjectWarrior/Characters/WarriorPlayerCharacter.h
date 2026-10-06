@@ -15,6 +15,7 @@ class UPlayerUIComponent;
 class UPlayerInventoryComponent;
 class UInventoryWheelWidget;
 class UPlayerInteractionComponent;
+class UAttackTokenComponent;
 class UGameplayEffect;
 
 struct FInputActionValue;
@@ -69,6 +70,10 @@ private:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (AllowPrivateAccess = "true"))
 	UPlayerInteractionComponent* PlayerInteractionComponent;
+
+	// 적 AI가 동시에 공격할 수 있는 수를 제한하는 공격 토큰 풀
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat", meta = (AllowPrivateAccess = "true"))
+	UAttackTokenComponent* AttackTokenComponent;
 #pragma endregion
 
 #pragma region Inputs

@@ -8,6 +8,7 @@
 
 class AWarriorAICharacter;
 class UAICombatComponent;
+class UAttackTokenComponent;
 class AWarriorProjectileBase;
 
 /**
@@ -40,6 +41,21 @@ public:
     AWarriorProjectileBase* SpawnProjectileFromEquippedWeapon(TSubclassOf<AWarriorProjectileBase> ProjectileClass, FName SpawnSocketName, AActor* TargetActor, const FGameplayEffectSpecHandle& InDamageSpecHandle, bool bPredictTargetMovement = true);
 
 protected:
+    //~ Begin GameplayAbility Interface.
+    virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+    virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+    virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+    //~ End GameplayAbility Interface
+
+    // 공격 대상에게서 받을 공격 토큰 풀 (AI.AttackToken.*). 비어 있거나 보스가 발동하면 토큰 없이 발동
+    // 토큰이 없으면 발동에 실패하고, 어빌리티가 끝나면(취소 포함) 반납함
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackToken", meta = (Categories = "AI.AttackToken"))
+    FGameplayTag AttackTokenPool;
+
+    // 이 공격이 차지하는 토큰 수. 강공격은 2로 두면 그동안 다른 적이 덜 공격함
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackToken", meta = (ClampMin = "1"))
+    int32 AttackTokenCost = 1;
+
     // 기본 히트리액션 강도 (Shared.Event.HitReact.Light/Heavy). 근접 공격은 무기 충돌 노티파이 값이 우선
     // 플레이어는 강도에 따라 다르게 반응하고, 적은 강도와 무관하게 반응함
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact", meta = (Categories = "Shared.Event.HitReact"))
@@ -58,5 +74,14 @@ protected:
     FVector ComputeProjectileLaunchDirection(const FVector& LaunchLocation, AActor* TargetActor, float ProjectileSpeed, bool bPredictTargetMovement);
 
 private:
+    // 토큰 풀이 지정돼 있고 보스가 아니면 true
+    bool UsesAttackToken(const FGameplayAbilityActorInfo* ActorInfo) const;
+
+    // AI 컨트롤러 블랙보드의 TargetActor(없으면 Focus 액터)가 가진 토큰 컴포넌트. 대상이 토큰을 쓰지 않으면 nullptr
+    static UAttackTokenComponent* FindTargetAttackTokenComponent(const FGameplayAbilityActorInfo* ActorInfo);
+
     TWeakObjectPtr<AWarriorAICharacter> CachedAICharacter;
+
+    // 이번 발동에서 토큰을 받은 컴포넌트. EndAbility에서 반납
+    TWeakObjectPtr<UAttackTokenComponent> HeldAttackTokenComponent;
 };

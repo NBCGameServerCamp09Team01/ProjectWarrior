@@ -103,6 +103,10 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_UnderAttack, "AI.Status.UnderAttack");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Aiming, "AI.Status.Aiming");
 
+	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken, "AI.AttackToken");
+	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken_Melee, "AI.AttackToken.Melee");
+	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken_Range, "AI.AttackToken.Range");
+
 	/** Boss tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss, "AI.Ability.Boss");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Melee_1, "AI.Ability.Boss.Melee.1");

@@ -108,6 +108,11 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_UnderAttack);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Aiming);
 
+	// 공격 토큰 풀. 공격받는 쪽의 UAttackTokenComponent가 풀마다 동시 공격 수를 제한
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_AttackToken);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_AttackToken_Melee);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_AttackToken_Range);
+
 	/** Boss tags **/
 	// 보스 패턴 어빌리티의 상위 태그. 패턴 어빌리티는 AI.Ability.Boss.* 로 등록
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss);
