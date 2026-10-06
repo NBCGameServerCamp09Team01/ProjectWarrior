@@ -85,16 +85,50 @@ void AWarriorAIController::BeginPlay()
 	}
 }
 
+bool AWarriorAIController::RunBehaviorTree(UBehaviorTree* BTAsset)
+{
+	const bool bRan = Super::RunBehaviorTree(BTAsset);
+
+	if (bRan && PendingInitialTarget.IsValid())
+	{
+		TrySetTargetActor(PendingInitialTarget.Get());
+		PendingInitialTarget.Reset();
+	}
+
+	return bRan;
+}
+
+void AWarriorAIController::SetInitialTarget(AActor* InTarget)
+{
+	if (!InTarget)
+	{
+		return;
+	}
+
+	// 스폰 직후에는 BT(블랙보드)가 아직 실행되지 않았을 수 있음
+	if (!TrySetTargetActor(InTarget) && !GetBlackboardComponent())
+	{
+		PendingInitialTarget = InTarget;
+	}
+}
+
 void AWarriorAIController::OnPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
-	if (UBlackboardComponent* BlackboardComponent = GetBlackboardComponent())
+	if (Stimulus.WasSuccessfullySensed())
 	{
-		if(!BlackboardComponent->GetValueAsObject(FName("TargetActor")))
-		{
-			if (Stimulus.WasSuccessfullySensed() && Actor)
-			{
-				BlackboardComponent->SetValueAsObject(FName("TargetActor"), Actor);
-			}
-		}
+		TrySetTargetActor(Actor);
 	}
+}
+
+bool AWarriorAIController::TrySetTargetActor(AActor* InTarget)
+{
+	UBlackboardComponent* BlackboardComponent = GetBlackboardComponent();
+
+	if (!InTarget || !BlackboardComponent || BlackboardComponent->GetValueAsObject(FName("TargetActor")))
+	{
+		return false;
+	}
+
+	BlackboardComponent->SetValueAsObject(FName("TargetActor"), InTarget);
+	return true;
 }

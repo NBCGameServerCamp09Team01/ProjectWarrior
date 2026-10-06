@@ -25,6 +25,14 @@ public:
 	virtual ETeamAttitude::Type GetTeamAttitudeTowards(const AActor& Other) const override;
 	//~ End IGenericTeamAgentInterface Interface
 
+	//~ Begin AAIController Interface.
+	virtual bool RunBehaviorTree(UBehaviorTree* BTAsset) override;
+	//~ End AAIController Interface
+
+	// 감지 없이 처음부터 대상을 알고 시작 (웨이브 스폰 등). 블랙보드가 아직 없으면 BT 실행 시점에 적용
+	UFUNCTION(BlueprintCallable, Category = "Warrior|AI")
+	void SetInitialTarget(AActor* InTarget);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -52,4 +60,10 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Detour Crowd Avoidance Config", meta = (EditCondition = "bEnableDetourCrowdAvoidance"))
 	float CollisionQueryRange = 600.f;
+
+	// 블랙보드 TargetActor가 비어 있으면 InTarget을 넣음. 넣었으면 true
+	bool TrySetTargetActor(AActor* InTarget);
+
+	// BT 실행 전에 SetInitialTarget으로 받은 대상
+	TWeakObjectPtr<AActor> PendingInitialTarget;
 };

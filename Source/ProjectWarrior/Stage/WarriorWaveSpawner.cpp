@@ -2,6 +2,7 @@
 
 #include "Engine/World.h"
 #include "ProjectWarrior/Characters/WarriorAICharacter.h"
+#include "ProjectWarrior/Controllers/WarriorAIController.h"
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
 #include "GameFramework/PlayerController.h"
@@ -238,6 +239,7 @@ bool AWarriorWaveSpawner::TrySpawnEnemy(const FWarriorPendingWaveSpawnRequest& S
 		Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
 		Enemy->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);
 		UWarriorStatsLibrary::RecordEnemySpawned(Enemy);
+		AssignInitialTarget(Enemy);
 		return true;
 	}
 
@@ -403,6 +405,27 @@ void AWarriorWaveSpawner::GiveGoldToPlayer(const int32 InGold) const
 	}
 
 	Inventory->AddGold(InGold);
+}
+
+void AWarriorWaveSpawner::AssignInitialTarget(AWarriorAICharacter* Enemy) const
+{
+	if (!bAwareOnSpawn || !Enemy)
+	{
+		return;
+	}
+
+	// 골드 지급과 같이 싱글 플레이 기준으로 첫 번째 플레이어를 대상으로 삼는다
+	const APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	APawn* PlayerPawn = PlayerController ? PlayerController->GetPawn() : nullptr;
+	if (!PlayerPawn)
+	{
+		return;
+	}
+
+	if (AWarriorAIController* AIController = Cast<AWarriorAIController>(Enemy->GetController()))
+	{
+		AIController->SetInitialTarget(PlayerPawn);
+	}
 }
 
 void AWarriorWaveSpawner::HandleSpawnedEnemyDestroyed(AActor* DestroyedActor)
