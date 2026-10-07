@@ -16,14 +16,27 @@
 
 namespace WarriorAuthRules
 {
-	//첫 흐름 API 명세 회원가입 요청의 제안 값. 서버와 확정되면 같이 고친다
+	//auth-api.md v1 A1 회원가입 요청 규칙. 명세가 바뀌면 같이 고친다(서버도 같은 규칙으로 다시 검증한다)
 	constexpr int32 LoginIdMin = 4;
 	constexpr int32 LoginIdMax = 20;
 	constexpr int32 PasswordMin = 8;
-	constexpr int32 PasswordMax = 64;
+	constexpr int32 PasswordMaxUtf8Bytes = 72;	// BCrypt 한도
 	constexpr int32 NicknameMin = 2;
-	constexpr int32 NicknameMax = 12;
+	constexpr int32 NicknameMax = 20;
 	constexpr int32 EmailMax = 254;
+
+	bool IsAsciiLetterOrDigit(TCHAR InChar)
+	{
+		return (InChar >= TEXT('a') && InChar <= TEXT('z'))
+			|| (InChar >= TEXT('A') && InChar <= TEXT('Z'))
+			|| (InChar >= TEXT('0') && InChar <= TEXT('9'));
+	}
+
+	//완성형 한글(가~힣)
+	bool IsHangulSyllable(TCHAR InChar)
+	{
+		return InChar >= 0xAC00 && InChar <= 0xD7A3;
+	}
 }
 
 UWarriorAuthSubsystem* UWarriorAuthSubsystem::Get(const UObject* WorldContextObject)
@@ -163,7 +176,7 @@ void UWarriorAuthSubsystem::HandleSignupResponse(const FString& InLoginId, int32
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Signup 201 but the body could not be read. Using the entered loginId."));
 		}
 
-		//서버가 저장한 아이디를 우선한다(대소문자 구분 없음이라 서버가 값을 다듬을 수 있다)
+		//서버가 저장한 아이디를 쓴다(명세상 입력 그대로 저장되지만, 응답 값을 기준으로 삼는다)
 		RecentSignupLoginId = (bParsed && !ResponseDto.Data.LoginId.IsEmpty()) ? ResponseDto.Data.LoginId : InLoginId;
 
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup OK. accountId=%s loginId=%s requestId=%s"),
@@ -301,8 +314,9 @@ void UWarriorAuthSubsystem::RequestLogin(const FString& InLoginId, const FString
 void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body)
 {
 	bRequestInFlight = false;
+	LastLoginRetryAfterSeconds = 0;
 
-	//── 200: { "data": { accessToken, tokenType, expiresAt, account }, "meta": { requestId } }
+	//── 200: { "data": { accessToken, tokenType, sessionExpiresAt, account }, "meta": { requestId } }
 	if (Status == 200)
 	{
 		FWarriorLoginResponseDto ResponseDto;
@@ -317,10 +331,10 @@ void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 
 
 		//토큰은 메모리에만 둔다(로그 금지). 앱을 다시 켜면 다시 로그인한다
 		AccessToken = Result.AccessToken;
-		if (!FDateTime::ParseIso8601(*Result.ExpiresAt, AccessTokenExpiresAt))
+		if (!FDateTime::ParseIso8601(*Result.SessionExpiresAt, SessionExpiresAt))
 		{
-			AccessTokenExpiresAt = FDateTime();
-			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Login expiresAt could not be parsed: %s"), *Result.ExpiresAt);
+			SessionExpiresAt = FDateTime();
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Login sessionExpiresAt could not be parsed: %s"), *Result.SessionExpiresAt);
 		}
 
 		//로그인 응답에는 loginId·nickname이 없으므로 아이디는 요청 값을 쓴다
@@ -333,14 +347,20 @@ void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 
 		bLoggedIn = true;
 
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login OK. accountId=%s level=%d requestId=%s"),
-			*Account.AccountId, Result.Account.Level, *ResponseDto.Meta.RequestId);
+			*Account.AccountId, Result.Account.AccountLevel, *ResponseDto.Meta.RequestId);
 
 		OnLoginCompleted.Broadcast(true, FString(), FText::GetEmpty());
 		return;
 	}
 
-	//── 실패: { code, message, path, retryable, errors } / 연결 실패는 본문 없음
+	//── 실패: { code, message, path, retryable, errors, retryAfterSeconds? } / 연결 실패는 본문 없음
 	const FWarriorApiError Error = ParseApiError(Status, Body);
+
+	//429 잠김: 남은 초를 기억해 로그인 화면이 그동안 버튼을 막게 한다
+	if (Error.Code == TEXT("AUTH_LOGIN_LOCKED") || Status == 429)
+	{
+		LastLoginRetryAfterSeconds = FMath::Max(0, Error.RetryAfterSeconds);
+	}
 
 	if (Error.Code == TEXT("INVALID_REQUEST_BODY"))
 	{
@@ -349,11 +369,11 @@ void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 
 	}
 	else
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Login failed. status=%d code=%s retryable=%s"),
-			Status, *Error.Code, Error.Retryable ? TEXT("true") : TEXT("false"));
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Login failed. status=%d code=%s retryable=%s retryAfter=%d"),
+			Status, *Error.Code, Error.Retryable ? TEXT("true") : TEXT("false"), LastLoginRetryAfterSeconds);
 	}
 
-	OnLoginCompleted.Broadcast(false, Error.Code, LoginErrorToText(Error.Code, Status));
+	OnLoginCompleted.Broadcast(false, Error.Code, LoginErrorToText(Error.Code, Status, LastLoginRetryAfterSeconds));
 }
 
 void UWarriorAuthSubsystem::ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot)
@@ -375,7 +395,7 @@ void UWarriorAuthSubsystem::ApplyAccountSnapshot(const FWarriorAccountSnapshotDt
 	//ApplyServerSnapshot은 통째로 덮어쓰므로, 지금 값에서 시작해 스냅샷에 있는 칸만 바꾼다
 	//(RewardedRecordIds·ExternalCurrencies·TotalExperience는 스냅샷에 없어 지금 값을 유지한다)
 	FWarriorAccountData Data = AccountSubsystem->GetAccountData();
-	Data.AccountLevel = InSnapshot.Level;
+	Data.AccountLevel = InSnapshot.AccountLevel;
 	Data.Experience = InSnapshot.Experience;
 	Data.StatPoints = InSnapshot.StatPoints;
 
@@ -412,7 +432,7 @@ void UWarriorAuthSubsystem::ApplyAccountSnapshot(const FWarriorAccountSnapshotDt
 	AccountSubsystem->ApplyServerSnapshot(Data);
 }
 
-FText UWarriorAuthSubsystem::LoginErrorToText(const FString& InCode, int32 InStatus)
+FText UWarriorAuthSubsystem::LoginErrorToText(const FString& InCode, int32 InStatus, int32 InRetryAfterSeconds)
 {
 	if (InCode == TEXT("AUTH_INVALID_CREDENTIALS") || InStatus == 401)
 	{
@@ -420,7 +440,13 @@ FText UWarriorAuthSubsystem::LoginErrorToText(const FString& InCode, int32 InSta
 	}
 	if (InCode == TEXT("AUTH_LOGIN_LOCKED") || InStatus == 429)
 	{
-		return LOCTEXT("LoginLocked", "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.");
+		return InRetryAfterSeconds > 0
+			? FText::Format(LOCTEXT("LoginLockedSeconds", "로그인 시도가 너무 많습니다. {0}초 뒤 다시 시도해 주세요."), InRetryAfterSeconds)
+			: LOCTEXT("LoginLocked", "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.");
+	}
+	if (InCode == TEXT("ACCOUNT_SUSPENDED") || InStatus == 403)
+	{
+		return LOCTEXT("LoginSuspended", "이용이 제한된 계정입니다.");
 	}
 	if (InCode == TEXT("VALIDATION_FAILED"))
 	{
@@ -458,11 +484,12 @@ FText UWarriorAuthSubsystem::ValidateLoginId(const FString& InLoginId)
 		return FText::Format(LOCTEXT("LoginIdLength", "아이디는 {0}~{1}자로 입력해 주세요."), WarriorAuthRules::LoginIdMin, WarriorAuthRules::LoginIdMax);
 	}
 
+	//영문 대소문자·숫자. 대소문자를 구분하므로 바꾸지 않고 그대로 보낸다
 	for (const TCHAR Char : InLoginId)
 	{
-		if (!((Char >= TEXT('a') && Char <= TEXT('z')) || (Char >= TEXT('0') && Char <= TEXT('9'))))
+		if (!WarriorAuthRules::IsAsciiLetterOrDigit(Char))
 		{
-			return LOCTEXT("LoginIdChars", "아이디는 영문 소문자와 숫자만 쓸 수 있습니다.");
+			return LOCTEXT("LoginIdChars", "아이디는 영문과 숫자만 쓸 수 있습니다.");
 		}
 	}
 
@@ -471,9 +498,16 @@ FText UWarriorAuthSubsystem::ValidateLoginId(const FString& InLoginId)
 
 FText UWarriorAuthSubsystem::ValidatePassword(const FString& InPassword)
 {
-	if (InPassword.Len() < WarriorAuthRules::PasswordMin || InPassword.Len() > WarriorAuthRules::PasswordMax)
+	if (InPassword.Len() < WarriorAuthRules::PasswordMin)
 	{
-		return FText::Format(LOCTEXT("PasswordLength", "비밀번호는 {0}~{1}자로 입력해 주세요."), WarriorAuthRules::PasswordMin, WarriorAuthRules::PasswordMax);
+		return FText::Format(LOCTEXT("PasswordTooShort", "비밀번호는 {0}자 이상 입력해 주세요."), WarriorAuthRules::PasswordMin);
+	}
+
+	//BCrypt 한도: UTF-8로 72바이트까지(영문·숫자 1바이트, 한글 3바이트 → 한글만이면 24자)
+	const int32 Utf8Bytes = FTCHARToUTF8(*InPassword).Length();
+	if (Utf8Bytes > WarriorAuthRules::PasswordMaxUtf8Bytes)
+	{
+		return LOCTEXT("PasswordTooLong", "비밀번호가 너무 깁니다. 영문·숫자는 72자, 한글은 24자까지 쓸 수 있습니다.");
 	}
 
 	return FText::GetEmpty();
@@ -486,9 +520,24 @@ FText UWarriorAuthSubsystem::ValidateNickname(const FString& InNickname)
 		return LOCTEXT("NicknameBlank", "닉네임을 입력해 주세요.");
 	}
 
+	//앞뒤 공백은 안 된다(화면은 보내기 전에 앞뒤 공백을 지운다)
+	if (FChar::IsWhitespace(InNickname[0]) || FChar::IsWhitespace(InNickname[InNickname.Len() - 1]))
+	{
+		return LOCTEXT("NicknameEdgeSpace", "닉네임 앞뒤에는 공백을 쓸 수 없습니다.");
+	}
+
 	if (InNickname.Len() < WarriorAuthRules::NicknameMin || InNickname.Len() > WarriorAuthRules::NicknameMax)
 	{
 		return FText::Format(LOCTEXT("NicknameLength", "닉네임은 {0}~{1}자로 입력해 주세요."), WarriorAuthRules::NicknameMin, WarriorAuthRules::NicknameMax);
+	}
+
+	//한글·영문·숫자, 가운데 공백
+	for (const TCHAR Char : InNickname)
+	{
+		if (!(WarriorAuthRules::IsAsciiLetterOrDigit(Char) || WarriorAuthRules::IsHangulSyllable(Char) || Char == TEXT(' ')))
+		{
+			return LOCTEXT("NicknameChars", "닉네임은 한글·영문·숫자만 쓸 수 있습니다.");
+		}
 	}
 
 	return FText::GetEmpty();

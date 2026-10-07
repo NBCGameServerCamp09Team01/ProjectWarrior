@@ -59,12 +59,19 @@ public:
 	//400 VALIDATION_FAILED의 errors[]와 409 중복(아이디·닉네임)을 담는다. 회원가입 화면이 해당 칸 아래에 표시한다
 	const TMap<FString, FText>& GetLastSignupFieldErrors() const { return LastSignupFieldErrors; }
 
+	//마지막 로그인 실패가 429 AUTH_LOGIN_LOCKED였다면 남은 잠김 초(retryAfterSeconds). 아니면 0.
+	//로그인 화면이 그동안 로그인 버튼을 막는 데 쓴다
+	int32 GetLoginRetryAfterSeconds() const { return LastLoginRetryAfterSeconds; }
+
 	//~ Begin 입력 규칙. 문제가 없으면 빈 FText, 있으면 화면에 보여 줄 문장을 돌려준다
-	//길이·문자는 명세의 제안 값이다. 아이디 대소문자 구분 없음, 아이디·닉네임 중복은 서버가 판정한다(409)
+	//auth-api.md v1 A1 규칙. 아이디·닉네임 중복은 서버가 판정한다(409)
+	//아이디: 영문 대소문자·숫자 4~20자, 대소문자 구분
 	static FText ValidateLoginId(const FString& InLoginId);
+	//비밀번호: 8자 이상, UTF-8 72바이트 이하(한글만이면 24자)
 	static FText ValidatePassword(const FString& InPassword);
+	//닉네임: 한글·영문·숫자 2~20자, 가운데 공백 가능, 앞뒤 공백 불가
 	static FText ValidateNickname(const FString& InNickname);
-	//비어 있으면 통과(선택 입력). 값이 있으면 형식만 간단히 본다
+	//이메일: 비어 있으면 통과(선택 입력, 보낼 때 칸을 뺀다). 값이 있으면 254자 이하, 이름@도메인.최상위 모양만 본다
 	static FText ValidateEmail(const FString& InEmail);
 	//~ End 입력 규칙
 
@@ -107,7 +114,8 @@ private:
 	void ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot);
 
 	//오류 코드(없으면 HTTP 상태)로 화면에 보여 줄 문장을 고른다. 서버 message는 개발 확인용이라 쓰지 않는다
-	static FText LoginErrorToText(const FString& InCode, int32 InStatus);
+	//InRetryAfterSeconds는 429 잠김의 남은 초(없으면 0)
+	static FText LoginErrorToText(const FString& InCode, int32 InStatus, int32 InRetryAfterSeconds = 0);
 
 	FWarriorAuthAccount Account;
 
@@ -117,11 +125,14 @@ private:
 	//인증 헤더에 붙일 토큰. 로그에 남기지 않는다
 	FString AccessToken;
 
-	FDateTime AccessTokenExpiresAt;
+	//로그인 때 받은 세션 만료 시각(참고용). 세션은 인증 요청마다 늘어나므로 판단은 서버의 401로 한다
+	FDateTime SessionExpiresAt;
 
 	FString RecentSignupLoginId;
 
 	TMap<FString, FText> LastSignupFieldErrors;
+
+	int32 LastLoginRetryAfterSeconds = 0;
 
 	bool bLoggedIn = false;
 

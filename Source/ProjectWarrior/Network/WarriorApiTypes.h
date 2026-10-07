@@ -64,4 +64,8 @@ struct PROJECTWARRIOR_API FWarriorApiError
 	//VALIDATION_FAILED일 때만 온다
 	UPROPERTY()
 	TArray<FWarriorApiFieldError> Errors;
+
+	//429 AUTH_LOGIN_LOCKED일 때만 온다. 남은 잠김 초(Retry-After 헤더와 같은 값). 없으면 0
+	UPROPERTY()
+	int32 RetryAfterSeconds = 0;
 };

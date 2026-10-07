@@ -51,6 +51,16 @@ protected:
 	UFUNCTION()
 	void HandleLoginCompleted(bool bSuccess, const FString& ErrorCode, const FText& Message);
 
+	//429 잠김: 남은 초 동안 로그인 버튼을 막고, 시간이 지나면 다시 켠다(서버도 잠김을 지키므로 화면 안내용)
+	void LockLoginButton(int32 InSeconds);
+	void HandleLoginLockExpired();
+
+	FTimerHandle LoginLockTimer;
+
+	bool bLoginLocked = false;
+
+	bool bBusy = false;
+
 	//~ Begin WBP에 같은 이름으로 꼭 있어야 하는 위젯
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> EditableTextBox_LoginId;

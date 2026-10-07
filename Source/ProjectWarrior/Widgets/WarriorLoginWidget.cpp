@@ -5,6 +5,8 @@
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
 
@@ -85,6 +87,13 @@ void UWarriorLoginWidget::NativeDestruct()
 		Auth->OnLoginCompleted.RemoveDynamic(this, &ThisClass::HandleLoginCompleted);
 	}
 
+	//화면을 떠나면 잠김 타이머를 멈춘다(다시 들어와서 시도하면 서버가 다시 429로 알려 준다)
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LoginLockTimer);
+	}
+	bLoginLocked = false;
+
 	Super::NativeDestruct();
 }
 
@@ -101,19 +110,48 @@ UWidget* UWarriorLoginWidget::GetInitialFocusWidget() const
 
 void UWarriorLoginWidget::SetBusy(bool bInBusy)
 {
-	for (UWidget* Widget : TArray<UWidget*>{ Button_Login, Button_Signup, Button_Back, EditableTextBox_LoginId, EditableTextBox_Password })
+	bBusy = bInBusy;
+
+	for (UWidget* Widget : TArray<UWidget*>{ Button_Signup, Button_Back, EditableTextBox_LoginId, EditableTextBox_Password })
 	{
 		if (Widget)
 		{
 			Widget->SetIsEnabled(!bInBusy);
 		}
 	}
+
+	//로그인 버튼은 잠김(429) 중에도 막아 둔다
+	if (Button_Login)
+	{
+		Button_Login->SetIsEnabled(!bInBusy && !bLoginLocked);
+	}
+}
+
+void UWarriorLoginWidget::LockLoginButton(int32 InSeconds)
+{
+	UWorld* World = GetWorld();
+	if (InSeconds <= 0 || !World)
+	{
+		return;
+	}
+
+	bLoginLocked = true;
+	SetBusy(bBusy);
+	World->GetTimerManager().SetTimer(LoginLockTimer, this, &ThisClass::HandleLoginLockExpired, static_cast<float>(InSeconds), false);
+}
+
+void UWarriorLoginWidget::HandleLoginLockExpired()
+{
+	bLoginLocked = false;
+	SetBusy(bBusy);
+	ShowMessage(LOCTEXT("LoginUnlocked", "다시 로그인할 수 있습니다."), false);
 }
 
 void UWarriorLoginWidget::SubmitLogin()
 {
 	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
-	if (!Auth || Auth->IsRequestInFlight())
+	//잠김 중에는 Enter로도 보내지 않는다
+	if (!Auth || Auth->IsRequestInFlight() || bLoginLocked)
 	{
 		return;
 	}
@@ -163,6 +201,15 @@ void UWarriorLoginWidget::HandleLoginCompleted(bool bSuccess, const FString& Err
 	if (!bSuccess)
 	{
 		ShowMessage(Message.IsEmpty() ? LOCTEXT("LoginFailed", "로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.") : Message, true);
+
+		//429 잠김이면 남은 초 동안 로그인 버튼을 막는다
+		if (ErrorCode == TEXT("AUTH_LOGIN_LOCKED"))
+		{
+			if (const UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this))
+			{
+				LockLoginButton(Auth->GetLoginRetryAfterSeconds());
+			}
+		}
 		return;
 	}
 

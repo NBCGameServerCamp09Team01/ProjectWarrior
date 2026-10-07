@@ -52,7 +52,8 @@ struct PROJECTWARRIOR_API FWarriorLoginRequestDto
 
 /**
  * 메인화면 값(계정 스냅샷, 명세 AccountSnapshot). 로그인 응답의 account, GET /accounts/me의 data.
- * FWarriorAccountData와 같은 뜻이지만 JSON 모양이 달라(이름 level, 태그가 문자열) 이 구조로 받은 뒤 옮긴다.
+ * FWarriorAccountData와 같은 뜻이지만 JSON 모양이 달라(태그가 문자열) 이 구조로 받은 뒤 옮긴다.
+ * 칸 이름이 JSON과 다르면 오류 없이 기본값(레벨 1 등)으로 남으므로, 명세(account-api.md) 칸 이름과 정확히 맞춘다.
  */
 USTRUCT()
 struct PROJECTWARRIOR_API FWarriorAccountSnapshotDto
@@ -67,9 +68,9 @@ struct PROJECTWARRIOR_API FWarriorAccountSnapshotDto
 	UPROPERTY()
 	int64 Version = 0;
 
-	//계정 레벨 (FWarriorAccountData::AccountLevel)
+	//계정 레벨. 1부터 (FWarriorAccountData::AccountLevel). JSON 이름 "accountLevel"
 	UPROPERTY()
-	int32 Level = 1;
+	int32 AccountLevel = 1;
 
 	//현재 레벨 안에서 모은 경험치 (FWarriorAccountData::Experience)
 	UPROPERTY()
@@ -87,7 +88,7 @@ struct PROJECTWARRIOR_API FWarriorAccountSnapshotDto
 	UPROPERTY()
 	TArray<FString> UnlockedSkills;
 
-	//명세에 totalExperience 칸이 아직 없다. 서버가 칸을 추가하면 int32 TotalExperience를 여기에 더한다
+	//누적 경험치는 서버 계산용이라 보내지 않는다(account-api.md). FWarriorAccountData::TotalExperience는 게임 로컬 값이다
 };
 
 //로그인 응답의 data (명세 LoginResult)
@@ -96,7 +97,7 @@ struct PROJECTWARRIOR_API FWarriorLoginResultDto
 {
 	GENERATED_BODY()
 
-	//인증 헤더에 붙일 토큰. 메모리에만 두고 로그에 남기지 않는다
+	//인증 헤더에 붙일 43자 토큰(불투명 토큰, JWT 아님). 메모리에만 두고 로그에 남기지 않는다
 	UPROPERTY()
 	FString AccessToken;
 
@@ -104,11 +105,11 @@ struct PROJECTWARRIOR_API FWarriorLoginResultDto
 	UPROPERTY()
 	FString TokenType;
 
-	//토큰(또는 세션) 만료 시각. UTC ISO-8601 문자열 → FDateTime::ParseIso8601로 바꾼다
+	//세션 만료 시각(UTC ISO-8601). 세션은 인증 요청마다 10분씩 늘어나므로 곧 지난 값이 된다(참고용). JSON 이름 "sessionExpiresAt"
 	UPROPERTY()
-	FString ExpiresAt;
+	FString SessionExpiresAt;
 
-	//메인화면 값. 로그인 응답에는 loginId·nickname이 없다(닉네임은 명세에서 나중에 칸 추가 예정)
+	//메인화면 값(account-api.md 계정 스냅샷). 로그인 응답에는 loginId·nickname이 없다
 	UPROPERTY()
 	FWarriorAccountSnapshotDto Account;
 };
@@ -138,7 +139,7 @@ struct PROJECTWARRIOR_API FWarriorSignupRequestDto
 {
 	GENERATED_BODY()
 
-	//대소문자 구분 없음, 유일
+	//영문 대소문자·숫자 4~20자. 대소문자를 구분하고 입력 그대로 저장된다. 유일
 	UPROPERTY()
 	FString LoginId;
 
@@ -164,7 +165,7 @@ struct PROJECTWARRIOR_API FWarriorCreatedAccountDto
 	UPROPERTY()
 	FString AccountId;
 
-	//서버가 저장한 아이디. 서버가 값을 다듬을 수 있으므로(대소문자 구분 없음) 로그인 화면에는 이 값을 채운다
+	//서버가 저장한 아이디(입력 그대로). 로그인 화면에는 이 값을 채운다
 	UPROPERTY()
 	FString LoginId;
 
