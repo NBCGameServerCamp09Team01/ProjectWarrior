@@ -38,6 +38,7 @@ EBTNodeResult::Type UBTTask_ActivateAbilityAndWait::ExecuteTask(UBehaviorTreeCom
 	const FGameplayAbilitySpecHandle SpecHandle = Specs[FMath::RandRange(0, Specs.Num() - 1)]->Handle;
 
 	// 발동 중에 바로 끝나는 경우도 받도록 먼저 구독
+	bAbortPending = false;
 	CachedOwnerComp = &OwnerComp;
 	CachedASC = ASC;
 	ActiveSpecHandle = SpecHandle;
@@ -64,6 +65,13 @@ EBTNodeResult::Type UBTTask_ActivateAbilityAndWait::ExecuteTask(UBehaviorTreeCom
 
 EBTNodeResult::Type UBTTask_ActivateAbilityAndWait::AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
+	// 어빌리티가 아직 진행 중이면 끝날 때까지 중단을 미룸 (HandleAbilityEnded에서 FinishLatentAbort)
+	if (bFinishAbilityBeforeAbort && AbilityEndedHandle.IsValid())
+	{
+		bAbortPending = true;
+		return EBTNodeResult::InProgress;
+	}
+
 	UAbilitySystemComponent* ASC = CachedASC.Get();
 	const FGameplayAbilitySpecHandle SpecHandle = ActiveSpecHandle;
 	StopListening();
@@ -85,7 +93,8 @@ void UBTTask_ActivateAbilityAndWait::OnTaskFinished(UBehaviorTreeComponent& Owne
 
 FString UBTTask_ActivateAbilityAndWait::GetStaticDescription() const
 {
-	return FString::Printf(TEXT("%s\nActivate %s and wait"), *Super::GetStaticDescription(), *AbilityTag.ToString());
+	return FString::Printf(TEXT("%s\nActivate %s and wait%s"), *Super::GetStaticDescription(), *AbilityTag.ToString(),
+		bFinishAbilityBeforeAbort ? TEXT("\n(finish before abort)") : TEXT(""));
 }
 
 void UBTTask_ActivateAbilityAndWait::HandleAbilityEnded(const FAbilityEndedData& EndedData)
@@ -97,6 +106,16 @@ void UBTTask_ActivateAbilityAndWait::HandleAbilityEnded(const FAbilityEndedData&
 
 	UBehaviorTreeComponent* OwnerComp = CachedOwnerComp.Get();
 	StopListening();
+
+	if (bAbortPending)
+	{
+		bAbortPending = false;
+		if (OwnerComp)
+		{
+			FinishLatentAbort(*OwnerComp);
+		}
+		return;
+	}
 
 	// ExecuteTask 안에서 바로 끝난 경우는 ExecuteTask가 결과를 반환함
 	if (OwnerComp && !bActivating)

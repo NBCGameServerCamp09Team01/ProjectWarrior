@@ -14,7 +14,8 @@ struct FAbilityEndedData;
 /**
  * AbilityTag와 일치하는 어빌리티를 발동하고 끝날 때까지 기다리는 태스크.
  * (BT_ActivateAbilityByTag는 발동 즉시 끝나서 가드처럼 오래 걸리는 어빌리티 도중에 BT가 다음 행동으로 넘어감)
- * 발동하지 못하면 Failed, 정상 종료면 Succeeded, 취소되면 Failed. 태스크가 중단되면 어빌리티도 취소(bCancelAbilityOnAbort)
+ * 발동하지 못하면 Failed, 정상 종료면 Succeeded, 취소되면 Failed.
+ * 태스크가 중단되면 어빌리티도 취소(bCancelAbilityOnAbort). bFinishAbilityBeforeAbort면 어빌리티가 끝날 때까지 중단을 미룸
  */
 UCLASS()
 class PROJECTWARRIOR_API UBTTask_ActivateAbilityAndWait : public UBTTaskNode
@@ -33,8 +34,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Ability", meta = (Categories = "AI.Ability"))
 	FGameplayTag AbilityTag;
 
+	// 중단되면 어빌리티도 취소. bFinishAbilityBeforeAbort가 켜져 있으면 무시됨
 	UPROPERTY(EditAnywhere, Category = "Ability")
 	bool bCancelAbilityOnAbort = true;
+
+	// 상위 데코레이터 등이 중단을 요청해도 어빌리티가 끝날 때까지 기다린 뒤 중단 (저격처럼 끝까지 유지해야 하는 동작)
+	// 피격·처형·사망 등으로 어빌리티가 끊기면 그때 중단이 마무리됨
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	bool bFinishAbilityBeforeAbort = false;
 
 private:
 	void HandleAbilityEnded(const FAbilityEndedData& EndedData);
@@ -46,4 +53,6 @@ private:
 	FDelegateHandle AbilityEndedHandle;
 	// TryActivateAbility 호출 중 (그 안에서 끝나면 FinishLatentTask 대신 ExecuteTask가 결과 반환)
 	bool bActivating = false;
+	// 중단을 미루고 어빌리티 종료를 기다리는 중 (끝나면 FinishLatentAbort)
+	bool bAbortPending = false;
 };
