@@ -42,6 +42,8 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_TargetLock);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Finisher);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Counter);
+	// 퍼펙트 패링한 투사체를 발사자에게 되돌림 (스킬 해금 시 부여)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_ParryReflect);
 
 	// 공격 어빌리티의 상위 태그. 입력에서 하위 공격 어빌리티를 한 번에 찾을 때 쓴다
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Attack);

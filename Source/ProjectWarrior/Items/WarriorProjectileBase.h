@@ -32,6 +32,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Projectile")
 	bool IsLaunched() const { return bLaunched; }
 
+	// 원래 발사자에게 되돌림. 이후 Reflector가 쏜 투사체로 취급하고, 피해는 같은 이펙트로 Reflector가 다시 만듦
+	// 막기 이벤트(Player.Event.Successful.Block, OptionalObject = 이 투사체)를 받은 어빌리티에서 호출하면 막힌 투사체가 파괴되지 않음
+	UFUNCTION(BlueprintCallable, Category = "Projectile")
+	bool ReflectProjectile(APawn* Reflector, float DamageMultiplier = 1.f, float SpeedMultiplier = 1.5f);
+
+	UFUNCTION(BlueprintPure, Category = "Projectile")
+	bool IsReflected() const { return bReflected; }
+
 protected:
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -66,6 +74,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile")
 	EWarriorBlockRule BlockRule = EWarriorBlockRule::Blockable;
 
+	// ReflectProjectile로 되돌릴 수 있는지 (보스 투사체 등은 끌 수 있음)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Reflect")
+	bool bCanBeReflected = true;
+
 	UFUNCTION()
 	virtual void OnProjectileBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
@@ -73,12 +85,21 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Projectile", meta = (DisplayName = "On Projectile Impact"))
 	void BP_OnProjectileImpact(AActor* HitActor, const FVector& ImpactLocation, EWarriorHitResultType HitResult);
 
+	// 되돌아갈 때 호출 (이펙트/사운드용). 투사체는 파괴되지 않고 계속 날아감
+	UFUNCTION(BlueprintImplementableEvent, Category = "Projectile", meta = (DisplayName = "On Projectile Reflected"))
+	void BP_OnProjectileReflected(AActor* Reflector, const FVector& ReflectLocation);
+
 private:
 	// 쏜 캐릭터, 그 캐릭터의 무기, 다른 투사체는 무시
 	bool ShouldIgnoreActor(AActor* OtherActor) const;
 
 	void HandleHitPawn(APawn* HitPawn, const FVector& ImpactLocation);
 	void ApplyDamageToTarget(AActor* TargetActor);
+
+	// 트레이스에 걸린 액터가 폰에 붙은 무기 등이면 그 폰을 반환
+	static APawn* ResolveHitPawn(AActor* HitActor);
+
+	bool bReflected = false;
 
 	UPROPERTY()
 	TArray<AActor*> ProcessedActors;
