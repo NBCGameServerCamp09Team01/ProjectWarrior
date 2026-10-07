@@ -104,8 +104,14 @@ protected:
 	// 제자리 회전으로 되돌리므로 둘 다 함께 갱신
 	void SetOwnerFacingRotation(const FRotator& NewRotation) const;
 
+	// BeginMontageAreaTelegraph와 같지만 판정 시점(ImpactTime)과 영역을 직접 지정 (여러 번 판정하는 몽타주용)
+	bool BeginMontageAreaTelegraphAtTime(UAnimMontage* Montage, float ImpactTime, const FWarriorAttackAreaData& InAreaData, AActor* TargetActor, bool bFaceTarget, float TelegraphDuration = -1.f);
+
 	// 몽타주 노티파이 중 InEventTag 값을 가진 GameplayTag 변수를 가진 첫 노티파이의 시간
 	static bool FindMontageEventTime(const UAnimMontage* InMontage, const FGameplayTag& InEventTag, float& OutTime);
+
+	// 위와 같은 노티파이의 시간을 모두 (시간순)
+	static void FindMontageEventTimes(const UAnimMontage* InMontage, const FGameplayTag& InEventTag, TArray<float>& OutTimes);
 
 private:
 	// 앵커 기준(오프셋 적용 전) 트랜스폼. 수평 방향만 사용

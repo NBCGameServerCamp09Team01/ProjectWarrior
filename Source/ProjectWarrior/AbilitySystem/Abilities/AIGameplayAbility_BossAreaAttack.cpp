@@ -107,9 +107,7 @@ void UAIGameplayAbility_BossAreaAttack::BeginDefaultAreaTelegraph(AActor* Target
 
 bool UAIGameplayAbility_BossAreaAttack::BeginMontageAreaTelegraph(UAnimMontage* Montage, AActor* TargetActor, bool bFaceTarget, float TelegraphDuration)
 {
-	ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-
-	if (!OwnerCharacter || !Montage)
+	if (!Montage)
 	{
 		return false;
 	}
@@ -119,6 +117,18 @@ bool UAIGameplayAbility_BossAreaAttack::BeginMontageAreaTelegraph(UAnimMontage* 
 	if (!FindMontageEventTime(Montage, MontageImpactEventTag, ImpactTime))
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[BossAreaAttack] %s: notify with %s not found in %s."), *GetName(), *MontageImpactEventTag.ToString(), *Montage->GetName());
+		return false;
+	}
+
+	return BeginMontageAreaTelegraphAtTime(Montage, ImpactTime, DefaultAreaData, TargetActor, bFaceTarget, TelegraphDuration);
+}
+
+bool UAIGameplayAbility_BossAreaAttack::BeginMontageAreaTelegraphAtTime(UAnimMontage* Montage, float ImpactTime, const FWarriorAttackAreaData& InAreaData, AActor* TargetActor, bool bFaceTarget, float TelegraphDuration)
+{
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+
+	if (!OwnerCharacter || !Montage)
+	{
 		return false;
 	}
 
@@ -163,7 +173,7 @@ bool UAIGameplayAbility_BossAreaAttack::BeginMontageAreaTelegraph(UAnimMontage* 
 	}
 
 	// Owner 앵커면 보스를 따라가 버리므로 고정 앵커로 강제
-	FWarriorAttackAreaData MontageAreaData = DefaultAreaData;
+	FWarriorAttackAreaData MontageAreaData = InAreaData;
 	MontageAreaData.Anchor = EWarriorAttackAreaAnchor::OwnerSnapshot;
 
 	BeginAreaTelegraphAtAnchor(MontageAreaData, ImpactAnchor, TelegraphDuration);
@@ -201,33 +211,30 @@ bool UAIGameplayAbility_BossAreaAttack::FaceAreaTarget(AActor* TargetActor)
 
 void UAIGameplayAbility_BossAreaAttack::SetOwnerFacingRotation(const FRotator& NewRotation) const
 {
-	APawn* OwnerPawn = Cast<APawn>(GetAvatarActorFromActorInfo());
-
-	if (!OwnerPawn)
-	{
-		return;
-	}
-
-	if (AALSBaseCharacter* ALSCharacter = Cast<AALSBaseCharacter>(OwnerPawn))
-	{
-		ALSCharacter->SetActorLocationAndTargetRotation(ALSCharacter->GetActorLocation(), NewRotation);
-	}
-	else
-	{
-		OwnerPawn->SetActorRotation(NewRotation);
-	}
-
-	if (AController* Controller = OwnerPawn->GetController())
-	{
-		Controller->SetControlRotation(NewRotation);
-	}
+	UWarriorFunctionLibrary::SetPawnFacingRotation(Cast<APawn>(GetAvatarActorFromActorInfo()), NewRotation);
 }
 
 bool UAIGameplayAbility_BossAreaAttack::FindMontageEventTime(const UAnimMontage* InMontage, const FGameplayTag& InEventTag, float& OutTime)
 {
-	if (!InMontage || !InEventTag.IsValid())
+	TArray<float> EventTimes;
+	FindMontageEventTimes(InMontage, InEventTag, EventTimes);
+
+	if (EventTimes.IsEmpty())
 	{
 		return false;
+	}
+
+	OutTime = EventTimes[0];
+	return true;
+}
+
+void UAIGameplayAbility_BossAreaAttack::FindMontageEventTimes(const UAnimMontage* InMontage, const FGameplayTag& InEventTag, TArray<float>& OutTimes)
+{
+	OutTimes.Reset();
+
+	if (!InMontage || !InEventTag.IsValid())
+	{
+		return;
 	}
 
 	for (const FAnimNotifyEvent& NotifyEvent : InMontage->Notifies)
@@ -249,13 +256,14 @@ bool UAIGameplayAbility_BossAreaAttack::FindMontageEventTime(const UAnimMontage*
 
 			if (*It->ContainerPtrToValuePtr<FGameplayTag>(NotifyObject) == InEventTag)
 			{
-				OutTime = NotifyEvent.GetTriggerTime();
-				return true;
+				OutTimes.Add(NotifyEvent.GetTriggerTime());
+				break;
 			}
 		}
 	}
 
-	return false;
+	// 노티파이 배열은 트랙 순서라 시간순이 아닐 수 있음
+	OutTimes.Sort();
 }
 
 TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamage(const FGameplayEffectSpecHandle& InDamageSpecHandle, bool bClearTelegraph)
