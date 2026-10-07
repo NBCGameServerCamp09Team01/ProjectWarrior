@@ -8,7 +8,8 @@
 
 class UUserWidget;
 
-//프론트 레벨의 화면 단계. 로그인 화면이 생기면 Title과 MainMenu 사이에 추가한다.
+//프론트 레벨의 화면 단계. 흐름은 Title → (로그인 안 했으면 Login ↔ Signup) → MainMenu.
+//BP에 저장된 값이 바뀌지 않도록 새 값은 끝에 추가한다.
 UENUM(BlueprintType)
 enum class EWarriorFrontScreen : uint8
 {
@@ -16,7 +17,9 @@ enum class EWarriorFrontScreen : uint8
 	Title,
 	MainMenu,
 	Growth,		// 성장 화면(스탯 투자, 스킬 해금). 메인메뉴에서 연다
-	Skill		// 스킬 화면(스킬 해금). 메인메뉴에서 연다
+	Skill,		// 스킬 화면(스킬 해금). 메인메뉴에서 연다
+	Login,		// 로그인 화면. 로그인하지 않은 채 MainMenu를 열면 대신 뜬다
+	Signup		// 회원가입 화면. 로그인 화면에서 연다
 };
 
 /**
@@ -30,6 +33,7 @@ class PROJECTWARRIOR_API AWarriorFrontPlayerController : public AWarriorPlayerCo
 
 public:
 	//현재 화면을 숨기고 InScreen 위젯을 띄운다. 위젯은 처음 보여 줄 때 한 번만 만든다.
+	//로그인하지 않았으면 MainMenu 대신 Login을 띄운다.
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void ShowScreen(EWarriorFrontScreen InScreen);
 
@@ -50,6 +54,7 @@ protected:
 	//~ End AActor Interface
 
 	//화면별 위젯 클래스 (BP_FrontPlayerController에서 지정)
+	//Login → WBP_Login, Signup → WBP_Signup
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TMap<EWarriorFrontScreen, TSubclassOf<UUserWidget>> ScreenWidgetClasses;
 

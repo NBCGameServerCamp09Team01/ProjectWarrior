@@ -9,6 +9,7 @@
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
+#include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 
 void AWarriorFrontPlayerController::BeginPlay()
 {
@@ -39,6 +40,16 @@ void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 
 void AWarriorFrontPlayerController::ShowScreen(EWarriorFrontScreen InScreen)
 {
+	//메인메뉴는 로그인한 뒤에만 연다. 타이틀의 "게임 시작"(WBP_Title)이 MainMenu를 부르므로 여기서 로그인 화면으로 돌린다.
+	if (InScreen == EWarriorFrontScreen::MainMenu)
+	{
+		const UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+		if (Auth && !Auth->IsLoggedIn())
+		{
+			InScreen = EWarriorFrontScreen::Login;
+		}
+	}
+
 	if (InScreen == CurrentScreen)
 	{
 		return;
@@ -99,7 +110,10 @@ void AWarriorFrontPlayerController::PlayScreenSound(EWarriorFrontScreen InPrevio
 
 	switch (InNextScreen)
 	{
+	//로그인·회원가입은 타이틀에서 이어지는 화면이라 같은 상황으로 둔다.
 	case EWarriorFrontScreen::Title:
+	case EWarriorFrontScreen::Login:
+	case EWarriorFrontScreen::Signup:
 		Sound->SetMusicState(WarriorSoundTags::Music_Front_Title);
 		break;
 
@@ -114,7 +128,9 @@ void AWarriorFrontPlayerController::PlayScreenSound(EWarriorFrontScreen InPrevio
 		break;
 	}
 
-	if (InPreviousScreen == EWarriorFrontScreen::Title && InNextScreen == EWarriorFrontScreen::MainMenu)
+	//"게임 시작" 소리: 타이틀(이미 로그인함) 또는 로그인 화면에서 메인메뉴로 들어갈 때
+	if ((InPreviousScreen == EWarriorFrontScreen::Title || InPreviousScreen == EWarriorFrontScreen::Login)
+		&& InNextScreen == EWarriorFrontScreen::MainMenu)
 	{
 		UWarriorSoundSubsystem::PlaySound2D(this, WarriorSoundTags::Sound_UI_Front_Start);
 	}
