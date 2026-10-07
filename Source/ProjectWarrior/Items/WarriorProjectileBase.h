@@ -62,6 +62,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile", meta = (Categories = "Shared.Event.HitReact", EditCondition = "bSendHitReactEvent"))
 	FGameplayTag HitReactEventTag;
 
+	// 막기 규칙 (회피는 항상 가능). 저격 화살은 PerfectParryOnly
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile")
+	EWarriorBlockRule BlockRule = EWarriorBlockRule::Blockable;
+
 	UFUNCTION()
 	virtual void OnProjectileBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 

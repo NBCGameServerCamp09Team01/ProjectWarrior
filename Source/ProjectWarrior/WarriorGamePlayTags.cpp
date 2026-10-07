@@ -71,6 +71,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_AttackType_Heavy, "Player.SetByCaller.AttackType.Heavy");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_Blocking, "Player.Status.Blocking");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Status_Blocking_Perfect, "Player.Status.Blocking.Perfect");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_TargetLock, "Player.Status.TargetLock");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_OverrideLockOnRotation_Character, "Player.Status.OverrideLockOnRotation.Character");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_OverrideLockOnRotation_Controller, "Player.Status.OverrideLockOnRotation.Controller");

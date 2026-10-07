@@ -57,7 +57,7 @@ public:
 
     // 근접/투사체 공통 피격 판정. InDamageCauser가 있으면 막기 방향 판정에 공격자 대신 사용 (예: 화살)
     UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
-    static EWarriorHitResultType EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser = nullptr, bool bIsAttackUnblockable = false);
+    static EWarriorHitResultType EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser = nullptr, EWarriorBlockRule InBlockRule = EWarriorBlockRule::Blockable);
 
     // 사망 상태(Shared.Status.Death 하위 태그)인지. ASC가 없거나 이미 제거 중인 액터도 안전하게 처리 (false 또는 true)
     UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")

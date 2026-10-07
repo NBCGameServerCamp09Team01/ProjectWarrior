@@ -178,7 +178,7 @@ void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& Impact
 	EventData.Instigator = InstigatorPawn;
 	EventData.Target = HitPawn;
 
-	const EWarriorHitResultType HitResult = UWarriorFunctionLibrary::EvaluateHitResult(InstigatorPawn, HitPawn, this);
+	const EWarriorHitResultType HitResult = UWarriorFunctionLibrary::EvaluateHitResult(InstigatorPawn, HitPawn, this, BlockRule);
 
 	switch (HitResult)
 	{
