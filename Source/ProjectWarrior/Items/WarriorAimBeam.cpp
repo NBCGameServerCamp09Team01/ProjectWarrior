@@ -18,6 +18,7 @@ void AWarriorAimBeam::InitializeBeam(USceneComponent* InSourceComponent, FName I
 {
 	Target = InTarget;
 	bLocked = false;
+	bEndFrozen = false;
 
 	if (InSourceComponent)
 	{
@@ -28,19 +29,23 @@ void AWarriorAimBeam::InitializeBeam(USceneComponent* InSourceComponent, FName I
 	UpdateBeamEnd();
 }
 
-void AWarriorAimBeam::LockBeam()
+void AWarriorAimBeam::LockBeam(bool bFreezeEnd)
 {
 	if (bLocked)
 	{
 		return;
 	}
 
-	UpdateBeamEnd();
-	LockedEnd = Target.IsValid() ? Target->GetActorLocation() + TargetOffset : GetActorLocation() + GetActorForwardVector() * FallbackLength;
 	bLocked = true;
+	bEndFrozen = bFreezeEnd;
+
+	if (bEndFrozen)
+	{
+		LockedEnd = Target.IsValid() ? Target->GetActorLocation() + TargetOffset : GetActorLocation() + GetActorForwardVector() * FallbackLength;
+	}
 
 	BeamComponent->SetVariableLinearColor(BeamColorParameterName, LockedColor);
-	BeamComponent->SetVariableVec3(BeamEndParameterName, LockedEnd);
+	UpdateBeamEnd();
 
 	BP_OnBeamLocked();
 }
@@ -54,7 +59,7 @@ void AWarriorAimBeam::Tick(float DeltaSeconds)
 
 void AWarriorAimBeam::UpdateBeamEnd()
 {
-	if (bLocked)
+	if (bEndFrozen)
 	{
 		BeamComponent->SetVariableVec3(BeamEndParameterName, LockedEnd);
 		return;

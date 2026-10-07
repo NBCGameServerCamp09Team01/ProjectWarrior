@@ -10,7 +10,7 @@ class UNiagaraComponent;
 
 /**
  * 저격 조준선. 시작점(활 소켓)에서 대상까지 나이아가라 빔을 매 프레임 갱신한다.
- * 조준 중에는 대상을 따라가고, LockBeam 이후에는 끝점을 고정하고 색을 바꾼다 (지금 피하라는 신호).
+ * 조준 중에는 대상을 따라가고, LockBeam 이후에는 색을 바꾼다 (지금 피하라는 신호). 끝점 고정은 선택.
  *
  * 나이아가라 시스템에 필요한 유저 파라미터 (이름은 아래 프로퍼티로 변경 가능)
  *  - BeamEnd   (Vector, 월드 좌표): 빔 끝점. 빔 시작점은 시스템 위치(= 이 액터 위치)
@@ -28,9 +28,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|AimBeam")
 	void InitializeBeam(USceneComponent* InSourceComponent, FName InSourceSocket, AActor* InTarget);
 
-	// 끝점을 현재 위치에 고정하고 고정 색으로 바꿈
+	// 고정 색으로 바꿈. bFreezeEnd면 끝점도 현재 위치에 고정하고, 아니면 계속 대상을 따라감
 	UFUNCTION(BlueprintCallable, Category = "Warrior|AimBeam")
-	void LockBeam();
+	void LockBeam(bool bFreezeEnd = true);
 
 	UFUNCTION(BlueprintPure, Category = "Warrior|AimBeam")
 	bool IsLocked() const { return bLocked; }
@@ -71,4 +71,5 @@ private:
 	TWeakObjectPtr<AActor> Target;
 	FVector LockedEnd = FVector::ZeroVector;
 	bool bLocked = false;
+	bool bEndFrozen = false;
 };

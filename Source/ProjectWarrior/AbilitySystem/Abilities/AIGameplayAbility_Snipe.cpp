@@ -23,8 +23,8 @@ UAIGameplayAbility_Snipe::UAIGameplayAbility_Snipe()
 	ActivationBlockedTags.AddTag(WarriorGameplayTags::Shared_Status_Death);
 	ActivationBlockedTags.AddTag(WarriorGameplayTags::Shared_Status_Finisher);
 
-	// 고정한 뒤에는 회피 여부와 관계없이 고정 위치로 발사 (조준선이 보여 준 곳 = 화살이 가는 곳)
-	bOnlyUseLockedAimWhenDodged = false;
+	// 걷기로는 피할 수 없고, 고정(붉은 빛) 이후 회피해야 빗나감. 그 외에는 퍼펙트 패링으로만 막을 수 있음
+	bOnlyUseLockedAimWhenDodged = true;
 
 	FireEventTag = WarriorGameplayTags::AI_Event_Projectile_Fire;
 }
@@ -120,9 +120,10 @@ void UAIGameplayAbility_Snipe::OnLockAim()
 
 	LockAimLocation(SnipeTarget.Get());
 
+	// 회피했을 때만 고정 위치로 쏘는 경우 조준선은 색만 바꾸고 계속 대상을 따라감 (걷는 대상에게 실제로 날아가는 방향)
 	if (AWarriorAimBeam* Beam = AimBeam.Get())
 	{
-		Beam->LockBeam();
+		Beam->LockBeam(!bOnlyUseLockedAimWhenDodged);
 	}
 }
 
@@ -162,7 +163,8 @@ void UAIGameplayAbility_Snipe::OnFireEvent(FGameplayEventData Payload)
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[Snipe] %s has no SnipeDamageEffect."), *GetName());
 	}
 
-	LaunchHeldProjectile(SnipeTarget.Get(), DamageSpecHandle, false);
+	// 회피하지 않았으면 이동 예측으로 걷는 대상을 맞춤
+	LaunchHeldProjectile(SnipeTarget.Get(), DamageSpecHandle, true);
 }
 
 void UAIGameplayAbility_Snipe::OnSnipeMontageEnded()
