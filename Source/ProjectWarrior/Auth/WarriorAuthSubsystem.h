@@ -34,8 +34,10 @@ public:
 	//~ End USubsystem Interface
 
 	//POST /api/v1/auth/signup. 가입만 하고 로그인은 하지 않는다(명세대로 이어서 로그인을 부른다)
+	//InEmail은 선택이다. 비어 있으면 서버에 보내지 않는다(명세: 비워 두거나 null)
+	//비밀번호 확인 칸은 화면에서만 비교하고 여기로 넘기지 않는다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
-	void RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname);
+	void RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname, const FString& InEmail);
 
 	//POST /api/v1/auth/login
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
@@ -55,9 +57,12 @@ public:
 	bool ConsumeRecentSignupLoginId(FString& OutLoginId);
 
 	//~ Begin 입력 규칙. 문제가 없으면 빈 FText, 있으면 화면에 보여 줄 문장을 돌려준다
+	//길이·문자는 명세의 제안 값이다. 아이디 대소문자 구분 없음, 아이디·닉네임 중복은 서버가 판정한다(409)
 	static FText ValidateLoginId(const FString& InLoginId);
 	static FText ValidatePassword(const FString& InPassword);
 	static FText ValidateNickname(const FString& InNickname);
+	//비어 있으면 통과(선택 입력). 값이 있으면 형식만 간단히 본다
+	static FText ValidateEmail(const FString& InEmail);
 	//~ End 입력 규칙
 
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Auth")

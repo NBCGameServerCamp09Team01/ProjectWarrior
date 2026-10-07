@@ -36,7 +36,7 @@ protected:
 	//~ End UWarriorAuthWidgetBase Interface
 
 	//입력 규칙을 확인한다. 문제가 있으면 빈 FText가 아닌 문장을 돌려준다
-	FText ValidateInputs(FString& OutLoginId, FString& OutPassword, FString& OutNickname) const;
+	FText ValidateInputs(FString& OutLoginId, FString& OutPassword, FString& OutNickname, FString& OutEmail) const;
 
 	UFUNCTION()
 	void HandleSubmitClicked();
@@ -57,6 +57,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> EditableTextBox_Nickname;
+
+	//선택 입력. 비워 두면 서버에 보내지 않는다(명세: email은 비워 두거나 null)
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UEditableTextBox> EditableTextBox_Email;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> EditableTextBox_Password;

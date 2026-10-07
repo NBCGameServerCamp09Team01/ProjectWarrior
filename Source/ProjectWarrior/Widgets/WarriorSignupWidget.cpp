@@ -81,7 +81,7 @@ UWidget* UWarriorSignupWidget::GetInitialFocusWidget() const
 
 void UWarriorSignupWidget::SetBusy(bool bInBusy)
 {
-	for (UWidget* Widget : TArray<UWidget*>{ Button_Submit, Button_Back, EditableTextBox_LoginId, EditableTextBox_Nickname, EditableTextBox_Password, EditableTextBox_PasswordConfirm })
+	for (UWidget* Widget : TArray<UWidget*>{ Button_Submit, Button_Back, EditableTextBox_LoginId, EditableTextBox_Nickname, EditableTextBox_Email, EditableTextBox_Password, EditableTextBox_PasswordConfirm })
 	{
 		if (Widget)
 		{
@@ -90,10 +90,11 @@ void UWarriorSignupWidget::SetBusy(bool bInBusy)
 	}
 }
 
-FText UWarriorSignupWidget::ValidateInputs(FString& OutLoginId, FString& OutPassword, FString& OutNickname) const
+FText UWarriorSignupWidget::ValidateInputs(FString& OutLoginId, FString& OutPassword, FString& OutNickname, FString& OutEmail) const
 {
 	OutLoginId = EditableTextBox_LoginId ? EditableTextBox_LoginId->GetText().ToString().TrimStartAndEnd() : FString();
 	OutNickname = EditableTextBox_Nickname ? EditableTextBox_Nickname->GetText().ToString().TrimStartAndEnd() : FString();
+	OutEmail = EditableTextBox_Email ? EditableTextBox_Email->GetText().ToString().TrimStartAndEnd() : FString();
 	OutPassword = EditableTextBox_Password ? EditableTextBox_Password->GetText().ToString() : FString();
 	const FString PasswordConfirm = EditableTextBox_PasswordConfirm ? EditableTextBox_PasswordConfirm->GetText().ToString() : OutPassword;
 
@@ -101,6 +102,10 @@ FText UWarriorSignupWidget::ValidateInputs(FString& OutLoginId, FString& OutPass
 	if (Error.IsEmpty())
 	{
 		Error = UWarriorAuthSubsystem::ValidateNickname(OutNickname);
+	}
+	if (Error.IsEmpty())
+	{
+		Error = UWarriorAuthSubsystem::ValidateEmail(OutEmail);
 	}
 	if (Error.IsEmpty())
 	{
@@ -125,7 +130,8 @@ void UWarriorSignupWidget::SubmitSignup()
 	FString LoginId;
 	FString Password;
 	FString Nickname;
-	const FText Error = ValidateInputs(LoginId, Password, Nickname);
+	FString Email;
+	const FText Error = ValidateInputs(LoginId, Password, Nickname, Email);
 	if (!Error.IsEmpty())
 	{
 		ShowMessage(Error, true);
@@ -134,7 +140,7 @@ void UWarriorSignupWidget::SubmitSignup()
 
 	ShowMessage(LOCTEXT("SigningUp", "가입하는 중..."), false);
 	SetBusy(true);
-	Auth->RequestSignup(LoginId, Password, Nickname);
+	Auth->RequestSignup(LoginId, Password, Nickname, Email);
 }
 
 void UWarriorSignupWidget::HandleSubmitClicked()
@@ -166,7 +172,7 @@ void UWarriorSignupWidget::HandleSignupCompleted(bool bSuccess, const FString& E
 	}
 
 	//가입한 아이디는 인증 서브시스템이 기억하고, 로그인 화면이 꺼내서 채운다
-	for (UEditableTextBox* Field : { EditableTextBox_LoginId.Get(), EditableTextBox_Nickname.Get(), EditableTextBox_Password.Get(), EditableTextBox_PasswordConfirm.Get() })
+	for (UEditableTextBox* Field : { EditableTextBox_LoginId.Get(), EditableTextBox_Nickname.Get(), EditableTextBox_Email.Get(), EditableTextBox_Password.Get(), EditableTextBox_PasswordConfirm.Get() })
 	{
 		if (Field)
 		{

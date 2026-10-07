@@ -18,6 +18,7 @@ namespace WarriorAuthRules
 	constexpr int32 PasswordMax = 64;
 	constexpr int32 NicknameMin = 2;
 	constexpr int32 NicknameMax = 12;
+	constexpr int32 EmailMax = 254;
 
 	//TODO(server): 임시 응답 지연(초)
 	constexpr float PlaceholderDelay = 0.4f;
@@ -39,7 +40,7 @@ void UWarriorAuthSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname)
+void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname, const FString& InEmail)
 {
 	if (bRequestInFlight)
 	{
@@ -48,9 +49,10 @@ void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FStrin
 	}
 
 	bRequestInFlight = true;
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. loginId=%s"), *InLoginId);
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. loginId=%s, email=%s"), *InLoginId, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
 
-	//TODO(server): POST /api/v1/auth/signup 으로 교체한다. 201이면 성공, 409는 AUTH_LOGIN_ID_DUPLICATED
+	//TODO(server): POST /api/v1/auth/signup 으로 교체한다. 본문 { loginId, password, nickname, email? } — email이 비면 빼거나 null.
+	//201이면 성공, 409는 아이디·닉네임 중복(서버 오류 코드로 구분)
 	GetGameInstance()->GetTimerManager().SetTimer(PlaceholderTimer,
 		FTimerDelegate::CreateUObject(this, &ThisClass::CompleteSignupPlaceholder, InLoginId),
 		WarriorAuthRules::PlaceholderDelay, false);
@@ -126,6 +128,28 @@ FText UWarriorAuthSubsystem::ValidateNickname(const FString& InNickname)
 	}
 
 	return FText::GetEmpty();
+}
+
+FText UWarriorAuthSubsystem::ValidateEmail(const FString& InEmail)
+{
+	if (InEmail.IsEmpty())
+	{
+		return FText::GetEmpty();
+	}
+
+	//정확한 검증은 서버가 한다. 여기서는 "a@b.c" 모양인지만 본다
+	FString Local;
+	FString Domain;
+	const bool bShapeOk = InEmail.Len() <= WarriorAuthRules::EmailMax
+		&& !InEmail.Contains(TEXT(" "))
+		&& InEmail.Split(TEXT("@"), &Local, &Domain)
+		&& !Local.IsEmpty()
+		&& !Domain.Contains(TEXT("@"))
+		&& Domain.Contains(TEXT("."))
+		&& !Domain.StartsWith(TEXT("."))
+		&& !Domain.EndsWith(TEXT("."));
+
+	return bShapeOk ? FText::GetEmpty() : LOCTEXT("EmailInvalid", "이메일 형식이 맞지 않습니다. 비워 두어도 됩니다.");
 }
 
 void UWarriorAuthSubsystem::CompleteSignupPlaceholder(FString InLoginId)
