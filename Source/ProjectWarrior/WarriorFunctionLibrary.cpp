@@ -8,6 +8,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "GenericTeamAgentInterface.h"
+#include "Character/ALSBaseCharacter.h"
 
 UWarriorAbilitySystemComponent* UWarriorFunctionLibrary::NativeGetWarriorASCFromActor(AActor* InActor)
 {
@@ -206,4 +207,26 @@ bool UWarriorFunctionLibrary::IsTargetPawnHostile(APawn* QueryPawn, APawn* Targe
     }
 
     return false;
+}
+
+void UWarriorFunctionLibrary::SetPawnFacingRotation(APawn* InPawn, const FRotator& NewRotation)
+{
+    if (!InPawn)
+    {
+        return;
+    }
+
+    if (AALSBaseCharacter* ALSCharacter = Cast<AALSBaseCharacter>(InPawn))
+    {
+        ALSCharacter->SetActorLocationAndTargetRotation(ALSCharacter->GetActorLocation(), NewRotation);
+    }
+    else
+    {
+        InPawn->SetActorRotation(NewRotation);
+    }
+
+    if (AController* Controller = InPawn->GetController())
+    {
+        Controller->SetControlRotation(NewRotation);
+    }
 }

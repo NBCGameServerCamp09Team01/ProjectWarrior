@@ -25,7 +25,7 @@ void UAICombatComponent::OnHitTargetActor(AActor* HitActor)
 		EventData.InstigatorTags.AddTag(CurrentHitReactEventTag);
 	}
 
-	switch (UWarriorFunctionLibrary::EvaluateHitResult(GetOwningPawn(), HitActor))
+	switch (UWarriorFunctionLibrary::EvaluateHitResult(GetOwningPawn(), HitActor, nullptr, CurrentBlockRule))
 	{
 	case EWarriorHitResultType::Blocked:
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor
@@ -34,6 +34,21 @@ void UAICombatComponent::OnHitTargetActor(AActor* HitActor)
 			WarriorGameplayTags::Player_Event_Successful_Block,
 			EventData
 		);
+
+		// 패링 전용 공격 등을 막아 내면 공격자가 무너짐 (보스 분노 연타 마지막 타격)
+		if (bStaggerOnBlocked)
+		{
+			FGameplayEventData StaggerEventData;
+			StaggerEventData.Instigator = HitActor;
+			StaggerEventData.Target = GetOwningPawn();
+
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor
+			(
+				GetOwningPawn(),
+				WarriorGameplayTags::Shared_Event_Stagger,
+				StaggerEventData
+			);
+		}
 		break;
 
 	case EWarriorHitResultType::Dodged:

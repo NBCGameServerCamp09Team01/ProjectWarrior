@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "ProjectWarrior/Components/PawnExtensionComponentBase.h"
 #include "GameplayTagContainer.h"
+#include "ProjectWarrior/Types/WarriorEnumTypes.h"
 #include "PawnCombatComponent.generated.h"
 
 class AWeaponBase;
@@ -48,6 +49,14 @@ public:
     UFUNCTION(BlueprintPure, Category = "Warrior|Combat")
     FGameplayTag GetCurrentHitReactEventTag() const { return CurrentHitReactEventTag; }
 
+    // 현재 무기 충돌 구간의 막기 규칙. 막기 규칙 노티파이(UAnimNotifyState_WarriorBlockRule)가 설정하고,
+    // 노티파이가 끝나거나 충돌을 끄면 Blockable로 돌아감
+    // bStaggerOnBlocked: 이 구간의 공격이 막히면 공격자가 스태거(Shared.Event.Stagger)
+    void SetCurrentBlockRule(EWarriorBlockRule InBlockRule, bool bInStaggerOnBlocked);
+    void ResetCurrentBlockRule();
+
+    EWarriorBlockRule GetCurrentBlockRule() const { return CurrentBlockRule; }
+
     virtual void OnHitTargetActor(AActor* HitActor);
     virtual void OnWeaponPulledFromTargetActor(AActor* InteractedActor);
 
@@ -55,6 +64,10 @@ protected:
     TArray<AActor*> OverlappedActors;
 
     FGameplayTag CurrentHitReactEventTag;
+
+    EWarriorBlockRule CurrentBlockRule = EWarriorBlockRule::Blockable;
+
+    bool bStaggerOnBlocked = false;
 
 
 private:
