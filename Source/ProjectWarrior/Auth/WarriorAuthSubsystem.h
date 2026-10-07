@@ -18,7 +18,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWarriorAuthRequestCompleted, b
  * - 프론트 컨트롤러는 IsLoggedIn으로 메인메뉴에 들어갈 수 있는지 판단한다.
  * - 입력 규칙(길이·문자)은 Validate* 에 모아 두고, 화면이 요청 전에 먼저 확인한다(서버도 다시 검증한다).
  *
- * 로그인은 웹서버에 실제로 요청한다(POST {BaseUrl}/auth/login). 회원가입은 아직 임시 구현이다(TODO(server) 표시).
+ * 회원가입(POST {BaseUrl}/auth/signup)과 로그인(POST {BaseUrl}/auth/login)은 웹서버에 실제로 요청한다.
  * 서버 주소는 DefaultGame.ini의 [/Script/ProjectWarrior.WarriorAuthSubsystem] BaseUrl로 바꿀 수 있다.
  * 액세스 토큰과 비밀번호는 어떤 로그에도 남기지 않는다.
  */
@@ -30,12 +30,9 @@ class PROJECTWARRIOR_API UWarriorAuthSubsystem : public UGameInstanceSubsystem
 public:
 	static UWarriorAuthSubsystem* Get(const UObject* WorldContextObject);
 
-	//~ Begin USubsystem Interface.
-	virtual void Deinitialize() override;
-	//~ End USubsystem Interface
-
-	//POST /auth/signup. 가입만 하고 로그인은 하지 않는다(명세대로 이어서 로그인을 부른다)
-	//InEmail은 선택이다. 비어 있으면 서버에 보내지 않는다(명세: 비워 두거나 null)
+	//POST {BaseUrl}/auth/signup. 결과는 OnSignupCompleted로 알린다.
+	//가입만 하고 로그인은 하지 않는다(토큰을 주지 않으므로 이어서 로그인한다). 성공하면 아이디를 기억해 로그인 화면이 채운다
+	//InEmail은 선택이다. 비어 있으면 JSON에서 칸을 빼고 보낸다(명세: 비워 두거나 null)
 	//비밀번호 확인 칸은 화면에서만 비교하고 여기로 넘기지 않는다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname, const FString& InEmail);
@@ -57,6 +54,10 @@ public:
 
 	//방금 가입한 아이디를 한 번 꺼낸다. 로그인 화면이 아이디 칸을 채우고 안내 문구를 띄울 때 쓴다
 	bool ConsumeRecentSignupLoginId(FString& OutLoginId);
+
+	//마지막 회원가입 실패의 칸별 오류. 키는 서버 칸 이름(loginId, nickname, email, password), 값은 화면 문구.
+	//400 VALIDATION_FAILED의 errors[]와 409 중복(아이디·닉네임)을 담는다. 회원가입 화면이 해당 칸 아래에 표시한다
+	const TMap<FString, FText>& GetLastSignupFieldErrors() const { return LastSignupFieldErrors; }
 
 	//~ Begin 입력 규칙. 문제가 없으면 빈 FText, 있으면 화면에 보여 줄 문장을 돌려준다
 	//길이·문자는 명세의 제안 값이다. 아이디 대소문자 구분 없음, 아이디·닉네임 중복은 서버가 판정한다(409)
@@ -83,8 +84,21 @@ protected:
 	float RequestTimeoutSeconds = 10.f;
 
 private:
-	//TODO(server): 회원가입은 아직 임시 응답. 잠깐 기다린 뒤 성공으로 처리한다
-	void CompleteSignupPlaceholder(FString InLoginId);
+	//JSON 본문으로 POST {BaseUrl}{InPath}를 보낸다. 응답(또는 연결 실패)이 오면 OnDone(Status, Body)를 부른다. Status 0은 연결 실패.
+	//요청을 시작하지 못하면 false. 본문에 비밀번호가 있을 수 있으므로 본문은 로그에 남기지 않는다
+	bool SendJsonPost(const FString& InPath, const FString& InJsonBody, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
+
+	//실패 응답 본문을 읽는다. 연결 실패(Status 0)는 NETWORK_ERROR, 본문을 못 읽으면 HTTP_<상태>로 채운다
+	static FWarriorApiError ParseApiError(int32 InStatus, const FString& InBody);
+
+	//회원가입·로그인이 같이 쓰는 문구(서버 장애, 연결 실패). 해당하지 않으면 빈 FText
+	static FText CommonErrorToText(const FString& InCode, int32 InStatus);
+
+	//회원가입 응답 처리. 201이면 성공
+	void HandleSignupResponse(const FString& InLoginId, int32 Status, const FString& Body);
+
+	//오류 코드로 회원가입 화면 문구를 고른다. VALIDATION_FAILED는 칸별 오류(errors[].message)를 보여 준다
+	static FText SignupErrorToText(const FWarriorApiError& InError, int32 InStatus);
 
 	//로그인 응답 처리. Status 0은 연결 실패(응답 없음)
 	void HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body);
@@ -107,7 +121,7 @@ private:
 
 	FString RecentSignupLoginId;
 
-	FTimerHandle PlaceholderTimer;
+	TMap<FString, FText> LastSignupFieldErrors;
 
 	bool bLoggedIn = false;
 

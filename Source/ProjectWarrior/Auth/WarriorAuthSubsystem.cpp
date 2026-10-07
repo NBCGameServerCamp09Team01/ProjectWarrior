@@ -9,7 +9,6 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "JsonObjectConverter.h"
-#include "TimerManager.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 
@@ -17,7 +16,7 @@
 
 namespace WarriorAuthRules
 {
-	//docs/contracts/auth-api.md 회원가입 요청 표의 제안 값. 서버와 확정되면 같이 고친다
+	//첫 흐름 API 명세 회원가입 요청의 제안 값. 서버와 확정되면 같이 고친다
 	constexpr int32 LoginIdMin = 4;
 	constexpr int32 LoginIdMax = 20;
 	constexpr int32 PasswordMin = 8;
@@ -25,9 +24,6 @@ namespace WarriorAuthRules
 	constexpr int32 NicknameMin = 2;
 	constexpr int32 NicknameMax = 12;
 	constexpr int32 EmailMax = 254;
-
-	//TODO(server): 임시 응답 지연(초)
-	constexpr float PlaceholderDelay = 0.4f;
 }
 
 UWarriorAuthSubsystem* UWarriorAuthSubsystem::Get(const UObject* WorldContextObject)
@@ -36,15 +32,71 @@ UWarriorAuthSubsystem* UWarriorAuthSubsystem::Get(const UObject* WorldContextObj
 	return GameInstance ? GameInstance->GetSubsystem<UWarriorAuthSubsystem>() : nullptr;
 }
 
-void UWarriorAuthSubsystem::Deinitialize()
+//~ Begin 공통 HTTP
+
+bool UWarriorAuthSubsystem::SendJsonPost(const FString& InPath, const FString& InJsonBody, TFunction<void(int32, const FString&)>&& OnDone)
 {
-	if (const UGameInstance* GameInstance = GetGameInstance())
+	const FString Url = BaseUrl + InPath;
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(Url);
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
+	Request->SetContentAsString(InJsonBody);
+	Request->SetTimeout(RequestTimeoutSeconds);
+
+	//응답이 오기 전에 게임이 끝나 이 서브시스템이 사라져도 안전하도록 약한 참조로 묶는다
+	Request->OnProcessRequestComplete().BindWeakLambda(this,
+		[OnDone = MoveTemp(OnDone)](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+		{
+			const bool bHasResponse = bConnected && Response.IsValid();
+			OnDone(bHasResponse ? Response->GetResponseCode() : 0,
+				bHasResponse ? Response->GetContentAsString() : FString());
+		});
+
+	if (!Request->ProcessRequest())
 	{
-		GameInstance->GetTimerManager().ClearTimer(PlaceholderTimer);
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] Request could not be started. POST %s"), *Url);
+		return false;
 	}
 
-	Super::Deinitialize();
+	return true;
 }
+
+FWarriorApiError UWarriorAuthSubsystem::ParseApiError(int32 InStatus, const FString& InBody)
+{
+	FWarriorApiError Error;
+	if (InStatus == 0)
+	{
+		Error.Code = TEXT("NETWORK_ERROR");
+		Error.Retryable = true;
+	}
+	else if (!FJsonObjectConverter::JsonObjectStringToUStruct(InBody, &Error) || Error.Code.IsEmpty())
+	{
+		Error.Code = FString::Printf(TEXT("HTTP_%d"), InStatus);
+	}
+
+	return Error;
+}
+
+FText UWarriorAuthSubsystem::CommonErrorToText(const FString& InCode, int32 InStatus)
+{
+	if (InCode == TEXT("SERVICE_UNAVAILABLE") || InCode == TEXT("INTERNAL_ERROR") || InStatus >= 500)
+	{
+		return LOCTEXT("ServerBusy", "서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 시도해 주세요.");
+	}
+	if (InCode == TEXT("NETWORK_ERROR"))
+	{
+		return LOCTEXT("Network", "서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.");
+	}
+
+	return FText::GetEmpty();
+}
+
+//~ End 공통 HTTP
+
+//~ Begin 회원가입
 
 void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname, const FString& InEmail)
 {
@@ -54,15 +106,159 @@ void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FStrin
 		return;
 	}
 
-	bRequestInFlight = true;
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. loginId=%s, email=%s"), *InLoginId, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
+	LastSignupFieldErrors.Reset();
 
-	//TODO(server): POST {BaseUrl}/auth/signup 으로 교체한다. 본문 { loginId, password, nickname, email? } — email이 비면 빼거나 null.
-	//201이면 성공, 409는 아이디·닉네임 중복(서버 오류 코드로 구분)
-	GetGameInstance()->GetTimerManager().SetTimer(PlaceholderTimer,
-		FTimerDelegate::CreateUObject(this, &ThisClass::CompleteSignupPlaceholder, InLoginId),
-		WarriorAuthRules::PlaceholderDelay, false);
+	//요청 본문은 명세 칸만. 이메일은 비어 있으면 칸을 뺀다(빈 문자열은 서버가 형식 오류로 볼 수 있다)
+	FWarriorSignupRequestDto RequestDto;
+	RequestDto.LoginId = InLoginId;
+	RequestDto.Password = InPassword;
+	RequestDto.Nickname = InNickname;
+	if (!InEmail.IsEmpty())
+	{
+		RequestDto.Email = InEmail;
+	}
+
+	FString RequestBody;
+	if (!FJsonObjectConverter::UStructToJsonObjectString(RequestDto, RequestBody, 0, 0, 0, nullptr, false))
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] Signup request body could not be built."));
+		FWarriorApiError Error;
+		Error.Code = TEXT("INVALID_REQUEST_BODY");
+		OnSignupCompleted.Broadcast(false, Error.Code, SignupErrorToText(Error, 0));
+		return;
+	}
+
+	const bool bStarted = SendJsonPost(TEXT("/auth/signup"), RequestBody,
+		[this, InLoginId](int32 Status, const FString& Body)
+		{
+			HandleSignupResponse(InLoginId, Status, Body);
+		});
+
+	if (!bStarted)
+	{
+		FWarriorApiError Error;
+		Error.Code = TEXT("NETWORK_ERROR");
+		OnSignupCompleted.Broadcast(false, Error.Code, SignupErrorToText(Error, 0));
+		return;
+	}
+
+	bRequestInFlight = true;
+	//비밀번호·이메일 값과 요청 본문은 로그에 남기지 않는다
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. POST %s/auth/signup loginId=%s email=%s"),
+		*BaseUrl, *InLoginId, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
 }
+
+void UWarriorAuthSubsystem::HandleSignupResponse(const FString& InLoginId, int32 Status, const FString& Body)
+{
+	bRequestInFlight = false;
+
+	//── 201: { "data": { accountId, loginId, nickname, createdAt }, "meta": { requestId } }
+	//성공 여부는 상태 코드로 정한다. 본문을 못 읽어도 계정은 만들어졌으므로 성공으로 처리하고 입력한 아이디를 쓴다
+	if (Status == 201)
+	{
+		FWarriorSignupResponseDto ResponseDto;
+		const bool bParsed = FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto);
+		if (!bParsed)
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Signup 201 but the body could not be read. Using the entered loginId."));
+		}
+
+		//서버가 저장한 아이디를 우선한다(대소문자 구분 없음이라 서버가 값을 다듬을 수 있다)
+		RecentSignupLoginId = (bParsed && !ResponseDto.Data.LoginId.IsEmpty()) ? ResponseDto.Data.LoginId : InLoginId;
+
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup OK. accountId=%s loginId=%s requestId=%s"),
+			*ResponseDto.Data.AccountId, *RecentSignupLoginId, *ResponseDto.Meta.RequestId);
+
+		OnSignupCompleted.Broadcast(true, FString(), FText::GetEmpty());
+		return;
+	}
+
+	//── 실패: 400 VALIDATION_FAILED·INVALID_REQUEST_BODY, 409 ACCOUNT_*_DUPLICATED, 503, 연결 실패
+	const FWarriorApiError Error = ParseApiError(Status, Body);
+
+	//칸별 오류: 명세는 해당 입력 칸 아래에 표시하도록 한다. 409는 errors[]가 없으므로 코드로 칸을 정한다
+	if (Error.Code == TEXT("ACCOUNT_LOGIN_ID_DUPLICATED"))
+	{
+		LastSignupFieldErrors.Add(TEXT("loginId"), SignupErrorToText(Error, Status));
+	}
+	else if (Error.Code == TEXT("ACCOUNT_NICKNAME_DUPLICATED"))
+	{
+		LastSignupFieldErrors.Add(TEXT("nickname"), SignupErrorToText(Error, Status));
+	}
+	else if (Error.Code == TEXT("VALIDATION_FAILED"))
+	{
+		//같은 칸에 오류가 여러 개면 줄을 바꿔 붙인다
+		for (const FWarriorApiFieldError& FieldError : Error.Errors)
+		{
+			if (FieldError.Field.IsEmpty() || FieldError.Message.IsEmpty())
+			{
+				continue;
+			}
+
+			if (FText* Existing = LastSignupFieldErrors.Find(FieldError.Field))
+			{
+				*Existing = FText::FromString(Existing->ToString() + TEXT("\n") + FieldError.Message);
+			}
+			else
+			{
+				LastSignupFieldErrors.Add(FieldError.Field, FText::FromString(FieldError.Message));
+			}
+		}
+	}
+
+	if (Error.Code == TEXT("INVALID_REQUEST_BODY"))
+	{
+		//요청 모양이 명세와 다르다는 뜻이므로 게임 쪽 버그다
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] Signup rejected: INVALID_REQUEST_BODY. Check FWarriorSignupRequestDto against the spec."));
+	}
+	else
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Signup failed. status=%d code=%s retryable=%s fieldErrors=%d"),
+			Status, *Error.Code, Error.Retryable ? TEXT("true") : TEXT("false"), Error.Errors.Num());
+	}
+
+	OnSignupCompleted.Broadcast(false, Error.Code, SignupErrorToText(Error, Status));
+}
+
+FText UWarriorAuthSubsystem::SignupErrorToText(const FWarriorApiError& InError, int32 InStatus)
+{
+	if (InError.Code == TEXT("ACCOUNT_LOGIN_ID_DUPLICATED"))
+	{
+		return LOCTEXT("SignupLoginIdDuplicated", "이미 사용 중인 아이디입니다.");
+	}
+	if (InError.Code == TEXT("ACCOUNT_NICKNAME_DUPLICATED"))
+	{
+		return LOCTEXT("SignupNicknameDuplicated", "이미 사용 중인 닉네임입니다.");
+	}
+	if (InError.Code == TEXT("VALIDATION_FAILED"))
+	{
+		//명세 제안: 칸별 오류(errors[].message)를 보여 준다. 지금은 문구 칸이 하나라 줄을 바꿔 모두 보여 준다
+		TArray<FString> Lines;
+		for (const FWarriorApiFieldError& FieldError : InError.Errors)
+		{
+			if (!FieldError.Message.IsEmpty())
+			{
+				Lines.Add(FieldError.Message);
+			}
+		}
+		return Lines.Num() > 0
+			? FText::FromString(FString::Join(Lines, TEXT("\n")))
+			: LOCTEXT("SignupValidation", "입력한 값을 다시 확인해 주세요.");
+	}
+
+	const FText CommonText = CommonErrorToText(InError.Code, InStatus);
+	if (!CommonText.IsEmpty())
+	{
+		return CommonText;
+	}
+
+	//INVALID_REQUEST_BODY, 모르는 코드
+	return LOCTEXT("SignupUnknown", "가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+}
+
+//~ End 회원가입
+
+//~ Begin 로그인
 
 void UWarriorAuthSubsystem::RequestLogin(const FString& InLoginId, const FString& InPassword)
 {
@@ -85,36 +281,21 @@ void UWarriorAuthSubsystem::RequestLogin(const FString& InLoginId, const FString
 		return;
 	}
 
-	const FString Url = BaseUrl + TEXT("/auth/login");
-
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->SetURL(Url);
-	Request->SetVerb(TEXT("POST"));
-	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
-	Request->SetContentAsString(RequestBody);
-	Request->SetTimeout(RequestTimeoutSeconds);
-
-	//응답이 오기 전에 게임이 끝나 이 서브시스템이 사라져도 안전하도록 약한 참조로 묶는다
-	Request->OnProcessRequestComplete().BindWeakLambda(this,
-		[this, InLoginId](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+	const bool bStarted = SendJsonPost(TEXT("/auth/login"), RequestBody,
+		[this, InLoginId](int32 Status, const FString& Body)
 		{
-			const bool bHasResponse = bConnected && Response.IsValid();
-			HandleLoginResponse(InLoginId,
-				bHasResponse ? Response->GetResponseCode() : 0,
-				bHasResponse ? Response->GetContentAsString() : FString());
+			HandleLoginResponse(InLoginId, Status, Body);
 		});
+
+	if (!bStarted)
+	{
+		OnLoginCompleted.Broadcast(false, TEXT("NETWORK_ERROR"), LoginErrorToText(TEXT("NETWORK_ERROR"), 0));
+		return;
+	}
 
 	bRequestInFlight = true;
 	//비밀번호와 요청 본문은 로그에 남기지 않는다
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login requested. POST %s loginId=%s"), *Url, *InLoginId);
-
-	if (!Request->ProcessRequest())
-	{
-		bRequestInFlight = false;
-		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] Login request could not be started. url=%s"), *Url);
-		OnLoginCompleted.Broadcast(false, TEXT("NETWORK_ERROR"), LoginErrorToText(TEXT("NETWORK_ERROR"), 0));
-	}
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login requested. POST %s/auth/login loginId=%s"), *BaseUrl, *InLoginId);
 }
 
 void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body)
@@ -159,16 +340,7 @@ void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 
 	}
 
 	//── 실패: { code, message, path, retryable, errors } / 연결 실패는 본문 없음
-	FWarriorApiError Error;
-	if (Status == 0)
-	{
-		Error.Code = TEXT("NETWORK_ERROR");
-		Error.Retryable = true;
-	}
-	else if (!FJsonObjectConverter::JsonObjectStringToUStruct(Body, &Error))
-	{
-		Error.Code = FString::Printf(TEXT("HTTP_%d"), Status);
-	}
+	const FWarriorApiError Error = ParseApiError(Status, Body);
 
 	if (Error.Code == TEXT("INVALID_REQUEST_BODY"))
 	{
@@ -254,18 +426,18 @@ FText UWarriorAuthSubsystem::LoginErrorToText(const FString& InCode, int32 InSta
 	{
 		return LOCTEXT("LoginValidation", "아이디와 비밀번호를 입력해 주세요.");
 	}
-	if (InCode == TEXT("SERVICE_UNAVAILABLE") || InCode == TEXT("INTERNAL_ERROR") || InStatus >= 500)
+
+	const FText CommonText = CommonErrorToText(InCode, InStatus);
+	if (!CommonText.IsEmpty())
 	{
-		return LOCTEXT("LoginServerBusy", "서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 시도해 주세요.");
-	}
-	if (InCode == TEXT("NETWORK_ERROR"))
-	{
-		return LOCTEXT("LoginNetwork", "서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.");
+		return CommonText;
 	}
 
 	//INVALID_REQUEST_BODY, INVALID_RESPONSE, 모르는 코드
 	return LOCTEXT("LoginUnknown", "로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
 }
+
+//~ End 로그인
 
 bool UWarriorAuthSubsystem::ConsumeRecentSignupLoginId(FString& OutLoginId)
 {
@@ -342,15 +514,6 @@ FText UWarriorAuthSubsystem::ValidateEmail(const FString& InEmail)
 		&& !Domain.EndsWith(TEXT("."));
 
 	return bShapeOk ? FText::GetEmpty() : LOCTEXT("EmailInvalid", "이메일 형식이 맞지 않습니다. 비워 두어도 됩니다.");
-}
-
-void UWarriorAuthSubsystem::CompleteSignupPlaceholder(FString InLoginId)
-{
-	bRequestInFlight = false;
-	RecentSignupLoginId = InLoginId;
-
-	UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Signup succeeded with PLACEHOLDER response (server not connected). loginId=%s"), *InLoginId);
-	OnSignupCompleted.Broadcast(true, FString(), FText::GetEmpty());
 }
 
 #undef LOCTEXT_NAMESPACE

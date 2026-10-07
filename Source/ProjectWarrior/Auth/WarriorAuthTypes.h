@@ -126,3 +126,66 @@ struct PROJECTWARRIOR_API FWarriorLoginResponseDto
 	FWarriorApiMeta Meta;
 };
 //~ End 로그인 API DTO
+
+//~ Begin 회원가입 API DTO (POST /auth/signup, 첫 흐름 API 명세 SignupRequest·SignupSuccess)
+
+/**
+ * 회원가입 요청 본문. 명세 칸만 둔다(모르는 칸은 400 INVALID_REQUEST_BODY).
+ * 비밀번호 확인 칸은 화면에서만 비교하고 보내지 않는다. 비밀번호가 들어 있으므로 로그에 남기지 않는다.
+ */
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorSignupRequestDto
+{
+	GENERATED_BODY()
+
+	//대소문자 구분 없음, 유일
+	UPROPERTY()
+	FString LoginId;
+
+	UPROPERTY()
+	FString Password;
+
+	//화면에 보이는 이름. 유일
+	UPROPERTY()
+	FString Nickname;
+
+	//선택 입력. 값을 넣지 않으면 JSON에서 칸이 빠진다(빈 문자열 ""을 보내면 서버가 형식 오류로 볼 수 있다)
+	UPROPERTY()
+	TOptional<FString> Email;
+};
+
+//가입한 계정 (명세 CreatedAccount)
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorCreatedAccountDto
+{
+	GENERATED_BODY()
+
+	//계정 ID. JSON에서는 문자열로 온다
+	UPROPERTY()
+	FString AccountId;
+
+	//서버가 저장한 아이디. 서버가 값을 다듬을 수 있으므로(대소문자 구분 없음) 로그인 화면에는 이 값을 채운다
+	UPROPERTY()
+	FString LoginId;
+
+	UPROPERTY()
+	FString Nickname;
+
+	//만든 시각. UTC ISO-8601 문자열
+	UPROPERTY()
+	FString CreatedAt;
+};
+
+//회원가입 성공(201) 응답 본문 전체: { "data": CreatedAccount, "meta": Meta }
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorSignupResponseDto
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FWarriorCreatedAccountDto Data;
+
+	UPROPERTY()
+	FWarriorApiMeta Meta;
+};
+//~ End 회원가입 API DTO
