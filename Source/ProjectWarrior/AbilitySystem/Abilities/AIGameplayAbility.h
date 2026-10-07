@@ -56,6 +56,13 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackToken", meta = (ClampMin = "1"))
     int32 AttackTokenCost = 1;
 
+    // 정상 종료(취소 아님)하면 이어서 발동할 어빌리티 (예: 밀치기 -> 백스텝 -> 속사). 발동하지 못하면(토큰 부족 등) 무시
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "FollowUp", meta = (Categories = "AI.Ability"))
+    FGameplayTag FollowUpAbilityTag;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "FollowUp", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float FollowUpChance = 1.f;
+
     // 기본 히트리액션 강도 (Shared.Event.HitReact.Light/Heavy). 근접 공격은 무기 충돌 노티파이 값이 우선
     // 플레이어는 강도에 따라 다르게 반응하고, 적은 강도와 무관하게 반응함
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact", meta = (Categories = "Shared.Event.HitReact"))
@@ -80,6 +87,9 @@ protected:
     // 피격 경직·스태거·처형·사망 중이면 true (회피·가드를 시작하지 않음)
     static bool IsOwnerIncapacitated(const UAbilitySystemComponent* ASC);
 
+    // AI 컨트롤러 블랙보드의 TargetActor, 없으면 Focus 액터. 없으면 nullptr
+    static AActor* FindAITargetActor(const FGameplayAbilityActorInfo* ActorInfo);
+
 private:
     UFUNCTION()
     void HandleFinisherOrDeathEvent(FGameplayEventData Payload);
@@ -92,7 +102,7 @@ private:
     // 토큰 풀이 지정돼 있고 보스가 아니면 true
     bool UsesAttackToken(const FGameplayAbilityActorInfo* ActorInfo) const;
 
-    // AI 컨트롤러 블랙보드의 TargetActor(없으면 Focus 액터)가 가진 토큰 컴포넌트. 대상이 토큰을 쓰지 않으면 nullptr
+    // FindAITargetActor가 가진 토큰 컴포넌트. 대상이 토큰을 쓰지 않으면 nullptr
     static UAttackTokenComponent* FindTargetAttackTokenComponent(const FGameplayAbilityActorInfo* ActorInfo);
 
     TWeakObjectPtr<AWarriorAICharacter> CachedAICharacter;

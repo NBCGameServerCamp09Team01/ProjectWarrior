@@ -90,6 +90,11 @@ namespace WarriorGameplayTags
 	// 가드 후 반격. AI.Ability.Block 하위라 피격 경직(GA_HitReact_Base)이 가드를 취소함
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Block_Counter);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Dodge);
+	// 엘리트 특수 공격. AI.Ability.Melee/Range 하위가 아니어서 기본 공격(태그로 무작위 발동)에 섞이지 않음
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Special);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Special_Snipe);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Special_RapidShot);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Special_KnockbackStrike);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Equip_Weapon_Katana);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Unequip_Weapon_Katana);

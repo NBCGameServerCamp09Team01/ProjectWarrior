@@ -39,7 +39,7 @@ bool UAIGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Han
         }
 
         // 회피·가드 중에는 공격하지 않음
-        static const FGameplayTagContainer AttackAbilityTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ WarriorGameplayTags::AI_Ability_Melee, WarriorGameplayTags::AI_Ability_Range });
+        static const FGameplayTagContainer AttackAbilityTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ WarriorGameplayTags::AI_Ability_Melee, WarriorGameplayTags::AI_Ability_Range, WarriorGameplayTags::AI_Ability_Special });
         static const FGameplayTagContainer DefensiveStatusTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ WarriorGameplayTags::AI_Status_Dodging, WarriorGameplayTags::AI_Status_Guarding });
         if (OwnAssetTags.HasAny(AttackAbilityTags) && ASC->HasAnyMatchingGameplayTags(DefensiveStatusTags))
         {
@@ -91,7 +91,18 @@ void UAIGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, con
     }
     HeldAttackTokenComponent.Reset();
 
+    const bool bWasActive = IsActive();
+
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+
+    // 이 어빌리티의 활성 태그(회피 중 등)가 빠진 뒤에 후속 어빌리티 발동
+    if (bWasActive && !bWasCancelled && FollowUpAbilityTag.IsValid() && FMath::FRand() < FollowUpChance)
+    {
+        if (UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
+        {
+            ASC->TryActivateAbilitiesByTag(FollowUpAbilityTag.GetSingleTagContainer());
+        }
+    }
 }
 
 void UAIGameplayAbility::WatchForFinisherOrDeath()
@@ -164,7 +175,7 @@ bool UAIGameplayAbility::UsesAttackToken(const FGameplayAbilityActorInfo* ActorI
     return AttackTokenPool.IsValid() && AvatarActor && !AvatarActor->IsA<AWarriorBossCharacter>();
 }
 
-UAttackTokenComponent* UAIGameplayAbility::FindTargetAttackTokenComponent(const FGameplayAbilityActorInfo* ActorInfo)
+AActor* UAIGameplayAbility::FindAITargetActor(const FGameplayAbilityActorInfo* ActorInfo)
 {
     const APawn* AvatarPawn = ActorInfo ? Cast<APawn>(ActorInfo->AvatarActor.Get()) : nullptr;
     const AAIController* AIController = AvatarPawn ? Cast<AAIController>(AvatarPawn->GetController()) : nullptr;
@@ -174,18 +185,20 @@ UAttackTokenComponent* UAIGameplayAbility::FindTargetAttackTokenComponent(const 
         return nullptr;
     }
 
-    AActor* TargetActor = nullptr;
-
     if (const UBlackboardComponent* BlackboardComponent = AIController->GetBlackboardComponent())
     {
-        TargetActor = Cast<AActor>(BlackboardComponent->GetValueAsObject(FName("TargetActor")));
+        if (AActor* TargetActor = Cast<AActor>(BlackboardComponent->GetValueAsObject(FName("TargetActor"))))
+        {
+            return TargetActor;
+        }
     }
 
-    if (!TargetActor)
-    {
-        TargetActor = AIController->GetFocusActor();
-    }
+    return AIController->GetFocusActor();
+}
 
+UAttackTokenComponent* UAIGameplayAbility::FindTargetAttackTokenComponent(const FGameplayAbilityActorInfo* ActorInfo)
+{
+    const AActor* TargetActor = FindAITargetActor(ActorInfo);
     return TargetActor ? TargetActor->FindComponentByClass<UAttackTokenComponent>() : nullptr;
 }
 

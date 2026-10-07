@@ -22,6 +22,8 @@ enum class EWarriorDodgeDirection : uint8
  * 반응 지연 후 공격자 반대쪽·좌우 중 내비메시가 열린 방향을 골라 해당 방향 몽타주를 재생하고,
  * 시작부터 InvulnerableDuration 동안 Shared.Status.Dodge를 붙여 공격을 피한다.
  * 회피 중(AI.Status.Dodging)에는 공격 어빌리티가 발동하지 않는다.
+ * BT에서 직접 발동할 수도 있다 (거리 조건 백스텝 등. 이때는 블랙보드 TargetActor 기준으로 피함).
+ * 원거리 엘리트 백스텝: SideWeight 0, Bow 백스텝 몽타주, FollowUpAbilityTag = 속사
  */
 UCLASS()
 class PROJECTWARRIOR_API UAIGameplayAbility_Dodge : public UAIGameplayAbility
@@ -78,6 +80,9 @@ private:
 
 	UFUNCTION()
 	void OnDodgeMontageFinished();
+
+	UFUNCTION()
+	void OnDodgeMontageInterrupted();
 
 	// 공격자 기준 뒤·좌우 중 열린 방향을 가중치로 고름. 열린 방향이 없으면 false
 	bool ChooseDodgeDirection(const AActor* Avatar, const AActor* InAttacker, FVector& OutWorldDirection) const;

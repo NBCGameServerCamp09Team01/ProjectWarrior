@@ -86,6 +86,10 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block, "AI.Ability.Block");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block_Counter, "AI.Ability.Block.Counter");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Dodge, "AI.Ability.Dodge");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special, "AI.Ability.Special");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special_Snipe, "AI.Ability.Special.Snipe");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special_RapidShot, "AI.Ability.Special.RapidShot");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special_KnockbackStrike, "AI.Ability.Special.KnockbackStrike");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Equip_Weapon_Katana, "AI.Ability.Equip.Weapon.Katana");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Unequip_Weapon_Katana, "AI.Ability.Unequip.Weapon.Katana");

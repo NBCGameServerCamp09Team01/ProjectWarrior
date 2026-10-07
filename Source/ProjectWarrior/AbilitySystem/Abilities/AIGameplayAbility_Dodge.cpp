@@ -60,13 +60,16 @@ void UAIGameplayAbility_Dodge::ActivateAbility(const FGameplayAbilitySpecHandle 
 		return;
 	}
 
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo) || !TriggerEventData || !TriggerEventData->Instigator)
+	// 이벤트로 발동하면 공격한 플레이어, BT에서 직접 발동하면(거리 조건 백스텝) 블랙보드 TargetActor·Focus 기준으로 피함
+	const AActor* ResolvedAttacker = TriggerEventData && TriggerEventData->Instigator ? TriggerEventData->Instigator.Get() : FindAITargetActor(ActorInfo);
+
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo) || !ResolvedAttacker)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	Attacker = TriggerEventData->Instigator.Get();
+	Attacker = ResolvedAttacker;
 	LastDodgeTime = GetWorld()->GetTimeSeconds();
 
 	// 반응 지연 중에 처형이 시작되면 처형 몽타주를 덮어쓰지 않도록 취소
@@ -127,8 +130,9 @@ void UAIGameplayAbility_Dodge::OnReactionDelayFinished()
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, Montage);
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnDodgeMontageFinished);
 	MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnDodgeMontageFinished);
-	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnDodgeMontageFinished);
-	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnDodgeMontageFinished);
+	// 피격 등으로 끊기면 취소로 끝내 후속 어빌리티(속사 등)가 나가지 않게 함
+	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnDodgeMontageInterrupted);
+	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnDodgeMontageInterrupted);
 	MontageTask->ReadyForActivation();
 }
 
@@ -140,6 +144,11 @@ void UAIGameplayAbility_Dodge::OnInvulnerabilityFinished()
 void UAIGameplayAbility_Dodge::OnDodgeMontageFinished()
 {
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+}
+
+void UAIGameplayAbility_Dodge::OnDodgeMontageInterrupted()
+{
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 }
 
 bool UAIGameplayAbility_Dodge::ChooseDodgeDirection(const AActor* Avatar, const AActor* InAttacker, FVector& OutWorldDirection) const
@@ -238,7 +247,7 @@ bool UAIGameplayAbility_Dodge::IsAttacking(const UAbilitySystemComponent* ASC) c
 	}
 
 	static const FGameplayTagContainer AttackAbilityTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{
-		WarriorGameplayTags::AI_Ability_Melee, WarriorGameplayTags::AI_Ability_Range, WarriorGameplayTags::AI_Ability_Boss });
+		WarriorGameplayTags::AI_Ability_Melee, WarriorGameplayTags::AI_Ability_Range, WarriorGameplayTags::AI_Ability_Boss, WarriorGameplayTags::AI_Ability_Special });
 
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
