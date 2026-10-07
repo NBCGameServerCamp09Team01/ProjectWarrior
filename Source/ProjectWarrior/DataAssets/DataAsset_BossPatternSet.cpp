@@ -15,3 +15,11 @@ const FWarriorBossPatternData* UDataAsset_BossPatternSet::FindPattern(const FGam
 			return Pattern.AbilityTag == InAbilityTag;
 		});
 }
+
+const FWarriorBossPatternData* UDataAsset_BossPatternSet::FindPattern(const FGameplayTag& InAbilityTag, int32 InPhase) const
+{
+	return Patterns.FindByPredicate([&InAbilityTag, InPhase](const FWarriorBossPatternData& Pattern)
+		{
+			return Pattern.AbilityTag == InAbilityTag && Pattern.IsUsableInPhase(InPhase);
+		});
+}
