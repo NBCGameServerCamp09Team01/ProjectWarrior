@@ -97,8 +97,9 @@ void UPlayerCombatComponent::OnHitTargetActor(AActor* HitActor)
 
 	OverlappedActors.AddUnique(HitActor);
 
-	// 회피 중인 대상은 피해·히트스톱 없음
-	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::Shared_Status_Dodge))
+	// 회피 중이거나 무적인 대상은 피해·히트스톱 없음
+	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::Shared_Status_Dodge)
+		|| UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::Shared_Status_Invulnerable))
 	{
 		return;
 	}

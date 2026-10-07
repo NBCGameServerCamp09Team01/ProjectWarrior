@@ -159,7 +159,9 @@ EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttac
     check(InAttacker && InVictim);
 
     // 처형 연출 중이거나 이미 죽은 대상은 판정하지 않음 (투사체·범위 공격 포함)
-    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher) || IsActorDead(InVictim))
+    // 무적(넘어져 있는 동안 등)인 대상도 판정하지 않음
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher) || IsActorDead(InVictim)
+        || NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Invulnerable))
     {
         return EWarriorHitResultType::Invalid;
     }
