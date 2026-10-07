@@ -63,6 +63,10 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "FollowUp", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float FollowUpChance = 1.f;
 
+    // 0보다 크면 대상이 이 거리 안에 있을 때만 후속 발동 (예: 플레이어가 붙어 있을 때만 백스텝)
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "FollowUp", meta = (ClampMin = "0.0", Units = "cm"))
+    float FollowUpMaxTargetDistance = 0.f;
+
     // 기본 히트리액션 강도 (Shared.Event.HitReact.Light/Heavy). 근접 공격은 무기 충돌 노티파이 값이 우선
     // 플레이어는 강도에 따라 다르게 반응하고, 적은 강도와 무관하게 반응함
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HitReact", meta = (Categories = "Shared.Event.HitReact"))
@@ -104,6 +108,9 @@ private:
 
     // FindAITargetActor가 가진 토큰 컴포넌트. 대상이 토큰을 쓰지 않으면 nullptr
     static UAttackTokenComponent* FindTargetAttackTokenComponent(const FGameplayAbilityActorInfo* ActorInfo);
+
+    // FollowUpMaxTargetDistance 조건. 거리 제한이 없으면 항상 true, 대상이 없으면 false
+    bool IsTargetInFollowUpRange(const FGameplayAbilityActorInfo* ActorInfo) const;
 
     TWeakObjectPtr<AWarriorAICharacter> CachedAICharacter;
 

@@ -96,7 +96,8 @@ void UAIGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, con
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 
     // 이 어빌리티의 활성 태그(회피 중 등)가 빠진 뒤에 후속 어빌리티 발동
-    if (bWasActive && !bWasCancelled && FollowUpAbilityTag.IsValid() && FMath::FRand() < FollowUpChance)
+    if (bWasActive && !bWasCancelled && FollowUpAbilityTag.IsValid() && FMath::FRand() < FollowUpChance
+        && IsTargetInFollowUpRange(ActorInfo))
     {
         if (UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr)
         {
@@ -173,6 +174,24 @@ bool UAIGameplayAbility::UsesAttackToken(const FGameplayAbilityActorInfo* ActorI
     // 보스는 같은 어빌리티(AI.Ability.Melee 등)를 써도 토큰 제한 없이 공격
     const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
     return AttackTokenPool.IsValid() && AvatarActor && !AvatarActor->IsA<AWarriorBossCharacter>();
+}
+
+bool UAIGameplayAbility::IsTargetInFollowUpRange(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+    if (FollowUpMaxTargetDistance <= 0.f)
+    {
+        return true;
+    }
+
+    const AActor* Avatar = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+    const AActor* TargetActor = FindAITargetActor(ActorInfo);
+
+    if (!Avatar || !TargetActor)
+    {
+        return false;
+    }
+
+    return FVector::DistSquared2D(Avatar->GetActorLocation(), TargetActor->GetActorLocation()) <= FMath::Square(FollowUpMaxTargetDistance);
 }
 
 AActor* UAIGameplayAbility::FindAITargetActor(const FGameplayAbilityActorInfo* ActorInfo)
