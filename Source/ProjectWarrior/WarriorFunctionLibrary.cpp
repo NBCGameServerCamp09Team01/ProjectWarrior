@@ -154,19 +154,33 @@ bool UWarriorFunctionLibrary::IsActorDead(AActor* InActor)
     return ASC && ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death);
 }
 
-EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, bool bIsAttackUnblockable)
+EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, EWarriorBlockRule InBlockRule)
 {
     check(InAttacker && InVictim);
 
     // 처형 연출 중이거나 이미 죽은 대상은 판정하지 않음 (투사체·범위 공격 포함)
-    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher) || IsActorDead(InVictim))
+    // 무적(넘어져 있는 동안 등)인 대상도 판정하지 않음
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher) || IsActorDead(InVictim)
+        || NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Invulnerable))
     {
         return EWarriorHitResultType::Invalid;
     }
 
-    const bool bIsVictimBlocking = NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Player_Status_Blocking);
+    bool bCanBlock = false;
+    switch (InBlockRule)
+    {
+    case EWarriorBlockRule::Blockable:
+        bCanBlock = NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Player_Status_Blocking);
+        break;
+    case EWarriorBlockRule::PerfectParryOnly:
+        // 일반 가드로는 막을 수 없고 퍼펙트 패링 구간에만 막힘
+        bCanBlock = NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Player_Status_Blocking_Perfect);
+        break;
+    default:
+        break;
+    }
 
-    if (bIsVictimBlocking && !bIsAttackUnblockable && IsValidBlock(InDamageCauser ? InDamageCauser : InAttacker, InVictim))
+    if (bCanBlock && IsValidBlock(InDamageCauser ? InDamageCauser : InAttacker, InVictim))
     {
         return EWarriorHitResultType::Blocked;
     }

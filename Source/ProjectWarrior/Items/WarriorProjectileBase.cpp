@@ -102,7 +102,7 @@ void AWarriorProjectileBase::Tick(float DeltaSeconds)
 
 		if (!ShouldIgnoreActor(HitActor))
 		{
-			if (APawn* HitPawn = Cast<APawn>(HitActor))
+			if (APawn* HitPawn = ResolveHitPawn(HitActor))
 			{
 				HandleHitPawn(HitPawn, Hit.ImpactPoint);
 			}
@@ -178,12 +178,20 @@ void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& Impact
 	EventData.Instigator = InstigatorPawn;
 	EventData.Target = HitPawn;
 
-	const EWarriorHitResultType HitResult = UWarriorFunctionLibrary::EvaluateHitResult(InstigatorPawn, HitPawn, this);
+	const EWarriorHitResultType HitResult = UWarriorFunctionLibrary::EvaluateHitResult(InstigatorPawn, HitPawn, this, BlockRule);
 
 	switch (HitResult)
 	{
 	case EWarriorHitResultType::Blocked:
+		// 막은 쪽 어빌리티가 이 투사체를 되돌릴 수 있도록 함께 넘김 (이벤트 처리는 즉시 실행됨)
+		EventData.OptionalObject = this;
 		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Player_Event_Successful_Block, EventData);
+
+		// 되돌려졌으면 파괴하지 않고 계속 날아감
+		if (bReflected)
+		{
+			return;
+		}
 		break;
 
 	case EWarriorHitResultType::Dodged:
@@ -206,6 +214,91 @@ void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& Impact
 
 	BP_OnProjectileImpact(HitPawn, ImpactLocation, HitResult);
 	Destroy();
+}
+
+bool AWarriorProjectileBase::ReflectProjectile(APawn* Reflector, float DamageMultiplier, float SpeedMultiplier)
+{
+	APawn* OriginalInstigator = GetInstigator();
+
+	if (!bCanBeReflected || !bLaunched || bReflected || !Reflector || Reflector == OriginalInstigator
+		|| !OriginalInstigator || UWarriorFunctionLibrary::IsActorDead(OriginalInstigator))
+	{
+		return false;
+	}
+
+	UAbilitySystemComponent* ReflectorASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Reflector);
+
+	if (!ReflectorASC)
+	{
+		return false;
+	}
+
+	// 피해는 같은 이펙트로 패링한 쪽이 다시 만듦 (공격력·통계의 가해자 = 패링한 쪽)
+	if (ProjectileDamageEffectSpecHandle.IsValid() && ProjectileDamageEffectSpecHandle.Data->Def)
+	{
+		const FGameplayEffectSpec& OriginalSpec = *ProjectileDamageEffectSpecHandle.Data;
+
+		FGameplayEffectContextHandle ContextHandle = ReflectorASC->MakeEffectContext();
+		ContextHandle.AddSourceObject(this);
+		ContextHandle.AddInstigator(Reflector, this);
+
+		FGameplayEffectSpecHandle ReflectedSpecHandle = ReflectorASC->MakeOutgoingSpec(OriginalSpec.Def->GetClass(), OriginalSpec.GetLevel(), ContextHandle);
+
+		if (ReflectedSpecHandle.IsValid())
+		{
+			const float BaseDamage = OriginalSpec.GetSetByCallerMagnitude(WarriorGameplayTags::Shared_SetByCaller_BaseDamage, false, 0.f);
+			ReflectedSpecHandle.Data->SetSetByCallerMagnitude(WarriorGameplayTags::Shared_SetByCaller_BaseDamage, BaseDamage * DamageMultiplier);
+			ProjectileDamageEffectSpecHandle = ReflectedSpecHandle;
+		}
+	}
+
+	bReflected = true;
+
+	// 이제 패링한 쪽이 쏜 투사체. 패링한 쪽은 다시 맞지 않고 원래 발사자는 맞을 수 있음
+	SetInstigator(Reflector);
+	ProcessedActors.Reset();
+	ProcessedActors.Add(Reflector);
+
+	const FVector CurrentLocation = GetActorLocation();
+	FVector Direction = (OriginalInstigator->GetActorLocation() - CurrentLocation).GetSafeNormal();
+
+	if (Direction.IsNearlyZero())
+	{
+		Direction = -GetActorForwardVector();
+	}
+
+	const float Speed = FMath::Max(ProjectileMovement->Velocity.Size(), ProjectileMovement->InitialSpeed) * FMath::Max(SpeedMultiplier, 0.1f);
+	ProjectileMovement->MaxSpeed = FMath::Max(ProjectileMovement->MaxSpeed, Speed);
+	ProjectileMovement->Velocity = Direction * Speed;
+	SetActorRotation(Direction.Rotation());
+
+	LastTraceLocation = CurrentLocation;
+	SetLifeSpan(LifeSpanAfterLaunch);
+
+	BP_OnProjectileReflected(Reflector, CurrentLocation);
+
+	return true;
+}
+
+APawn* AWarriorProjectileBase::ResolveHitPawn(AActor* HitActor)
+{
+	if (!HitActor)
+	{
+		return nullptr;
+	}
+
+	if (APawn* HitPawn = Cast<APawn>(HitActor))
+	{
+		return HitPawn;
+	}
+
+	// 무기처럼 폰에 붙어 있거나 폰이 소유한 액터에 맞으면 그 폰에 맞은 것으로 처리
+	if (APawn* ParentPawn = Cast<APawn>(HitActor->GetAttachParentActor()))
+	{
+		return ParentPawn;
+	}
+
+	return Cast<APawn>(HitActor->GetOwner());
 }
 
 void AWarriorProjectileBase::ApplyDamageToTarget(AActor* TargetActor)

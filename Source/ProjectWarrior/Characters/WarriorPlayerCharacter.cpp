@@ -19,6 +19,7 @@
 #include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/Components/Interact/PlayerInteractionComponent.h"
+#include "ProjectWarrior/Components/Combat/AttackTokenComponent.h"
 #include "ProjectWarrior/DataAssets/DataAsset_Item.h"
 #include "ProjectWarrior/Widgets/InventoryWheelWidget.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
@@ -46,6 +47,8 @@ AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& Objec
     PlayerUIComponent = CreateDefaultSubobject<UPlayerUIComponent>(TEXT("PlayerUIComponent"));
 
     PlayerInteractionComponent = CreateDefaultSubobject<UPlayerInteractionComponent>(TEXT("PlayerInteractionComponent"));
+
+    AttackTokenComponent = CreateDefaultSubobject<UAttackTokenComponent>(TEXT("AttackTokenComponent"));
 }
 
 UPawnCombatComponent* AWarriorPlayerCharacter::GetPawnCombatComponent() const
