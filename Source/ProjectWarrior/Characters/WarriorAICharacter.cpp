@@ -3,6 +3,7 @@
 
 #include "WarriorAICharacter.h"
 #include "ProjectWarrior/Components/Combat/AICombatComponent.h"
+#include "ProjectWarrior/AbilitySystem/WarriorAbilitySystemComponent.h"
 #include "ProjectWarrior/Components/UI/AIUIComponent.h"
 #include "Engine/AssetManager.h"
 #include "ProjectWarrior/DataAssets/DataAsset_AIStartUpData.h"
@@ -83,6 +84,18 @@ void AWarriorAICharacter::BeginPlay()
 void AWarriorAICharacter::PossessedBy(AController* NewController)
 {
     Super::PossessedBy(NewController);
+
+    // 재빙의돼도 중복으로 쌓이지 않도록 없는 태그만 추가
+    if (WarriorAbilitySystemComponent)
+    {
+        for (const FGameplayTag& StatusTag : DefaultStatusTags)
+        {
+            if (!WarriorAbilitySystemComponent->HasMatchingGameplayTag(StatusTag))
+            {
+                WarriorAbilitySystemComponent->AddLooseGameplayTag(StatusTag);
+            }
+        }
+    }
 
     //if (!CharacterStartUpData.IsNull())
     //{

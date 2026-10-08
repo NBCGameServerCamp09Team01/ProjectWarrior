@@ -155,6 +155,27 @@ bool UWarriorFunctionLibrary::IsActorDead(AActor* InActor)
     return ASC && ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death);
 }
 
+bool UWarriorFunctionLibrary::CanBeFinisherTarget(AActor* InActor)
+{
+    if (IsActorDead(InActor))
+    {
+        return false;
+    }
+
+    // ASC가 없는 대상(소품 등)은 처형 대상이 아님
+    const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InActor);
+
+    if (!ASC)
+    {
+        return false;
+    }
+
+    static const FGameplayTagContainer BlockedTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{
+        WarriorGameplayTags::Shared_Status_FinisherImmune, WarriorGameplayTags::Shared_Status_Finisher });
+
+    return !ASC->HasAnyMatchingGameplayTags(BlockedTags);
+}
+
 EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, EWarriorBlockRule InBlockRule)
 {
     check(InAttacker && InVictim);

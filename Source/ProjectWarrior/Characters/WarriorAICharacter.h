@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "WarriorBaseCharacter.h"
+#include "GameplayTagContainer.h"
 #include "WarriorAICharacter.generated.h"
 
 class UAICombatComponent;
@@ -49,6 +50,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI")
 	UWidgetComponent* AIHealthWidgetComponent;
+
+	// 빙의 시 ASC에 붙여 두는 상태 태그 (예: 처형 불가 Shared.Status.FinisherImmune). 보스는 기본으로 처형 불가
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (Categories = "Shared.Status,AI.Status"))
+	FGameplayTagContainer DefaultStatusTags;
 
 
 private:

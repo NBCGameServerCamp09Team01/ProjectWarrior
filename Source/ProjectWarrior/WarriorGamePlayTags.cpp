@@ -182,6 +182,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Dodge, "Shared.Status.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Sprint, "Shared.Status.Sprint");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Finisher, "Shared.Status.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_FinisherImmune, "Shared.Status.FinisherImmune");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Invulnerable, "Shared.Status.Invulnerable");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_WeaponEquipped, "Shared.Status.WeaponEquipped");
 

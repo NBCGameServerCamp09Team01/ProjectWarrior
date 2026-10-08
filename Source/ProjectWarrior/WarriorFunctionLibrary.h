@@ -63,6 +63,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
     static bool IsActorDead(AActor* InActor);
 
+    // 처형 대상이 될 수 있는지. 대상이 없거나, 죽었거나, 처형 중이거나, 처형 불가(Shared.Status.FinisherImmune)면 false
+    UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
+    static bool CanBeFinisherTarget(AActor* InActor);
+
     // 폰 회전 설정. ALS는 TargetRotation으로 되돌리려 하고, LookingDirection 모드는 컨트롤 회전과 어긋나면
     // 제자리 회전으로 되돌리므로 둘 다 함께 갱신
     static void SetPawnFacingRotation(APawn* InPawn, const FRotator& NewRotation);

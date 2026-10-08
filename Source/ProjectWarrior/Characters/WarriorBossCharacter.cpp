@@ -14,6 +14,8 @@ AWarriorBossCharacter::AWarriorBossCharacter(const FObjectInitializer& ObjectIni
 	: Super(ObjectInitializer)
 {
 	BossPatternComponent = CreateDefaultSubobject<UBossPatternComponent>("BossPatternComponent");
+
+	DefaultStatusTags.AddTag(WarriorGameplayTags::Shared_Status_FinisherImmune);
 }
 
 void AWarriorBossCharacter::SetPhase(int32 NewPhase)
@@ -214,8 +216,6 @@ int32 AWarriorBossCharacter::ComputePhaseForHealthRatio(float HealthRatio) const
 	return FMath::Clamp(Phase, 1, MaxPhase);
 }
 
-bool AWarriorBossCharacter::IsBossBlocking() const
-{
 float AWarriorBossCharacter::GetPatternRecoveryTime() const
 {
 	if (PatternRecoveryTimes.IsEmpty())
@@ -226,6 +226,8 @@ float AWarriorBossCharacter::GetPatternRecoveryTime() const
 	return PatternRecoveryTimes[FMath::Clamp(CurrentPhase - 1, 0, PatternRecoveryTimes.Num() - 1)];
 }
 
+bool AWarriorBossCharacter::IsBossBlocking() const
+{
 	return WarriorAbilitySystemComponent && WarriorAbilitySystemComponent->HasMatchingGameplayTag(WarriorGameplayTags::AI_Status_Boss_Blocking);
 }
 
