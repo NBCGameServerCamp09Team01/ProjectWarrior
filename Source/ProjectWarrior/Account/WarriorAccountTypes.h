@@ -28,6 +28,10 @@ struct PROJECTWARRIOR_API FWarriorAccountData
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Account")
 	int32 Experience = 0;
 
+	//지금까지 받은 경험치의 합. 레벨이 올라도 줄지 않는다(최대 레벨에서 버려진 경험치는 넣지 않는다)
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Account")
+	int32 TotalExperience = 0;
+
 	//아직 투자하지 않은 스탯 포인트
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Account")
 	int32 StatPoints = 0;
