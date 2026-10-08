@@ -35,6 +35,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Boss")
 	void SetPhase(int32 NewPhase);
 
+	// 현재 페이즈의 패턴 사이 대기 시간 (PatternRecoveryTimes). 항목이 모자라면 마지막 값
+	UFUNCTION(BlueprintPure, Category = "Warrior|Boss")
+	float GetPatternRecoveryTime() const;
+
 	// AI.Status.Boss.Blocking 보유 여부
 	UFUNCTION(BlueprintPure, Category = "Warrior|Boss")
 	bool IsBossBlocking() const;
@@ -65,6 +69,11 @@ protected:
 	// 도약 공중 구간에 페이즈가 오르면 착지까지 전환 연출을 미룸. 착지 신호가 오지 않아도 이 시간이 지나면 시작
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boss", meta = (ClampMin = "0.0", Units = "s"))
 	float MaxPhaseTransitionDelay = 3.f;
+
+	// 페이즈별 패턴 사이 대기 시간(초). [0] = 1페이즈, [1] = 2페이즈 ...
+	// BTS_UpdateBossTargetInfo가 블랙보드 키에 기록하고, BT의 Wait 노드가 그 키를 읽음
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Boss", meta = (ClampMin = "0.0"))
+	TArray<float> PatternRecoveryTimes = { 1.5f, 0.5f };
 
 	// 경직 연속 제한. HitReactWindow 안에 피격 경직(Shared.Ability.HitReact)이 HitReactLimit번 나오면
 	// HitReactImmunityDuration 동안 슈퍼아머(AI.Status.SuperArmor)가 되어 경직되지 않음 (약공격 연타로 계속 묶이지 않게)

@@ -216,6 +216,16 @@ int32 AWarriorBossCharacter::ComputePhaseForHealthRatio(float HealthRatio) const
 
 bool AWarriorBossCharacter::IsBossBlocking() const
 {
+float AWarriorBossCharacter::GetPatternRecoveryTime() const
+{
+	if (PatternRecoveryTimes.IsEmpty())
+	{
+		return 0.f;
+	}
+
+	return PatternRecoveryTimes[FMath::Clamp(CurrentPhase - 1, 0, PatternRecoveryTimes.Num() - 1)];
+}
+
 	return WarriorAbilitySystemComponent && WarriorAbilitySystemComponent->HasMatchingGameplayTag(WarriorGameplayTags::AI_Status_Boss_Blocking);
 }
 
