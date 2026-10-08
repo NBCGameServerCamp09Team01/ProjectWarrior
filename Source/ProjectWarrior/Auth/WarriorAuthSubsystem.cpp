@@ -45,19 +45,45 @@ UWarriorAuthSubsystem* UWarriorAuthSubsystem::Get(const UObject* WorldContextObj
 	return GameInstance ? GameInstance->GetSubsystem<UWarriorAuthSubsystem>() : nullptr;
 }
 
+void UWarriorAuthSubsystem::Deinitialize()
+{
+	//코어 티커는 이 서브시스템보다 오래 살므로 반드시 뗀다. 서버 세션은 수명이 지나면 사라진다
+	StopHeartbeat();
+
+	Super::Deinitialize();
+}
+
 //~ Begin 공통 HTTP
 
-bool UWarriorAuthSubsystem::SendJsonPost(const FString& InPath, const FString& InJsonBody, TFunction<void(int32, const FString&)>&& OnDone)
+bool UWarriorAuthSubsystem::SendPost(const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone)
 {
 	const FString Url = BaseUrl + InPath;
+
+	//토큰 없이 보내면 서버가 401 AUTH_TOKEN_MISSING으로 거절할 뿐이므로 보내지 않는다
+	if (bWithAuth && AccessToken.IsEmpty())
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Request not sent. No access token. POST %s"), *Url);
+		return false;
+	}
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(Url);
 	Request->SetVerb(TEXT("POST"));
-	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
-	Request->SetContentAsString(InJsonBody);
 	Request->SetTimeout(RequestTimeoutSeconds);
+
+	//본문이 없는 요청(A4·A5)에는 Content-Type을 붙이지 않는다
+	if (!InJsonBody.IsEmpty())
+	{
+		Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+		Request->SetContentAsString(InJsonBody);
+	}
+
+	//토큰은 헤더에만 싣고 로그에 남기지 않는다
+	if (bWithAuth)
+	{
+		Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + AccessToken);
+	}
 
 	//응답이 오기 전에 게임이 끝나 이 서브시스템이 사라져도 안전하도록 약한 참조로 묶는다
 	Request->OnProcessRequestComplete().BindWeakLambda(this,
@@ -141,10 +167,10 @@ void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FStrin
 		return;
 	}
 
-	const bool bStarted = SendJsonPost(TEXT("/auth/signup"), RequestBody,
-		[this, InLoginId](int32 Status, const FString& Body)
+	const bool bStarted = SendPost(TEXT("/auth/signup"), RequestBody, false,
+		[this](int32 Status, const FString& Body)
 		{
-			HandleSignupResponse(InLoginId, Status, Body);
+			HandleSignupResponse(Status, Body);
 		});
 
 	if (!bStarted)
@@ -156,31 +182,30 @@ void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FStrin
 	}
 
 	bRequestInFlight = true;
-	//비밀번호·이메일 값과 요청 본문은 로그에 남기지 않는다
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. POST %s/auth/signup loginId=%s email=%s"),
-		*BaseUrl, *InLoginId, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
+	//아이디·비밀번호·이메일 값과 요청 본문은 로그에 남기지 않는다(로그 파일은 디스크에 남는다)
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. POST %s/auth/signup email=%s"),
+		*BaseUrl, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
 }
 
-void UWarriorAuthSubsystem::HandleSignupResponse(const FString& InLoginId, int32 Status, const FString& Body)
+void UWarriorAuthSubsystem::HandleSignupResponse(int32 Status, const FString& Body)
 {
 	bRequestInFlight = false;
 
 	//── 201: { "data": { accountId, loginId, nickname, createdAt }, "meta": { requestId } }
-	//성공 여부는 상태 코드로 정한다. 본문을 못 읽어도 계정은 만들어졌으므로 성공으로 처리하고 입력한 아이디를 쓴다
+	//성공 여부는 상태 코드로 정한다. 본문을 못 읽어도 계정은 만들어졌으므로 성공으로 처리한다(본문은 로그용)
 	if (Status == 201)
 	{
 		FWarriorSignupResponseDto ResponseDto;
-		const bool bParsed = FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto);
-		if (!bParsed)
+		if (!FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto))
 		{
-			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Signup 201 but the body could not be read. Using the entered loginId."));
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Signup 201 but the body could not be read."));
 		}
 
-		//서버가 저장한 아이디를 쓴다(명세상 입력 그대로 저장되지만, 응답 값을 기준으로 삼는다)
-		RecentSignupLoginId = (bParsed && !ResponseDto.Data.LoginId.IsEmpty()) ? ResponseDto.Data.LoginId : InLoginId;
+		//로그인 화면이 안내만 하고 아이디 칸은 비워 둔다(아이디는 기억하지 않는다)
+		bRecentSignup = true;
 
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup OK. accountId=%s loginId=%s requestId=%s"),
-			*ResponseDto.Data.AccountId, *RecentSignupLoginId, *ResponseDto.Meta.RequestId);
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup OK. accountId=%s requestId=%s"),
+			*ResponseDto.Data.AccountId, *ResponseDto.Meta.RequestId);
 
 		OnSignupCompleted.Broadcast(true, FString(), FText::GetEmpty());
 		return;
@@ -294,7 +319,7 @@ void UWarriorAuthSubsystem::RequestLogin(const FString& InLoginId, const FString
 		return;
 	}
 
-	const bool bStarted = SendJsonPost(TEXT("/auth/login"), RequestBody,
+	const bool bStarted = SendPost(TEXT("/auth/login"), RequestBody, false,
 		[this, InLoginId](int32 Status, const FString& Body)
 		{
 			HandleLoginResponse(InLoginId, Status, Body);
@@ -307,8 +332,8 @@ void UWarriorAuthSubsystem::RequestLogin(const FString& InLoginId, const FString
 	}
 
 	bRequestInFlight = true;
-	//비밀번호와 요청 본문은 로그에 남기지 않는다
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login requested. POST %s/auth/login loginId=%s"), *BaseUrl, *InLoginId);
+	//아이디·비밀번호와 요청 본문은 로그에 남기지 않는다(로그 파일은 디스크에 남는다)
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login requested. POST %s/auth/login"), *BaseUrl);
 }
 
 void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body)
@@ -345,6 +370,13 @@ void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 
 		//명세 순서: 메인화면 값을 먼저 적용하고 그다음 메인메뉴로 간다(성공 알림을 먼저 보내면 메인메뉴가 예전 값을 잠깐 보인다)
 		ApplyAccountSnapshot(Result.Account);
 		bLoggedIn = true;
+
+		//새로 로그인했으므로 이전 로그인이 끝난 이유는 더 보여 줄 필요가 없다
+		PendingSessionEndReason = EWarriorSessionEndReason::None;
+		PendingSessionEndMessage = FText::GetEmpty();
+
+		++SessionSerial;
+		StartHeartbeat();
 
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login OK. accountId=%s level=%d requestId=%s"),
 			*Account.AccountId, Result.Account.AccountLevel, *ResponseDto.Meta.RequestId);
@@ -465,16 +497,267 @@ FText UWarriorAuthSubsystem::LoginErrorToText(const FString& InCode, int32 InSta
 
 //~ End 로그인
 
-bool UWarriorAuthSubsystem::ConsumeRecentSignupLoginId(FString& OutLoginId)
+//~ Begin 세션 종료
+
+bool UWarriorAuthSubsystem::HandleAuthFailure(int32 InStatus, const FWarriorApiError& InError)
 {
-	if (RecentSignupLoginId.IsEmpty())
+	if (InStatus != 401)
 	{
 		return false;
 	}
 
-	OutLoginId = MoveTemp(RecentSignupLoginId);
-	RecentSignupLoginId.Reset();
+	//명세 인증 절: 401 코드 네 개. 앞에서 걸리면 뒤는 보지 않으므로 한 번에 하나만 온다
+	EWarriorSessionEndReason Reason = EWarriorSessionEndReason::Expired;
+	if (InError.Code == TEXT("AUTH_SESSION_NOT_FOUND"))
+	{
+		Reason = EWarriorSessionEndReason::Expired;
+	}
+	else if (InError.Code == TEXT("AUTH_SESSION_REPLACED"))
+	{
+		Reason = EWarriorSessionEndReason::Replaced;
+	}
+	else if (InError.Code == TEXT("AUTH_TOKEN_MISSING") || InError.Code == TEXT("AUTH_TOKEN_INVALID"))
+	{
+		//토큰을 빠뜨렸거나 모양이 틀렸다는 뜻이므로 게임 쪽 버그다
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] %s. Check the Authorization header in SendPost."), *InError.Code);
+		Reason = EWarriorSessionEndReason::InvalidToken;
+	}
+	else
+	{
+		//모르는 코드(본문을 못 읽은 HTTP_401 포함). 세션을 믿을 수 없으므로 다시 로그인하게 한다
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Unknown 401 code %s. Treated as an expired session."), *InError.Code);
+	}
+
+	EndSession(Reason);
 	return true;
+}
+
+void UWarriorAuthSubsystem::EndSession(EWarriorSessionEndReason InReason)
+{
+	//접속 점검과 다른 요청이 거의 동시에 401을 받아도 처리는 한 번만 한다
+	if (!bLoggedIn)
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Auth] EndSession(%s) ignored. Not logged in."), *UEnum::GetValueAsString(InReason));
+		return;
+	}
+
+	StopHeartbeat();
+
+	//로그인 때 채운 값을 모두 되돌린다. 토큰은 로그에 남기지 않는다
+	AccessToken.Reset();
+	SessionExpiresAt = FDateTime();
+	Account = FWarriorAuthAccount();
+	bLoggedIn = false;
+
+	//스냅샷 번호도 되돌린다. 그대로 두면 다른 계정으로 로그인했을 때 그 계정의 번호가 더 작아 스냅샷이 무시된다
+	LastAppliedAccountVersion = 0;
+
+	//알림을 받을 화면이 아직 없을 수 있으므로(레벨 이동 중) 이유를 남겨 둔다
+	PendingSessionEndReason = InReason;
+	PendingSessionEndMessage = SessionEndToText(InReason);
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Session ended. reason=%s"), *UEnum::GetValueAsString(InReason));
+
+	OnSessionEnded.Broadcast(InReason, PendingSessionEndMessage);
+}
+
+bool UWarriorAuthSubsystem::ConsumePendingSessionEnd(EWarriorSessionEndReason& OutReason, FText& OutMessage)
+{
+	if (PendingSessionEndReason == EWarriorSessionEndReason::None)
+	{
+		return false;
+	}
+
+	OutReason = PendingSessionEndReason;
+	OutMessage = PendingSessionEndMessage;
+	PendingSessionEndReason = EWarriorSessionEndReason::None;
+	PendingSessionEndMessage = FText::GetEmpty();
+	return true;
+}
+
+FText UWarriorAuthSubsystem::SessionEndToText(EWarriorSessionEndReason InReason)
+{
+	switch (InReason)
+	{
+	case EWarriorSessionEndReason::Expired:
+		//만료·제재로 끊김이 같은 코드로 오므로 둘 다에 맞는 문장을 쓴다
+		return LOCTEXT("SessionExpired", "접속이 종료되었습니다. 다시 로그인해 주세요.");
+	case EWarriorSessionEndReason::Replaced:
+		return LOCTEXT("SessionReplaced", "다른 곳에서 같은 계정으로 로그인하여 접속이 종료되었습니다.");
+	case EWarriorSessionEndReason::InvalidToken:
+		return LOCTEXT("SessionInvalidToken", "로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.");
+	case EWarriorSessionEndReason::ConnectionLost:
+		return LOCTEXT("SessionConnectionLost", "서버와 연결이 끊어졌습니다. 다시 로그인해 주세요.");
+	default:
+		//LoggedOut은 플레이어가 직접 한 일이라 안내하지 않는다
+		return FText::GetEmpty();
+	}
+}
+
+//~ End 세션 종료
+
+//~ Begin 로그아웃
+
+void UWarriorAuthSubsystem::RequestLogout()
+{
+	if (!bLoggedIn)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Logout ignored. Not logged in."));
+		return;
+	}
+
+	//요청을 먼저 보낸다. EndSession이 토큰을 지우므로 순서가 바뀌면 인증 헤더 없이 나간다
+	const bool bStarted = SendPost(TEXT("/auth/logout"), FString(), true,
+		[this](int32 Status, const FString& Body)
+		{
+			HandleLogoutResponse(Status, Body);
+		});
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Logout requested. POST %s/auth/logout started=%s"),
+		*BaseUrl, bStarted ? TEXT("true") : TEXT("false"));
+
+	//명세: 응답을 받든 못 받든 토큰을 지우고 타이틀로 간다. 그래서 응답을 기다리지 않는다
+	EndSession(EWarriorSessionEndReason::LoggedOut);
+}
+
+void UWarriorAuthSubsystem::HandleLogoutResponse(int32 Status, const FString& Body)
+{
+	//── 204: 본문 없음. 서버 세션을 지웠다
+	if (Status == 204)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Logout OK."));
+		return;
+	}
+
+	//── 실패: 이미 로그아웃 처리를 마쳤으므로 화면은 바꾸지 않는다.
+	//401은 HandleAuthFailure로 보내지 않는다(로그아웃한 플레이어에게 만료·중복 로그인 안내를 띄우지 않기 위해).
+	//401 AUTH_SESSION_NOT_FOUND: 서버 세션이 이미 없었다(만료). 401 AUTH_SESSION_REPLACED: 다른 곳의 새 세션은 지워지지 않는다.
+	//연결 실패·5xx: 서버 세션은 수명(10분)이 지나면 사라진다
+	const FWarriorApiError Error = ParseApiError(Status, Body);
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Logout response was not 204. status=%d code=%s (already logged out locally)"),
+		Status, *Error.Code);
+}
+
+//~ End 로그아웃
+
+//~ Begin 접속 점검
+
+void UWarriorAuthSubsystem::StartHeartbeat()
+{
+	StopHeartbeat();
+
+	HeartbeatFailureCount = 0;
+	bHeartbeatInFlight = false;
+
+	//일시 정지·레벨 이동 중에도 실제 시간으로 돌아야 서버 세션이 끊기지 않으므로 월드 타이머 대신 코어 티커를 쓴다
+	const float Interval = FMath::Max(1.f, HeartbeatIntervalSeconds);
+	HeartbeatTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &ThisClass::HandleHeartbeatTick), Interval);
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Heartbeat started. interval=%.0fs maxFailures=%d"), Interval, HeartbeatMaxConsecutiveFailures);
+}
+
+void UWarriorAuthSubsystem::StopHeartbeat()
+{
+	if (HeartbeatTickerHandle.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(HeartbeatTickerHandle);
+		HeartbeatTickerHandle.Reset();
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Heartbeat stopped."));
+	}
+}
+
+bool UWarriorAuthSubsystem::HandleHeartbeatTick(float InDeltaTime)
+{
+	SendHeartbeat();
+	return true;
+}
+
+void UWarriorAuthSubsystem::SendHeartbeat()
+{
+	if (!bLoggedIn)
+	{
+		return;
+	}
+
+	//응답이 늦으면(최대 RequestTimeoutSeconds) 다음 차례를 건너뛴다. 겹쳐 보내도 세션은 더 늘지 않는다
+	if (bHeartbeatInFlight)
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Auth] Heartbeat skipped. Previous one is still in flight."));
+		return;
+	}
+
+	const int32 SentSessionSerial = SessionSerial;
+	const bool bStarted = SendPost(TEXT("/auth/heartbeat"), FString(), true,
+		[this, SentSessionSerial](int32 Status, const FString& Body)
+		{
+			HandleHeartbeatResponse(SentSessionSerial, Status, Body);
+		});
+
+	if (bStarted)
+	{
+		bHeartbeatInFlight = true;
+		return;
+	}
+
+	//요청을 시작하지 못한 것도 연결 실패로 센다
+	HandleHeartbeatResponse(SentSessionSerial, 0, FString());
+}
+
+void UWarriorAuthSubsystem::HandleHeartbeatResponse(int32 InSessionSerial, int32 Status, const FString& Body)
+{
+	//지난 세션의 응답(로그아웃 뒤 다시 로그인한 경우 등)은 새 세션에 영향을 주지 않는다
+	if (InSessionSerial != SessionSerial || !bLoggedIn)
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Auth] Heartbeat response for an old session ignored. status=%d"), Status);
+		return;
+	}
+
+	bHeartbeatInFlight = false;
+
+	//── 200: { "data": { sessionExpiresAt }, "meta": { requestId } }. 세션은 인증 확인에서 이미 10분 늘었다
+	if (Status == 200)
+	{
+		HeartbeatFailureCount = 0;
+
+		FWarriorHeartbeatResponseDto ResponseDto;
+		if (FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto)
+			&& !FDateTime::ParseIso8601(*ResponseDto.Data.SessionExpiresAt, SessionExpiresAt))
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Heartbeat sessionExpiresAt could not be parsed: %s"), *ResponseDto.Data.SessionExpiresAt);
+		}
+
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Heartbeat OK. sessionExpiresAt=%s requestId=%s"),
+			*ResponseDto.Data.SessionExpiresAt, *ResponseDto.Meta.RequestId);
+		return;
+	}
+
+	const FWarriorApiError Error = ParseApiError(Status, Body);
+
+	//── 401: 만료·중복 로그인 등. 다시 시도해도 소용없으므로 바로 끝낸다
+	if (HandleAuthFailure(Status, Error))
+	{
+		return;
+	}
+
+	//── 연결 실패·503·그 밖: 잠깐 끊긴 것일 수 있으므로 허용 횟수까지 다음 차례에 다시 본다
+	++HeartbeatFailureCount;
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Heartbeat failed (%d/%d). status=%d code=%s"),
+		HeartbeatFailureCount, HeartbeatMaxConsecutiveFailures, Status, *Error.Code);
+
+	if (HeartbeatFailureCount >= HeartbeatMaxConsecutiveFailures)
+	{
+		EndSession(EWarriorSessionEndReason::ConnectionLost);
+	}
+}
+
+//~ End 접속 점검
+
+bool UWarriorAuthSubsystem::ConsumeRecentSignup()
+{
+	const bool bWasRecentSignup = bRecentSignup;
+	bRecentSignup = false;
+	return bWasRecentSignup;
 }
 
 FText UWarriorAuthSubsystem::ValidateLoginId(const FString& InLoginId)
@@ -564,5 +847,3 @@ FText UWarriorAuthSubsystem::ValidateEmail(const FString& InEmail)
 
 	return bShapeOk ? FText::GetEmpty() : LOCTEXT("EmailInvalid", "이메일 형식이 맞지 않습니다. 비워 두어도 됩니다.");
 }
-
-#undef LOCTEXT_NAMESPACE

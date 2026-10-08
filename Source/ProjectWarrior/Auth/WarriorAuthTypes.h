@@ -7,6 +7,21 @@
 #include "WarriorAuthTypes.generated.h"
 
 /**
+ * 로그인 상태가 끝난 이유. 화면은 이 값으로 갈 곳(타이틀·로그인 화면)과 안내 팝업을 정한다.
+ * BP에 저장된 값이 바뀌지 않도록 새 값은 끝에 추가한다.
+ */
+UENUM(BlueprintType)
+enum class EWarriorSessionEndReason : uint8
+{
+	None,
+	LoggedOut,		// 플레이어가 로그아웃함 → 타이틀(안내 없음)
+	Expired,		// 401 AUTH_SESSION_NOT_FOUND. 만료·로그아웃·제재로 끊김(게임은 구분할 수 없다) → 로그인 화면
+	Replaced,		// 401 AUTH_SESSION_REPLACED. 다른 곳에서 같은 계정으로 로그인함 → 안내 후 타이틀
+	InvalidToken,	// 401 AUTH_TOKEN_MISSING·AUTH_TOKEN_INVALID. 게임 쪽 버그 → 로그인 화면
+	ConnectionLost	// 접속 점검이 연속으로 실패함(연결 실패·5xx) → 안내 후 타이틀
+};
+
+/**
  * 인증 API의 계정 본문(docs/contracts/auth-api.md "계정 본문").
  * 비밀번호와 토큰은 여기에 두지 않는다(토큰은 UWarriorAuthSubsystem만 보관한다).
  */
@@ -127,6 +142,33 @@ struct PROJECTWARRIOR_API FWarriorLoginResponseDto
 	FWarriorApiMeta Meta;
 };
 //~ End 로그인 API DTO
+
+//~ Begin 접속 점검 API DTO (POST /auth/heartbeat, auth-api.md A4)
+
+//접속 점검 응답의 data
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorHeartbeatResultDto
+{
+	GENERATED_BODY()
+
+	//늘어난 세션 만료 시각(UTC ISO-8601). 참고용이다(판단은 서버의 401로 한다)
+	UPROPERTY()
+	FString SessionExpiresAt;
+};
+
+//접속 점검 성공(200) 응답 본문 전체: { "data": { sessionExpiresAt }, "meta": Meta }
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorHeartbeatResponseDto
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FWarriorHeartbeatResultDto Data;
+
+	UPROPERTY()
+	FWarriorApiMeta Meta;
+};
+//~ End 접속 점검 API DTO
 
 //~ Begin 회원가입 API DTO (POST /auth/signup, 첫 흐름 API 명세 SignupRequest·SignupSuccess)
 

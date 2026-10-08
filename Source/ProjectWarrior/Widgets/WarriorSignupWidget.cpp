@@ -304,7 +304,7 @@ void UWarriorSignupWidget::HandleSignupCompleted(bool bSuccess, const FString& E
 
 	ClearFieldErrors();
 
-	//가입한 아이디는 인증 서브시스템이 기억하고, 로그인 화면이 꺼내서 채운다
+	//입력 칸을 모두 비운다. 가입했다는 사실만 인증 서브시스템이 기억하고, 로그인 화면이 안내한다
 	for (UEditableTextBox* Field : { EditableTextBox_LoginId.Get(), EditableTextBox_Nickname.Get(), EditableTextBox_Email.Get(), EditableTextBox_Password.Get(), EditableTextBox_PasswordConfirm.Get() })
 	{
 		if (Field)

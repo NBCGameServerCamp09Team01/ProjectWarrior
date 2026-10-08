@@ -31,10 +31,15 @@ void UWarriorLoginWidget::NativeConstruct()
 		Button_Back->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
 	}
 
+	//위젯을 재사용하므로 화면을 다시 열 때(로그아웃·회원가입 뒤 등) 이전 아이디·비밀번호가 남지 않게 한다
+	if (EditableTextBox_LoginId)
+	{
+		EditableTextBox_LoginId->SetText(FText::GetEmpty());
+	}
+
 	if (EditableTextBox_Password)
 	{
 		EditableTextBox_Password->OnTextCommitted.AddUniqueDynamic(this, &ThisClass::HandlePasswordCommitted);
-		//화면을 다시 열 때 이전 비밀번호가 남지 않게 한다
 		EditableTextBox_Password->SetText(FText::GetEmpty());
 	}
 
@@ -45,14 +50,9 @@ void UWarriorLoginWidget::NativeConstruct()
 	{
 		Auth->OnLoginCompleted.AddUniqueDynamic(this, &ThisClass::HandleLoginCompleted);
 
-		//회원가입 화면에서 막 가입하고 넘어왔으면 아이디를 채우고 안내한다
-		FString SignedUpLoginId;
-		if (Auth->ConsumeRecentSignupLoginId(SignedUpLoginId))
+		//회원가입 화면에서 막 가입하고 넘어왔으면 안내만 한다(아이디 칸은 비워 둔다)
+		if (Auth->ConsumeRecentSignup())
 		{
-			if (EditableTextBox_LoginId)
-			{
-				EditableTextBox_LoginId->SetText(FText::FromString(SignedUpLoginId));
-			}
 			ShowMessage(LOCTEXT("SignupDone", "가입이 완료되었습니다. 로그인해 주세요."), false);
 		}
 	}
