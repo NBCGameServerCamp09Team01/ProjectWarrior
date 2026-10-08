@@ -22,6 +22,7 @@ public class ProjectWarrior : ModuleRules
             "UMG",
             "AnimGraphRuntime",
             "MotionWarping",
+            "Niagara",
             "ALSV4_CPP"
     });
 

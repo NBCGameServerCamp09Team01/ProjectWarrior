@@ -56,6 +56,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Stage", meta = (ClampMin = "1"))
 	int32 MaxSpawnAttempts = 10;
 
+	/** true면 스폰된 적이 감지 없이 처음부터 플레이어를 대상으로 삼는다. 매복형 웨이브처럼 감지부터 시작하려면 끈다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Stage")
+	bool bAwareOnSpawn = true;
+
 private:
 	bool BuildPendingRequests(const FWarriorStageWaveData& InWaveData);
 	void ProcessNextSpawnRequest();
@@ -72,6 +76,8 @@ private:
 	/** 확률·배율을 적용해 골드를 계산하고, 지급 대상이 있으면 플레이어 인벤토리에 넣는다. 지급액(0이면 미지급)을 반환. */
 	int32 GrantEnemyReward(AWarriorAICharacter* Enemy);
 	void GiveGoldToPlayer(int32 InGold) const;
+	/** bAwareOnSpawn이면 첫 번째 플레이어 폰을 적의 초기 대상으로 지정한다. */
+	void AssignInitialTarget(AWarriorAICharacter* Enemy) const;
 
 	/** 사망 연출이 끝나 OnCharacterDied가 방송되면 호출된다. 시체가 남아도 생존 수에서 뺀다. */
 	UFUNCTION()

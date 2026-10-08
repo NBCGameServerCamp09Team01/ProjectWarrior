@@ -345,7 +345,7 @@ TArray<AActor*> UAIGameplayAbility_BossAreaAttack::ApplyAreaDamageAt(const FWarr
 		EventData.Instigator = AttackerPawn;
 		EventData.Target = HitPawn;
 
-		switch (UWarriorFunctionLibrary::EvaluateHitResult(AttackerPawn, HitPawn, nullptr, InAreaData.bUnblockable))
+		switch (UWarriorFunctionLibrary::EvaluateHitResult(AttackerPawn, HitPawn, nullptr, InAreaData.bUnblockable ? EWarriorBlockRule::Unblockable : EWarriorBlockRule::Blockable))
 		{
 		case EWarriorHitResultType::Blocked:
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Player_Event_Successful_Block, EventData);
