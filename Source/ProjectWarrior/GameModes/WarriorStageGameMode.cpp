@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
 #include "TimerManager.h"
 
 
@@ -314,6 +315,9 @@ void AWarriorStageGameMode::BeginRun()
 		*RunId.ToString(EGuidFormats::DigitsWithHyphens),
 		*GetResolvedStageId().ToString(),
 		Difficulty);
+
+	//서버에 스테이지 플레이 시작(응답을 기다리지 않는다). 받은 stagePlayId로 FinishRun에서 결과를 낸다
+	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this)) { StagePlay->StartStagePlay(GetResolvedStageId()); }
 }
 
 void AWarriorStageGameMode::FinishRun(bool bInCleared)
@@ -345,6 +349,9 @@ void AWarriorStageGameMode::FinishRun(bool bInCleared)
 		Result.ReachedWave,
 		Result.TotalWaveCount,
 		Result.PlayTimeSeconds);
+
+	//서버에 결과 제출(검사·보상·저장은 서버가 한다)
+	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this)) { StagePlay->SubmitResult(Result); }
 
 	//GameInstance 연결 지점: 결과 기록과 보상 계산은 여기서 같은 Result를 넘기면 된다.
 	if (StageGameState)
