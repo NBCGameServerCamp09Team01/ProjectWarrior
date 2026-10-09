@@ -301,6 +301,8 @@ crash handler — MCP will hang; relaunch); fresh and small → the editor is fi
 - **Discover before you call.** Method signatures come from `discover_python_class`, not memory or skill
   prose. Skills say *which* class and *why*; discovery gives the exact call shape.
 - **Commit at milestones** if the project is a git repo, so a bad experiment reverts cleanly.
-- **Living gotchas:** when you solve a real problem, append a one-line gotcha+fix to this file so the
-  next session doesn't relearn it.
+- **Living gotchas:** when you solve a real problem, append a one-line gotcha+fix to
+  `CLAUDE.local.md` (next to this file; create it if missing) so the next session
+  doesn't relearn it. **Never edit this file for gotchas** — it is shared in git, and per-person
+  appends cause merge conflicts. `CLAUDE.local.md` is gitignored and stays on your machine.
 <!-- END VibeUE -->
