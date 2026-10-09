@@ -9,6 +9,7 @@
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
+#include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
 #include "ProjectWarrior/Widgets/WarriorStageHUDWidget.h"
 #include "ProjectWarrior/Widgets/WarriorStageResultWidget.h"
@@ -32,6 +33,12 @@ void AWarriorStagePlayerController::BeginPlay()
 	if (!IsLocalController())
 	{
 		return;
+	}
+
+	//GameState가 없는 레벨이어도 접속이 끊기면 돌아가야 하므로 먼저 구독한다
+	if (UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this))
+	{
+		Auth->OnSessionEnded.AddUniqueDynamic(this, &ThisClass::HandleSessionEnded);
 	}
 
 	AWarriorStageGameState* StageGameState = GetWorld()->GetGameState<AWarriorStageGameState>();
@@ -93,6 +100,12 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	}
 	BoundGameState.Reset();
 
+	//서브시스템은 레벨보다 오래 살므로, 사라지는 컨트롤러를 알림 대상에서 뺀다
+	if (UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this))
+	{
+		Auth->OnSessionEnded.RemoveDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+
 	GetWorldTimerManager().ClearTimer(ResultRevealTimer);
 
 	Super::EndPlay(EndPlayReason);
@@ -120,6 +133,15 @@ void AWarriorStagePlayerController::ReturnToMainMenu()
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Open main menu level %s"), *MainMenuLevel.ToString());
 
 	UGameplayStatics::OpenLevelBySoftObjectPtr(this, MainMenuLevel);
+}
+
+void AWarriorStagePlayerController::HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage)
+{
+	//종료 이유는 서브시스템에 남아 있으므로 꺼내지 않는다(프론트 컨트롤러가 BeginPlay에서 꺼내 화면과 팝업을 정한다)
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Session ended (%s). Returning to the main menu level."),
+		*UEnum::GetValueAsString(InReason));
+
+	ReturnToMainMenu();
 }
 
 void AWarriorStagePlayerController::HandleStageStateChanged(EWarriorStageState InNewState, EWarriorStageState InOldState)

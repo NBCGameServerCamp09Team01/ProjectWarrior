@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "WarriorPlayerController.h"
 #include "Components/SlateWrapperTypes.h"
+#include "ProjectWarrior/Auth/WarriorAuthTypes.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 #include "WarriorStagePlayerController.generated.h"
 
@@ -66,6 +67,11 @@ protected:
 	//GameState의 OnWaveChanged에 연결. 웨이브는 InProgress에 들어갈 때만 바뀐다(웨이브 0은 초기화 알림)
 	UFUNCTION()
 	void HandleWaveChanged(int32 InWaveNumber, int32 InTotalWaveCount, bool bInBossWave);
+
+	//로그인 상태가 끝났을 때(UWarriorAuthSubsystem::OnSessionEnded). 스테이지를 그만두고 MainMenuLevel로 돌아간다.
+	//화면 선택과 안내 팝업은 그 레벨의 프론트 컨트롤러가 BeginPlay에서 ConsumePendingSessionEnd로 이어받는다
+	UFUNCTION()
+	void HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage);
 
 	//상태에 맞는 음악 상황을 알리고 상태 전환 소리를 낸다. 결과 음악은 ShowResult·RevealResult가 맡는다
 	void PlayStageStateSound(EWarriorStageState InState);

@@ -391,10 +391,15 @@ void UWarriorAccountSubsystem::GrantExperience(int32 InExp, FWarriorStageReward&
 	}
 
 	//최대 레벨에서는 남는 경험치를 쌓지 않는다.
+	int32 DiscardedExp = 0;
 	if (Data.AccountLevel >= Rules.MaxLevel)
 	{
+		DiscardedExp = Data.Experience;
 		Data.Experience = 0;
 	}
+
+	//누적 경험치는 실제로 반영된 양만 더한다(버려진 경험치 제외)
+	Data.TotalExperience += OutReward.ExpGained - DiscardedExp;
 
 	OutReward.LevelAfter = Data.AccountLevel;
 }
