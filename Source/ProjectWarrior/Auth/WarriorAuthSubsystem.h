@@ -59,6 +59,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestLogout();
 
+	//인증이 필요한 요청을 다른 서브시스템이 보낼 때 쓴다(예: 스테이지 플레이·결과). InVerb는 GET·POST.
+	//BaseUrl·토큰·제한 시간은 이 서브시스템 값을 그대로 쓰고, 토큰은 밖으로 내보내지 않는다.
+	//로그인하지 않았거나 요청을 시작하지 못하면 보내지 않고 false(OnDone은 부르지 않는다).
+	//401이면 보낼 때와 같은 세션일 때만 먼저 로그인 상태를 끝내고(HandleAuthFailure → OnSessionEnded), 그다음 OnDone을 부른다.
+	//OnDone(Status, Body)의 Status 0은 연결 실패. OnDone이 부른 쪽 객체를 잡으면 약한 참조로 잡는다(응답 전에 사라질 수 있다)
+	bool SendAuthorized(const FString& InVerb, const FString& InPath, const FString& InJsonBody, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
+
 	UFUNCTION(BlueprintPure, Category = "Warrior|Auth")
 	bool IsLoggedIn() const { return bLoggedIn; }
 
@@ -129,6 +136,9 @@ private:
 	//bWithAuth이면 Authorization: Bearer <AccessToken>을 붙인다. 토큰이 없으면 보내지 않고 false.
 	//요청을 시작하지 못하면 false. 본문(비밀번호)과 토큰은 로그에 남기지 않는다
 	bool SendPost(const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
+
+	//SendPost·SendAuthorized가 같이 쓰는 보내기. InVerb {BaseUrl}{InPath}. 나머지 규칙은 SendPost와 같다
+	bool SendRequest(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
 
 	//실패 응답 본문을 읽는다. 연결 실패(Status 0)는 NETWORK_ERROR, 본문을 못 읽으면 HTTP_<상태>로 채운다
 	static FWarriorApiError ParseApiError(int32 InStatus, const FString& InBody);

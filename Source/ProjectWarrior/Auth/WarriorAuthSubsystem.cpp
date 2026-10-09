@@ -57,18 +57,44 @@ void UWarriorAuthSubsystem::Deinitialize()
 
 bool UWarriorAuthSubsystem::SendPost(const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone)
 {
+	return SendRequest(TEXT("POST"), InPath, InJsonBody, bWithAuth, MoveTemp(OnDone));
+}
+
+bool UWarriorAuthSubsystem::SendAuthorized(const FString& InVerb, const FString& InPath, const FString& InJsonBody, TFunction<void(int32, const FString&)>&& OnDone)
+{
+	if (!bLoggedIn)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Request not sent. Not logged in. %s %s"), *InVerb, *InPath);
+		return false;
+	}
+
+	//401 처리는 접속 점검과 같은 규칙: 보낼 때의 세션이 아직 이어질 때만 로그인 상태를 끝낸다
+	const int32 SentSessionSerial = SessionSerial;
+	return SendRequest(InVerb, InPath, InJsonBody, true,
+		[this, SentSessionSerial, OnDone = MoveTemp(OnDone)](int32 Status, const FString& Body)
+		{
+			if (Status == 401 && SentSessionSerial == SessionSerial)
+			{
+				HandleAuthFailure(Status, ParseApiError(Status, Body));
+			}
+			OnDone(Status, Body);
+		});
+}
+
+bool UWarriorAuthSubsystem::SendRequest(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone)
+{
 	const FString Url = BaseUrl + InPath;
 
 	//토큰 없이 보내면 서버가 401 AUTH_TOKEN_MISSING으로 거절할 뿐이므로 보내지 않는다
 	if (bWithAuth && AccessToken.IsEmpty())
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Request not sent. No access token. POST %s"), *Url);
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Request not sent. No access token. %s %s"), *InVerb, *Url);
 		return false;
 	}
 
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetURL(Url);
-	Request->SetVerb(TEXT("POST"));
+	Request->SetVerb(InVerb);
 	Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
 	Request->SetTimeout(RequestTimeoutSeconds);
 
@@ -96,7 +122,7 @@ bool UWarriorAuthSubsystem::SendPost(const FString& InPath, const FString& InJso
 
 	if (!Request->ProcessRequest())
 	{
-		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] Request could not be started. POST %s"), *Url);
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Auth] Request could not be started. %s %s"), *InVerb, *Url);
 		return false;
 	}
 
