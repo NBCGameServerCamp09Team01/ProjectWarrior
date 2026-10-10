@@ -33,4 +33,9 @@ class PROJECTWARRIOR_API UBTS_UpdateBossTargetInfo : public UBTService
 	// 비워 두면 기록하지 않음
 	UPROPERTY(EditAnywhere, Category = "Target")
 	FBlackboardKeySelector OutAngleKey;
+
+	// 현재 페이즈의 패턴 사이 대기 시간 (AWarriorBossCharacter::GetPatternRecoveryTime). Wait 노드의 Wait Time 키로 사용
+	// 비워 두면 기록하지 않음
+	UPROPERTY(EditAnywhere, Category = "Boss")
+	FBlackboardKeySelector OutPatternRecoveryTimeKey;
 };

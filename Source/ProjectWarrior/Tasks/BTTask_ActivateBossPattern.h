@@ -59,4 +59,7 @@ class PROJECTWARRIOR_API UBTTask_ActivateBossPattern : public UBTTaskNode
 	// 발동 후 키를 비움 (같은 패턴이 실수로 다시 발동되는 것 방지)
 	UPROPERTY(EditAnywhere, Category = "Boss Pattern")
 	bool bClearPatternKeyOnActivate = true;
+
+	// AI.Ability.Boss 하위 어빌리티가 하나라도 실행 중이면 true
+	static bool HasActiveBossAbility(const UAbilitySystemComponent& ASC);
 };

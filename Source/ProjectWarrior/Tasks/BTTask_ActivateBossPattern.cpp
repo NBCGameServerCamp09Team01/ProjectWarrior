@@ -7,6 +7,8 @@
 #include "ProjectWarrior/Characters/WarriorBossCharacter.h"
 #include "ProjectWarrior/Components/Combat/BossPatternComponent.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAbilitySystemComponent.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "Abilities/GameplayAbility.h"
 
 UBTTask_ActivateBossPattern::UBTTask_ActivateBossPattern()
 {
@@ -136,10 +138,31 @@ void UBTTask_ActivateBossPattern::TickTask(UBehaviorTreeComponent& OwnerComp, ui
 	UAbilitySystemComponent* ASC = Memory->AbilitySystemComponent.Get();
 	const FGameplayAbilitySpec* ActivatedSpec = ASC ? ASC->FindAbilitySpecFromHandle(Memory->ActivatedSpecHandle) : nullptr;
 
-	if (!ActivatedSpec || !ActivatedSpec->IsActive())
+	if (ActivatedSpec && ActivatedSpec->IsActive())
 	{
-		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+		return;
 	}
+
+	// 후속 패턴(도약 -> 돌진 등)이나 페이즈 전환이 이어지고 있으면 끝날 때까지 다음 패턴을 고르지 않음
+	if (ASC && HasActiveBossAbility(*ASC))
+	{
+		return;
+	}
+
+	FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+}
+
+bool UBTTask_ActivateBossPattern::HasActiveBossAbility(const UAbilitySystemComponent& ASC)
+{
+	for (const FGameplayAbilitySpec& AbilitySpec : ASC.GetActivatableAbilities())
+	{
+		if (AbilitySpec.IsActive() && AbilitySpec.Ability && AbilitySpec.Ability->GetAssetTags().HasTag(WarriorGameplayTags::AI_Ability_Boss))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 EBTNodeResult::Type UBTTask_ActivateBossPattern::AbortTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)

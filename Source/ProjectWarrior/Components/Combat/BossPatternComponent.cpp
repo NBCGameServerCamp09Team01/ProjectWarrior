@@ -84,7 +84,7 @@ void UBossPatternComponent::NotifyPatternActivated(FGameplayTag PatternTag)
 
 	LastPatternTag = PatternTag;
 
-	const FWarriorBossPatternData* Pattern = PatternSet ? PatternSet->FindPattern(PatternTag) : nullptr;
+	const FWarriorBossPatternData* Pattern = PatternSet ? PatternSet->FindPattern(PatternTag, GetCurrentPhase()) : nullptr;
 
 	if (Pattern && Pattern->Cooldown > 0.f)
 	{

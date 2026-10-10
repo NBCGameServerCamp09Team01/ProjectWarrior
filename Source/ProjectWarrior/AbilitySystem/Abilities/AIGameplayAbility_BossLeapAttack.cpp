@@ -10,6 +10,8 @@
 #include "Character/ALSBaseCharacter.h"
 #include "Library/ALSCharacterEnumLibrary.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "AbilitySystemComponent.h"
 
 void UAIGameplayAbility_BossLeapAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
@@ -144,11 +146,31 @@ void UAIGameplayAbility_BossLeapAttack::BeginLeapMovement()
 			bAppliedALSInAir = true;
 		}
 	}
+
+	// 공중에서 페이즈 전환 연출로 끊기지 않도록 (AWarriorBossCharacter가 착지까지 미룸)
+	if (!bAppliedAirborneTag)
+	{
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->AddLooseGameplayTag(WarriorGameplayTags::AI_Status_Boss_Airborne);
+			bAppliedAirborneTag = true;
+		}
+	}
 }
 
 void UAIGameplayAbility_BossLeapAttack::EndLeapMovement()
 {
 	ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+
+	if (bAppliedAirborneTag)
+	{
+		bAppliedAirborneTag = false;
+
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->RemoveLooseGameplayTag(WarriorGameplayTags::AI_Status_Boss_Airborne);
+		}
+	}
 
 	if (bAppliedFlying)
 	{

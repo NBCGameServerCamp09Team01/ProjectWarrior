@@ -95,6 +95,7 @@ private:
 	bool bAppliedFlying = false;
 	bool bAppliedCollisionIgnore = false;
 	bool bAppliedALSInAir = false;
+	bool bAppliedAirborneTag = false;
 
 	TEnumAsByte<EMovementMode> SavedMovementMode = MOVE_Walking;
 	uint8 SavedCustomMovementMode = 0;

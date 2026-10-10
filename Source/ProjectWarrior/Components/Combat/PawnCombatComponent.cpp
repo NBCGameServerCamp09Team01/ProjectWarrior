@@ -73,12 +73,25 @@ void UPawnCombatComponent::ToggleWeaponCollision(bool bShouldEnable, EToggleDama
     if (!bShouldEnable)
     {
         CurrentHitReactEventTag = FGameplayTag();
+        ResetCurrentBlockRule();
     }
 }
 
 void UPawnCombatComponent::SetCurrentHitReactEventTag(FGameplayTag InHitReactEventTag)
 {
     CurrentHitReactEventTag = InHitReactEventTag;
+}
+
+void UPawnCombatComponent::SetCurrentBlockRule(EWarriorBlockRule InBlockRule, bool bInStaggerOnBlocked)
+{
+    CurrentBlockRule = InBlockRule;
+    bStaggerOnBlocked = bInStaggerOnBlocked;
+}
+
+void UPawnCombatComponent::ResetCurrentBlockRule()
+{
+    CurrentBlockRule = EWarriorBlockRule::Blockable;
+    bStaggerOnBlocked = false;
 }
 
 void UPawnCombatComponent::OnHitTargetActor(AActor* HitActor)

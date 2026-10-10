@@ -8,6 +8,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "GenericTeamAgentInterface.h"
+#include "Character/ALSBaseCharacter.h"
 
 UWarriorAbilitySystemComponent* UWarriorFunctionLibrary::NativeGetWarriorASCFromActor(AActor* InActor)
 {
@@ -154,6 +155,27 @@ bool UWarriorFunctionLibrary::IsActorDead(AActor* InActor)
     return ASC && ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death);
 }
 
+bool UWarriorFunctionLibrary::CanBeFinisherTarget(AActor* InActor)
+{
+    if (IsActorDead(InActor))
+    {
+        return false;
+    }
+
+    // ASC가 없는 대상(소품 등)은 처형 대상이 아님
+    const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InActor);
+
+    if (!ASC)
+    {
+        return false;
+    }
+
+    static const FGameplayTagContainer BlockedTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{
+        WarriorGameplayTags::Shared_Status_FinisherImmune, WarriorGameplayTags::Shared_Status_Finisher });
+
+    return !ASC->HasAnyMatchingGameplayTags(BlockedTags);
+}
+
 EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, EWarriorBlockRule InBlockRule)
 {
     check(InAttacker && InVictim);
@@ -206,4 +228,26 @@ bool UWarriorFunctionLibrary::IsTargetPawnHostile(APawn* QueryPawn, APawn* Targe
     }
 
     return false;
+}
+
+void UWarriorFunctionLibrary::SetPawnFacingRotation(APawn* InPawn, const FRotator& NewRotation)
+{
+    if (!InPawn)
+    {
+        return;
+    }
+
+    if (AALSBaseCharacter* ALSCharacter = Cast<AALSBaseCharacter>(InPawn))
+    {
+        ALSCharacter->SetActorLocationAndTargetRotation(ALSCharacter->GetActorLocation(), NewRotation);
+    }
+    else
+    {
+        InPawn->SetActorRotation(NewRotation);
+    }
+
+    if (AController* Controller = InPawn->GetController())
+    {
+        Controller->SetControlRotation(NewRotation);
+    }
 }

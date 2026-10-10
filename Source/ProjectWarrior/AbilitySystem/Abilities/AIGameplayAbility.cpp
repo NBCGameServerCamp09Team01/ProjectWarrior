@@ -32,8 +32,10 @@ bool UAIGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Han
     {
         const FGameplayTagContainer& OwnAssetTags = GetAssetTags();
 
-        // 슈퍼아머 중에는 피격 경직이 발동하지 않음 (가드 반격 등이 끊기지 않게)
-        if (OwnAssetTags.HasTag(WarriorGameplayTags::Shared_Ability_HitReact) && ASC->HasMatchingGameplayTag(WarriorGameplayTags::AI_Status_SuperArmor))
+        // 슈퍼아머 중에는 피격 경직이 발동하지 않음 (가드 반격, 보스 패턴 등이 끊기지 않게)
+        // 보스 패턴 어빌리티는 AI.Status.Boss.SuperArmor를 활성 태그로 가짐. 스태거(패링)는 막지 않음
+        static const FGameplayTagContainer SuperArmorTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ WarriorGameplayTags::AI_Status_SuperArmor, WarriorGameplayTags::AI_Status_Boss_SuperArmor });
+        if (OwnAssetTags.HasTag(WarriorGameplayTags::Shared_Ability_HitReact) && ASC->HasAnyMatchingGameplayTags(SuperArmorTags))
         {
             return false;
         }

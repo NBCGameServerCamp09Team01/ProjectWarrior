@@ -128,13 +128,19 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_LeapSlam, "AI.Ability.Boss.LeapSlam");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Charge, "AI.Ability.Boss.Charge");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Sweep, "AI.Ability.Boss.Sweep");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Sweep2, "AI.Ability.Boss.Sweep2");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Shockwave, "AI.Ability.Boss.Shockwave");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RageCombo, "AI.Ability.Boss.RageCombo");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_PhaseTransition, "AI.Ability.Boss.PhaseTransition");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_Telegraph, "AI.Event.Boss.Telegraph");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_AreaImpact, "AI.Event.Boss.AreaImpact");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_LeapTakeoff, "AI.Event.Boss.LeapTakeoff");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_PhaseChanged, "AI.Event.Boss.PhaseChanged");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Blocking, "AI.Status.Boss.Blocking");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_SuperArmor, "AI.Status.Boss.SuperArmor");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Airborne, "AI.Status.Boss.Airborne");
 
 	/** Shared tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact, "Shared.Ability.HitReact");
@@ -176,6 +182,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Dodge, "Shared.Status.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Sprint, "Shared.Status.Sprint");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Finisher, "Shared.Status.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_FinisherImmune, "Shared.Status.FinisherImmune");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Invulnerable, "Shared.Status.Invulnerable");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_WeaponEquipped, "Shared.Status.WeaponEquipped");
 

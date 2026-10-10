@@ -67,6 +67,9 @@ public:
 
 	const FWarriorBossPatternData* FindPattern(const FGameplayTag& InAbilityTag) const;
 
+	// 같은 어빌리티를 페이즈별로 다른 조건(쿨다운 등)으로 여러 번 등록한 경우, 해당 페이즈에서 쓰는 항목
+	const FWarriorBossPatternData* FindPattern(const FGameplayTag& InAbilityTag, int32 InPhase) const;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Pattern", meta = (TitleProperty = "AbilityTag"))
 	TArray<FWarriorBossPatternData> Patterns;
