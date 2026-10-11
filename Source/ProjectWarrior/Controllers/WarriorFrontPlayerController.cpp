@@ -16,6 +16,9 @@ namespace
 {
 	//화면 위젯(기본 0)보다 위에 띄운다
 	const int32 NoticePopupZOrder = 50;
+
+	//화면 위, 안내 팝업 아래
+	const int32 ReconnectIndicatorZOrder = 40;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -38,6 +41,13 @@ void AWarriorFrontPlayerController::BeginPlay()
 	if (Auth)
 	{
 		Auth->OnSessionEnded.AddUniqueDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+
+	//스테이지에서 다시 연결하던 중에 이 레벨로 왔을 수도 있으므로 지금 상태를 한 번 맞춘다
+	if (UWarriorRealtimeSubsystem* Realtime = UWarriorRealtimeSubsystem::Get(this))
+	{
+		Realtime->OnStateChanged.AddUniqueDynamic(this, &ThisClass::HandleRealtimeStateChanged);
+		HandleRealtimeStateChanged(Realtime->GetState());
 	}
 
 	//스테이지에서 로그인 상태가 끝나 이 레벨로 돌아왔다면, 그 이유에 맞는 화면과 안내를 보인다
@@ -64,7 +74,51 @@ void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 		Auth->OnSessionEnded.RemoveDynamic(this, &ThisClass::HandleSessionEnded);
 	}
 
+	if (UWarriorRealtimeSubsystem* Realtime = UWarriorRealtimeSubsystem::Get(this))
+	{
+		Realtime->OnStateChanged.RemoveDynamic(this, &ThisClass::HandleRealtimeStateChanged);
+	}
+
 	Super::EndPlay(EndPlayReason);
+}
+
+void AWarriorFrontPlayerController::HandleRealtimeStateChanged(EWarriorRealtimeState InState)
+{
+	SetReconnectIndicatorVisible(InState == EWarriorRealtimeState::Reconnecting);
+}
+
+void AWarriorFrontPlayerController::SetReconnectIndicatorVisible(bool bVisible)
+{
+	if (!bVisible)
+	{
+		if (ReconnectIndicator)
+		{
+			ReconnectIndicator->RemoveFromParent();
+		}
+		return;
+	}
+
+	if (!ReconnectIndicatorClass)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Front] Reconnecting to the server (ReconnectIndicatorClass is not set, no indicator shown)."));
+		return;
+	}
+
+	if (!ReconnectIndicator)
+	{
+		ReconnectIndicator = CreateWidget<UUserWidget>(this, ReconnectIndicatorClass);
+		if (!ReconnectIndicator)
+		{
+			return;
+		}
+		//표시만 한다: 클릭을 막지 않고, 입력 모드·포커스는 건드리지 않는다
+		ReconnectIndicator->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+
+	if (!ReconnectIndicator->IsInViewport())
+	{
+		ReconnectIndicator->AddToViewport(ReconnectIndicatorZOrder);
+	}
 }
 
 void AWarriorFrontPlayerController::ShowScreen(EWarriorFrontScreen InScreen)

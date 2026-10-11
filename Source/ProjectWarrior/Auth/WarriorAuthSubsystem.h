@@ -8,6 +8,8 @@
 #include "WarriorAuthTypes.h"
 #include "WarriorAuthSubsystem.generated.h"
 
+class IWebSocket;
+
 //요청 결과. 실패하면 ErrorCode에 서버 오류 코드(예: AUTH_INVALID_CREDENTIALS), Message에 화면에 보여 줄 문장이 들어온다
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWarriorAuthRequestCompleted, bool, bSuccess, const FString&, ErrorCode, const FText&, Message);
 
@@ -21,10 +23,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorSessionEnded, EWarriorSes
  * - 로그인·회원가입 화면은 Request* 를 호출하고 OnLoginCompleted·OnSignupCompleted로 결과를 받는다.
  * - 프론트 컨트롤러는 IsLoggedIn으로 메인메뉴에 들어갈 수 있는지 판단한다.
  * - 입력 규칙(길이·문자)은 Validate* 에 모아 두고, 화면이 요청 전에 먼저 확인한다(서버도 다시 검증한다).
- * - 로그인 상태가 끝나면(로그아웃·401·연결 끊김) 모두 EndSession 한곳을 거쳐 OnSessionEnded로 알린다.
+ * - 로그인 상태가 끝나면(로그아웃·서버 401·실시간 연결의 다른 곳 로그인) 모두 EndSession 한곳을 거쳐 OnSessionEnded로 알린다.
  *   레벨 이동 중에 알림을 놓친 화면은 ConsumePendingSessionEnd로 꺼낸다.
- * - 로그인해 있는 동안 HeartbeatIntervalSeconds마다 접속 점검(A4)을 보내 서버 세션(10분)을 늘린다.
- *   연속 HeartbeatMaxConsecutiveFailures번 실패하면 ConnectionLost로 끝낸다(세션 수명 > 간격 × 허용 횟수를 지킨다).
+ * - 로그인해 있는 동안 HeartbeatIntervalSeconds마다 접속 점검(A4)을 보내 서버 세션(10분)을 늘리고 401을 알아챈다.
+ *   연결 실패·5xx가 이어져도 로그인은 끝내지 않는다(realtime-api.md v1.1 "다시 연결". 끝내는 것은 서버 401뿐).
+ * - 실시간 연결(UWarriorRealtimeSubsystem)이 붙어 있는 동안은 그 연결의 Ping/Pong이 세션을 늘린다.
+ *   bPauseHeartbeatWhileRealtimeConnected가 켜져 있으면 그동안 접속 점검을 멈춘다.
  *
  * 회원가입(POST {BaseUrl}/auth/signup)과 로그인(POST {BaseUrl}/auth/login)은 웹서버에 실제로 요청한다.
  * 서버 주소는 DefaultGame.ini의 [/Script/ProjectWarrior.WarriorAuthSubsystem] BaseUrl로 바꿀 수 있다.
@@ -113,6 +117,25 @@ public:
 	//스테이지에서 끊겨 프론트 레벨로 돌아온 경우처럼, 알림 뒤에 새로 만들어진 화면이 쓴다
 	bool ConsumePendingSessionEnd(EWarriorSessionEndReason& OutReason, FText& OutMessage);
 
+	//~ Begin 실시간 연결(UWarriorRealtimeSubsystem)이 쓰는 함수. 토큰은 밖으로 내보내지 않는다
+	//{BaseUrl}{InPath}(http → ws, https → wss)로 Authorization 헤더를 붙인 WebSocket을 만든다(연결은 부른 쪽이 Connect).
+	//로그인하지 않았으면 nullptr
+	TSharedPtr<IWebSocket> CreateRealtimeSocket(const FString& InPath) const;
+
+	//서버가 실시간 연결로 알린 이유(다른 곳 로그인, 세션 끝남)로 로그인 상태를 끝낸다. 이미 끝났으면 아무것도 하지 않는다
+	void EndSessionByServer(EWarriorSessionEndReason InReason);
+
+	//지금 바로 접속 점검(A4)을 한 번 보낸다. 실시간 연결에 실패했을 때 세션이 살아 있는지(401인지) 확인하는 데 쓴다.
+	//401이면 평소처럼 로그인 상태를 끝내고(OnSessionEnded), 아니면 아무것도 하지 않는다
+	void CheckSessionNow();
+
+	//실시간 연결이 붙었는지 알린다. bPauseHeartbeatWhileRealtimeConnected가 켜져 있으면 붙은 동안 접속 점검을 멈추고 끊기면 다시 돌린다
+	void SetRealtimeConnected(bool bConnected);
+
+	//로그인할 때마다 바뀌는 번호. 실시간 연결이 늦게 온 지난 세션의 일을 버릴 때 비교한다
+	int32 GetSessionSerial() const { return SessionSerial; }
+	//~ End 실시간 연결
+
 protected:
 	//웹서버 주소 (끝에 / 없이). 경로는 /auth/login처럼 붙인다
 	UPROPERTY(Config)
@@ -122,13 +145,16 @@ protected:
 	UPROPERTY(Config)
 	float RequestTimeoutSeconds = 10.f;
 
-	//접속 점검 간격(초). 세션 수명(서버 pw01.auth.session.ttl, 10분) > 간격 × 허용 실패 횟수를 지킨다
+	//접속 점검 간격(초). 세션 수명(서버 pw01.auth.session.ttl, 10분)보다 충분히 짧게 둔다
 	UPROPERTY(Config)
 	float HeartbeatIntervalSeconds = 60.f;
 
-	//접속 점검이 연속으로 이만큼 실패하면(연결 실패·5xx) 연결이 끊긴 것으로 보고 로그인 상태를 끝낸다
+	//실시간 연결이 붙어 있는 동안 접속 점검을 멈출지. 켜져 있으면 연결 중에는 서버 Ping에 엔진이 자동으로 보내는 Pong이 세션을 늘리고,
+	//접속 점검은 연결이 없는 동안(처음 연결 전, 다시 연결하는 중)에만 돈다. Windows UE는 libwebsockets를 쓰고, Ping에 Pong을 자동으로 보낸다
+	//(서버 로그 [Realtime] pong received로 확인. 서버 LOGGING_LEVEL_COM_PW01_WEBSERVER_REALTIME=DEBUG).
+	//끄면 연결 중에도 점검을 계속 보낸다(세션은 어느 쪽으로든 늘어난다. 문제를 가릴 때만 끈다)
 	UPROPERTY(Config)
-	int32 HeartbeatMaxConsecutiveFailures = 3;
+	bool bPauseHeartbeatWhileRealtimeConnected = true;
 
 private:
 	//POST {BaseUrl}{InPath}를 보낸다. 응답(또는 연결 실패)이 오면 OnDone(Status, Body)를 부른다. Status 0은 연결 실패.
@@ -225,8 +251,11 @@ private:
 
 	FTSTicker::FDelegateHandle HeartbeatTickerHandle;
 
-	//연속으로 실패한 접속 점검 수. 성공하면 0
+	//연속으로 실패한 접속 점검 수(로그용). 성공하면 0. 이 수로 로그인을 끝내지 않는다
 	int32 HeartbeatFailureCount = 0;
+
+	//실시간 연결이 붙어 있는가(SetRealtimeConnected)
+	bool bRealtimeConnected = false;
 
 	//접속 점검 응답을 기다리는 중. 화면 버튼을 막는 bRequestInFlight와 따로 둔다
 	bool bHeartbeatInFlight = false;
