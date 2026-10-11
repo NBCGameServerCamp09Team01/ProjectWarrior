@@ -29,8 +29,8 @@ public class ProjectWarrior : ModuleRules
 		// 사운드 틀(Audio/): 프로젝트 설정(DeveloperSettings), MetaSound 입력(AudioExtensions), 버튼 소리(SlateCore)
 		PrivateDependencyModuleNames.AddRange(new string[] { "DeveloperSettings", "AudioExtensions", "SlateCore" });
 
-        // 서버 통신용 JSON 변환(FJsonObjectConverter)
-        PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities", "HTTP" });
+        // 서버 통신: JSON 변환(FJsonObjectConverter), HTTP 요청, 실시간 연결(S7 WebSocket, realtime-api.md)
+        PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities", "HTTP", "WebSockets" });
         // Uncomment if you are using Slate UI
         // PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "WarriorPlayerController.h"
 #include "ProjectWarrior/Auth/WarriorAuthTypes.h"
+#include "ProjectWarrior/Network/WarriorRealtimeSubsystem.h"
 #include "WarriorFrontPlayerController.generated.h"
 
 class UUserWidget;
@@ -76,7 +77,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TSubclassOf<UWarriorNoticePopupWidget> NoticePopupClass;
 
+	//"재연결 중" 표시 (BP_FrontPlayerController에서 지정). 실시간 연결이 끊겨 다시 연결하는 동안만 띄운다.
+	//입력을 막지 않고 포커스도 가져가지 않는다. 비어 있으면 표시 없이 로그만 남긴다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
+	TSubclassOf<UUserWidget> ReconnectIndicatorClass;
+
 private:
+	//실시간 연결 상태가 바뀌었을 때(UWarriorRealtimeSubsystem::OnStateChanged). Reconnecting이면 표시를 띄우고 아니면 내린다
+	UFUNCTION()
+	void HandleRealtimeStateChanged(EWarriorRealtimeState InState);
+
+	void SetReconnectIndicatorVisible(bool bVisible);
+
 	//로그인 상태가 끝났을 때(UWarriorAuthSubsystem::OnSessionEnded). ApplySessionEnd로 넘긴다
 	UFUNCTION()
 	void HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage);
@@ -100,6 +112,9 @@ private:
 	//한 번 만든 안내 팝업을 재사용
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorNoticePopupWidget> NoticePopup;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> ReconnectIndicator;
 
 	EWarriorFrontScreen CurrentScreen = EWarriorFrontScreen::None;
 };
