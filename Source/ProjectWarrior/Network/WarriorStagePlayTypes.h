@@ -52,6 +52,10 @@ struct PROJECTWARRIOR_API FWarriorStagePlayDto
 	UPROPERTY()
 	FString Status;
 
+	//결과를 낼 수 있는 마지막 시각(UTC ISO-8601, 시작 + 24시간). 결과를 보관할 때 보관 유효 기간으로 쓴다(S5)
+	UPROPERTY()
+	FString ExpiresAt;
+
 	//endReason·endedAt은 진행 중이면 null로 온다. 게임이 쓰지 않으므로 칸을 두지 않는다(null을 FString으로 읽다 실패하지 않게)
 };
 

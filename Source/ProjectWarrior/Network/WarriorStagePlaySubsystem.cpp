@@ -7,31 +7,14 @@
 #include "JsonObjectConverter.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Network/WarriorApiSubsystem.h"
+#include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
 #include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 
 namespace WarriorStagePlayApi
 {
 	const TCHAR* StagePlaysPath = TEXT("/accounts/me/stage-plays");
-
-	//결과 제출은 처음 1번 + retryable일 때 1번 더(같은 세션 안). 보관 뒤 재전송은 다음 작업
-	constexpr int32 ResultMaxAttempts = 2;
-
-	//실패 응답 본문을 읽는다. 연결 실패(Status 0)는 NETWORK_ERROR, 본문을 못 읽으면 HTTP_<상태>
-	FWarriorApiError ParseError(int32 InStatus, const FString& InBody)
-	{
-		FWarriorApiError Error;
-		if (InStatus == 0)
-		{
-			Error.Code = TEXT("NETWORK_ERROR");
-			Error.Retryable = true;
-		}
-		else if (!FJsonObjectConverter::JsonObjectStringToUStruct(InBody, &Error) || Error.Code.IsEmpty())
-		{
-			Error.Code = FString::Printf(TEXT("HTTP_%d"), InStatus);
-		}
-		return Error;
-	}
 }
 
 UWarriorStagePlaySubsystem* UWarriorStagePlaySubsystem::Get(const UObject* WorldContextObject)
@@ -40,11 +23,41 @@ UWarriorStagePlaySubsystem* UWarriorStagePlaySubsystem::Get(const UObject* World
 	return GameInstance ? GameInstance->GetSubsystem<UWarriorStagePlaySubsystem>() : nullptr;
 }
 
+void UWarriorStagePlaySubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	Collection.InitializeDependency<UWarriorApiSubsystem>();
+	if (UWarriorAuthSubsystem* Auth = Collection.InitializeDependency<UWarriorAuthSubsystem>())
+	{
+		Auth->OnSessionEnded.AddUniqueDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+}
+
+void UWarriorStagePlaySubsystem::Deinitialize()
+{
+	if (UWarriorAuthSubsystem* Auth = GetGameInstance()->GetSubsystem<UWarriorAuthSubsystem>())
+	{
+		Auth->OnSessionEnded.RemoveDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+
+	Super::Deinitialize();
+}
+
+void UWarriorStagePlaySubsystem::HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage)
+{
+	//다른 계정이 이 플레이 ID로 결과를 내지 않게 비운다. 늦게 온 시작 응답도 버리도록 번호를 올린다
+	++StartSerial;
+	CurrentStagePlayId.Reset();
+	CurrentStagePlayExpiresAt = FDateTime();
+}
+
 void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId)
 {
 	//이전 플레이 ID로 결과를 내지 않도록 먼저 비운다
 	++StartSerial;
 	CurrentStagePlayId.Reset();
+	CurrentStagePlayExpiresAt = FDateTime();
 
 	SendStart(InStageId.ToString().ToLower(), true);
 }
@@ -108,23 +121,27 @@ void UWarriorStagePlaySubsystem::HandleStartResponse(int32 InStartSerial, const 
 		}
 
 		CurrentStagePlayId = ResponseDto.Data.StagePlayId;
-		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Started. stagePlayId=%s stage=%s waveCount=%d serverRequestId=%s"),
-			*CurrentStagePlayId, *ResponseDto.Data.StageId, ResponseDto.Data.WaveCount, *ResponseDto.Meta.RequestId);
+		if (!FDateTime::ParseIso8601(*ResponseDto.Data.ExpiresAt, CurrentStagePlayExpiresAt))
+		{
+			CurrentStagePlayExpiresAt = FDateTime();
+		}
+		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Started. stagePlayId=%s stage=%s waveCount=%d expiresAt=%s serverRequestId=%s"),
+			*CurrentStagePlayId, *ResponseDto.Data.StageId, ResponseDto.Data.WaveCount, *ResponseDto.Data.ExpiresAt, *ResponseDto.Meta.RequestId);
 		return;
 	}
 
-	const FWarriorApiError Error = WarriorStagePlayApi::ParseError(Status, Body);
+	const FWarriorApiError Error = UWarriorApiSubsystem::ParseError(Status, Body);
 
-	//── 409 STAGE_PLAY_IN_PROGRESS: 이전 판(중간에 끈 PIE 등)이 남아 있다. 포기하고 한 번만 다시 시작한다
+	//── 409 STAGE_PLAY_IN_PROGRESS: 이전 판(중간에 끈 판 등)이 남아 있다. 보관 결과가 있으면 그것부터, 없으면 포기하고 한 번만 다시 시작한다
 	if (Status == 409 && Error.Code == TEXT("STAGE_PLAY_IN_PROGRESS") && bInRecoverInProgress)
 	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] A previous play is still in progress. Abandoning it and starting again."));
+		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] A previous play is still in progress. Recovering it and starting again."));
 		RecoverInProgress(InStartSerial, InStageId);
 		return;
 	}
 
 	//── 그 밖(404 STAGE_NOT_FOUND·403 STAGE_LOCKED·401·연결 실패 등): 이번 판은 서버에 저장되지 않는다.
-	//401은 Auth가 이미 로그인 상태를 끝냈다
+	//401은 Auth가 이미 로그인 상태를 끝냈다. 안내 후 메인메뉴는 S5 3단계
 	UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start failed. Stage %s status=%d code=%s. This run will not be saved."),
 		*InStageId, Status, *Error.Code);
 }
@@ -155,17 +172,78 @@ void UWarriorStagePlaySubsystem::RecoverInProgress(int32 InStartSerial, const FS
 			FWarriorStagePlayResponseDto ResponseDto;
 			if (Status == 200 && FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto) && !ResponseDto.Data.StagePlayId.IsEmpty())
 			{
+				//명세 P1: 그 플레이의 보관 결과가 있으면 포기하지 말고 결과부터 보낸다
+				const UWarriorAuthSubsystem* AuthNow = UWarriorAuthSubsystem::Get(WeakThis.Get());
+				FWarriorPendingRequest Stored;
+				if (AuthNow && FWarriorPendingRequestStore::FindByKey(AuthNow->GetAccount().AccountId, EWarriorPendingKind::StageResult,
+					ResponseDto.Data.StagePlayId, Stored))
+				{
+					WeakThis->ResendStoredThenRestart(InStartSerial, Stored, ResponseDto.Data.StagePlayId, InStageId);
+					return;
+				}
+
 				WeakThis->AbandonAndRestart(InStartSerial, ResponseDto.Data.StagePlayId, InStageId);
 				return;
 			}
 
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play could not be read. status=%d code=%s. This run will not be saved."),
-				Status, *WarriorStagePlayApi::ParseError(Status, Body).Code);
+				Status, *UWarriorApiSubsystem::ParseError(Status, Body).Code);
 		});
 
 	if (!bStarted)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play request not sent. This run will not be saved."));
+	}
+}
+
+void UWarriorStagePlaySubsystem::ResendStoredThenRestart(int32 InStartSerial, const FWarriorPendingRequest& InStored, const FString& InStagePlayId, const FString& InStageId)
+{
+	UWarriorApiSubsystem* Api = UWarriorApiSubsystem::Get(this);
+	const UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	if (!Api || !Auth)
+	{
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Sending the stored result of play %s before starting again. requestId=%s"),
+		*InStagePlayId, *InStored.RequestId);
+
+	//보관본 그대로(같은 requestId·같은 본문). 이미 보관돼 있으므로 다시 보관하지 않는다
+	FWarriorApiRequest Request;
+	Request.Verb = InStored.Verb;
+	Request.Path = InStored.Path;
+	Request.Body = InStored.Body;
+	Request.RequestId = InStored.RequestId;
+
+	const FString AccountId = Auth->GetAccount().AccountId;
+	const FString StoredRequestId = InStored.RequestId;
+	const bool bStarted = Api->Send(Request,
+		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, StoredRequestId, InStagePlayId, InStageId, AccountId](const FWarriorApiResult& Result)
+		{
+			if (Result.bOk || (Result.HttpStatus != 401 && !UWarriorApiSubsystem::IsRetryable(Result.Error)))
+			{
+				//받아들여졌거나(플레이가 끝남) 서버가 다시 받지 않는다. 어느 쪽이든 보관본은 필요 없다
+				FWarriorPendingRequestStore::Remove(AccountId, StoredRequestId);
+			}
+
+			if (!WeakThis.IsValid() || !WeakThis->IsCurrentStart(InStartSerial) || Result.HttpStatus == 401)
+			{
+				return;
+			}
+
+			if (Result.bOk)
+			{
+				WeakThis->SendStart(InStageId, false);
+				return;
+			}
+
+			//거절(만료 등)되었거나 아직 보낼 수 없다. 그 플레이를 포기하고 새로 시작한다(아직 보낼 수 없는 결과는 보관본이 남아 다음 로그인 때 다시 본다)
+			WeakThis->AbandonAndRestart(InStartSerial, InStagePlayId, InStageId);
+		});
+
+	if (!bStarted)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Stored result could not be sent. This run will not be saved."));
 	}
 }
 
@@ -187,7 +265,7 @@ void UWarriorStagePlaySubsystem::AbandonAndRestart(int32 InStartSerial, const FS
 			}
 
 			//── 200 포기됨, 409 STAGE_PLAY_NOT_IN_PROGRESS 그사이 이미 끝남: 둘 다 이제 시작할 수 있다
-			const FWarriorApiError Error = WarriorStagePlayApi::ParseError(Status, Body);
+			const FWarriorApiError Error = UWarriorApiSubsystem::ParseError(Status, Body);
 			if (Status == 200 || (Status == 409 && Error.Code == TEXT("STAGE_PLAY_NOT_IN_PROGRESS")))
 			{
 				UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Previous play %s ended. Starting again."), *InStagePlayId);
@@ -214,6 +292,13 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 		return;
 	}
 
+	UWarriorApiSubsystem* Api = UWarriorApiSubsystem::Get(this);
+	if (!Api)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent. No api subsystem. stagePlayId=%s"), *CurrentStagePlayId);
+		return;
+	}
+
 	//칸 이름을 손으로 맞춘다(bCleared → cleared). 재전송도 같은 본문(같은 requestId)을 쓴다
 	FWarriorStageResultRequestDto RequestDto;
 	RequestDto.RequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
@@ -233,47 +318,44 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 		return;
 	}
 
-	if (SendResult(CurrentStagePlayId, RequestBody, 1))
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Result sent. stagePlayId=%s %s wave %d/%d playTime %.1f s requestId=%s"),
-			*CurrentStagePlayId, InResult.bCleared ? TEXT("cleared") : TEXT("failed"), InResult.ReachedWave, InResult.TotalWaveCount,
-			InResult.PlayTimeSeconds, *RequestDto.RequestId);
-	}
-}
+	//S5: 계속 실패하면 결과를 보관하고(종류 StageResult, 키 stagePlayId, 유효 기간 = 플레이 마감), 다음 로그인 때 다시 보낸다
+	FWarriorApiRequest Request;
+	Request.Verb = TEXT("POST");
+	Request.Path = FString::Printf(TEXT("%s/%s/result"), WarriorStagePlayApi::StagePlaysPath, *CurrentStagePlayId);
+	Request.Body = RequestBody;
+	Request.RequestId = RequestDto.RequestId;
+	Request.StoreKind = EWarriorPendingKind::StageResult;
+	Request.StoreKey = CurrentStagePlayId;
+	Request.StoreExpiresAt = CurrentStagePlayExpiresAt;
+	Request.bAskOnFail = true;
 
-bool UWarriorStagePlaySubsystem::SendResult(const FString& InStagePlayId, const FString& InRequestBody, int32 InAttempt)
-{
-	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
-	if (!Auth)
+	const FString StagePlayId = CurrentStagePlayId;
+	const bool bStarted = Api->Send(Request, [WeakThis = TWeakObjectPtr<ThisClass>(this), StagePlayId](const FWarriorApiResult& Result)
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent. No auth subsystem. stagePlayId=%s"), *InStagePlayId);
-		return false;
-	}
-
-	const FString Path = FString::Printf(TEXT("%s/%s/result"), WarriorStagePlayApi::StagePlaysPath, *InStagePlayId);
-	const bool bStarted = Auth->SendAuthorized(TEXT("POST"), Path, InRequestBody,
-		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStagePlayId, InRequestBody, InAttempt](int32 Status, const FString& Body)
+		if (WeakThis.IsValid())
 		{
-			if (WeakThis.IsValid())
-			{
-				WeakThis->HandleResultResponse(InStagePlayId, InRequestBody, InAttempt, Status, Body);
-			}
-		});
+			WeakThis->HandleResultResult(StagePlayId, Result);
+		}
+	});
 
 	if (!bStarted)
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent (not logged in or request failed to start). stagePlayId=%s"), *InStagePlayId);
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent (not logged in or request failed to start). stagePlayId=%s"), *StagePlayId);
+		return;
 	}
-	return bStarted;
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Result sent. stagePlayId=%s %s wave %d/%d playTime %.1f s requestId=%s"),
+		*StagePlayId, InResult.bCleared ? TEXT("cleared") : TEXT("failed"), InResult.ReachedWave, InResult.TotalWaveCount,
+		InResult.PlayTimeSeconds, *RequestDto.RequestId);
 }
 
-void UWarriorStagePlaySubsystem::HandleResultResponse(const FString& InStagePlayId, const FString& InRequestBody, int32 InAttempt, int32 Status, const FString& Body)
+void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId, const FWarriorApiResult& InResult)
 {
 	//── 200: SAVED 또는 ALREADY_SAVED. 둘 다 서버에 저장된 것
-	if (Status == 200)
+	if (InResult.bOk)
 	{
 		FWarriorStageResultSubmitResponseDto ResponseDto;
-		if (!FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto))
+		if (!FJsonObjectConverter::JsonObjectStringToUStruct(InResult.Body, &ResponseDto))
 		{
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result saved but the response could not be read. stagePlayId=%s"), *InStagePlayId);
 			return;
@@ -281,29 +363,27 @@ void UWarriorStagePlaySubsystem::HandleResultResponse(const FString& InStagePlay
 
 		const FWarriorStageRewardDto& Reward = ResponseDto.Data.Result.Reward;
 		//serverRequestId는 응답 meta.requestId(서버 로그 번호). 보낼 때 로그의 requestId(재전송 키)와 다르다
-		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Result saveStatus %s. stagePlayId=%s cleared=%s exp +%d level %d->%d statPoints +%d serverRequestId=%s"),
+		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Result saveStatus %s. stagePlayId=%s cleared=%s exp +%d level %d->%d statPoints +%d attempts=%d serverRequestId=%s"),
 			*ResponseDto.Data.SaveStatus, *InStagePlayId, ResponseDto.Data.Result.Cleared ? TEXT("true") : TEXT("false"),
-			Reward.ExpGained, Reward.LevelBefore, Reward.LevelAfter, Reward.StatPointsGained, *ResponseDto.Meta.RequestId);
+			Reward.ExpGained, Reward.LevelBefore, Reward.LevelAfter, Reward.StatPointsGained, InResult.Attempts, *ResponseDto.Meta.RequestId);
 		return;
 	}
 
-	const FWarriorApiError Error = WarriorStagePlayApi::ParseError(Status, Body);
-
-	//── retryable(연결 실패·VERSION_CONFLICT·5xx): 같은 본문(같은 requestId)으로 한 번 더
-	if (Error.Retryable && InAttempt < WarriorStagePlayApi::ResultMaxAttempts)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result failed, sending again. stagePlayId=%s status=%d code=%s attempt=%d"),
-			*InStagePlayId, Status, *Error.Code, InAttempt);
-		SendResult(InStagePlayId, InRequestBody, InAttempt + 1);
-		return;
-	}
-
-	//── 다시 보내도 같은 것(RESULT_INVALID·RESULT_MISMATCH·STAGE_PLAY_EXPIRED 등) 또는 재시도도 실패. 401은 Auth가 이미 처리했다
 	FString FieldErrors;
-	for (const FWarriorApiFieldError& FieldError : Error.Errors)
+	for (const FWarriorApiFieldError& FieldError : InResult.Error.Errors)
 	{
 		FieldErrors += FString::Printf(TEXT(" [%s: %s]"), *FieldError.Field, *FieldError.Message);
 	}
-	UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not saved. stagePlayId=%s status=%d code=%s retryable=%s attempt=%d%s"),
-		*InStagePlayId, Status, *Error.Code, Error.Retryable ? TEXT("true") : TEXT("false"), InAttempt, *FieldErrors);
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not saved. stagePlayId=%s status=%d code=%s stored=%s attempts=%d%s"),
+		*InStagePlayId, InResult.HttpStatus, *InResult.Error.Code, InResult.bStored ? TEXT("true") : TEXT("false"), InResult.Attempts, *FieldErrors);
+
+	//── 보관했다(재시도까지 실패·401): 종료 안내·세션 종료 안내는 Api·Auth가 이미 띄웠다
+	//── 서버가 거절했다(RESULT_INVALID·STAGE_PLAY_EXPIRED 등): 문구 표의 안내를 띄운다
+	if (!InResult.bStored && InResult.HttpStatus != 401 && !UWarriorApiSubsystem::IsRetryable(InResult.Error))
+	{
+		if (UWarriorApiSubsystem* Api = UWarriorApiSubsystem::Get(this))
+		{
+			Api->PresentError(InResult);
+		}
+	}
 }
