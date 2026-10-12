@@ -6,6 +6,8 @@
 #include "ProjectWarrior/Controllers/WarriorPlayerController.h"
 #include "ProjectWarrior/Components/Combat/PlayerCombatComponent.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAbilitySystemComponent.h"
+#include "ProjectWarrior/Account/WarriorAccountTags.h"
+#include "ProjectWarrior/Skill/WarriorSkillEffectSettings.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 
 AWarriorPlayerCharacter* UPlayerGameplayAbility::GetPlayerCharacterFromActorInfo()
@@ -42,6 +44,8 @@ FGameplayEffectSpecHandle UPlayerGameplayAbility::MakePlayerDamageEffectSpecHand
 {
 	check(EffectClass);
 
+	InWeaponBaseDamage = ApplyCounterPlus(InWeaponBaseDamage);
+
 	FGameplayEffectContextHandle ContextHandle = GetWarriorAbilitySystemComponentFromActorInfo()->MakeEffectContext();
 	ContextHandle.SetAbility(this);
 	ContextHandle.AddSourceObject(GetAvatarActorFromActorInfo());
@@ -75,6 +79,9 @@ FGameplayEffectSpecHandle UPlayerGameplayAbility::MakePlayerBalanceDamageEffectS
 {
 	check(EffectClass);
 
+	// 반격(GA_Player_Counter)은 이 균형 데미지로 때린다
+	InWeaponBaseDamage = ApplyCounterPlus(InWeaponBaseDamage);
+
 	FGameplayEffectContextHandle ContextHandle = GetWarriorAbilitySystemComponentFromActorInfo()->MakeEffectContext();
 	ContextHandle.SetAbility(this);
 	ContextHandle.AddSourceObject(GetAvatarActorFromActorInfo());
@@ -92,4 +99,39 @@ FGameplayEffectSpecHandle UPlayerGameplayAbility::MakePlayerBalanceDamageEffectS
 	);
 
 	return EffectSpecHandle;
+}
+
+bool UPlayerGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	// 회피 숙련(S4): 설정이 켜져 있으면 회피는 해금 태그가 있어야 나간다(시연용. 끄면 예전처럼 늘 나감)
+	if (GetDefault<UWarriorSkillEffectSettings>()->bDodgeRequiresDodgeMastery
+		&& GetAssetTags().HasTagExact(WarriorGameplayTags::Player_Ability_Dodge))
+	{
+		const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+		if (!ASC || !ASC->HasMatchingGameplayTag(WarriorAccountTags::Account_Skill_DodgeMastery))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+float UPlayerGameplayAbility::ApplyCounterPlus(float InBaseDamage)
+{
+	if (!GetAssetTags().HasTagExact(WarriorGameplayTags::Player_Ability_Counter))
+	{
+		return InBaseDamage;
+	}
+	const UWarriorAbilitySystemComponent* ASC = GetWarriorAbilitySystemComponentFromActorInfo();
+	if (!ASC || !ASC->HasMatchingGameplayTag(WarriorAccountTags::Account_Skill_CounterPlus))
+	{
+		return InBaseDamage;
+	}
+	return InBaseDamage * GetDefault<UWarriorSkillEffectSettings>()->CounterPlusDamageMultiplier;
 }

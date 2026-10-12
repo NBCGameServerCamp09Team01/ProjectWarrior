@@ -35,7 +35,15 @@ public:
     UFUNCTION(BlueprintPure, Category = "Warrior|Ability")
     FGameplayEffectSpecHandle MakePlayerBalanceDamageEffectSpecHandle(TSubclassOf<UGameplayEffect> EffectClass, float InWeaponBaseDamage);
 
+    // 회피 숙련(S4): 회피(Player.Ability.Dodge)는 계정에서 스킬을 해금해야(Account.Skill.DodgeMastery 태그) 쓸 수 있다
+    virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+        const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr,
+        FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
 private:
+    // 반격 강화(S4): 반격 능력이고 스킬을 해금했으면(Account.Skill.CounterPlus 태그) 기본 데미지에 배율을 곱한다
+    float ApplyCounterPlus(float InBaseDamage);
+
     TWeakObjectPtr<AWarriorPlayerCharacter> CachedWarriorPlayerCharacter;
     TWeakObjectPtr<AWarriorPlayerController> CachedWarriorPlayerController;
 };

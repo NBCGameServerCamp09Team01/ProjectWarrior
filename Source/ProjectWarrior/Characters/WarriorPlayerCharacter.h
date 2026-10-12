@@ -151,4 +151,7 @@ protected:
 
 private:
 	void ApplyAccountStatBonuses();
+
+	// 해금한 스킬 태그(Account.Skill.*)를 능력 시스템에 붙인다. 효과(반격 강화·회피 숙련 등)는 이 태그를 보고 켜진다(S4)
+	void ApplyAccountSkillTags();
 };
