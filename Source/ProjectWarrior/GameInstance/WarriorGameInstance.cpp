@@ -10,23 +10,6 @@ UWarriorGameInstance* UWarriorGameInstance::Get(const UObject* WorldContextObjec
 	return Cast<UWarriorGameInstance>(UGameplayStatics::GetGameInstance(WorldContextObject));
 }
 
-void UWarriorGameInstance::SelectStage(FName InStageId, int32 InDifficulty)
-{
-	const int32 NewDifficulty = FMath::Max(0, InDifficulty);
-	if (SelectedStageId == InStageId && SelectedDifficulty == NewDifficulty)
-	{
-		return;
-	}
-
-	SelectedStageId = InStageId;
-	SelectedDifficulty = NewDifficulty;
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[GameInstance] Stage selected: %s, Difficulty %d"),
-		*SelectedStageId.ToString(), SelectedDifficulty);
-
-	OnStageSelectionChanged.Broadcast(SelectedStageId, SelectedDifficulty);
-}
-
 void UWarriorGameInstance::Init()
 {
 	Super::Init();
