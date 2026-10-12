@@ -13,6 +13,8 @@
 #include "WebSocketsModule.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
+#include "ProjectWarrior/Network/WarriorApiSubsystem.h"
+#include "ProjectWarrior/Network/WarriorErrorText.h"
 
 #define LOCTEXT_NAMESPACE "WarriorAuth"
 
@@ -59,7 +61,7 @@ void UWarriorAuthSubsystem::Deinitialize()
 
 bool UWarriorAuthSubsystem::SendPost(const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone)
 {
-	return SendRequest(TEXT("POST"), InPath, InJsonBody, bWithAuth, MoveTemp(OnDone));
+	return SendHttp(TEXT("POST"), InPath, InJsonBody, bWithAuth, MoveTemp(OnDone));
 }
 
 bool UWarriorAuthSubsystem::SendAuthorized(const FString& InVerb, const FString& InPath, const FString& InJsonBody, TFunction<void(int32, const FString&)>&& OnDone)
@@ -70,20 +72,41 @@ bool UWarriorAuthSubsystem::SendAuthorized(const FString& InVerb, const FString&
 		return false;
 	}
 
+	//한 번 보내고 끝(자동 재시도 없음). 이 함수를 쓰는 모듈(스테이지 목록·시작, 스탯 투자 등)의 동작을 S5가 바꾸지 않도록 그대로 둔다.
+	//자동 재시도·보관이 필요하면 각 모듈이 UWarriorApiSubsystem::Send로 옮긴다(S5 병합 뒤 담당자가 고름).
 	//401 처리는 접속 점검과 같은 규칙: 보낼 때의 세션이 아직 이어질 때만 로그인 상태를 끝낸다
 	const int32 SentSessionSerial = SessionSerial;
-	return SendRequest(InVerb, InPath, InJsonBody, true,
+	return SendHttp(InVerb, InPath, InJsonBody, true,
 		[this, SentSessionSerial, OnDone = MoveTemp(OnDone)](int32 Status, const FString& Body)
 		{
-			if (Status == 401 && SentSessionSerial == SessionSerial)
+			if (Status == 401)
 			{
-				HandleAuthFailure(Status, ParseApiError(Status, Body));
+				NotifyUnauthorized(ParseApiError(Status, Body), SentSessionSerial);
 			}
 			OnDone(Status, Body);
 		});
 }
 
-bool UWarriorAuthSubsystem::SendRequest(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone)
+void UWarriorAuthSubsystem::NotifyUnauthorized(const FWarriorApiError& InError, int32 InSentSessionSerial)
+{
+	//접속 점검과 같은 규칙: 보낼 때의 세션이 아직 이어질 때만 로그인 상태를 끝낸다
+	if (InSentSessionSerial == SessionSerial)
+	{
+		HandleAuthFailure(401, InError);
+	}
+}
+
+void UWarriorAuthSubsystem::ApplyServerAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot)
+{
+	if (!bLoggedIn || InSnapshot.AccountId != Account.AccountId)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Server account snapshot ignored (not logged in or another account)."));
+		return;
+	}
+	ApplyAccountSnapshot(InSnapshot);
+}
+
+bool UWarriorAuthSubsystem::SendHttp(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone, float InTimeoutSeconds)
 {
 	const FString Url = BaseUrl + InPath;
 
@@ -98,7 +121,7 @@ bool UWarriorAuthSubsystem::SendRequest(const FString& InVerb, const FString& In
 	Request->SetURL(Url);
 	Request->SetVerb(InVerb);
 	Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
-	Request->SetTimeout(RequestTimeoutSeconds);
+	Request->SetTimeout(InTimeoutSeconds > 0.f ? InTimeoutSeconds : RequestTimeoutSeconds);
 
 	//본문이 없는 요청(A4·A5)에는 Content-Type을 붙이지 않는다
 	if (!InJsonBody.IsEmpty())
@@ -133,32 +156,7 @@ bool UWarriorAuthSubsystem::SendRequest(const FString& InVerb, const FString& In
 
 FWarriorApiError UWarriorAuthSubsystem::ParseApiError(int32 InStatus, const FString& InBody)
 {
-	FWarriorApiError Error;
-	if (InStatus == 0)
-	{
-		Error.Code = TEXT("NETWORK_ERROR");
-		Error.Retryable = true;
-	}
-	else if (!FJsonObjectConverter::JsonObjectStringToUStruct(InBody, &Error) || Error.Code.IsEmpty())
-	{
-		Error.Code = FString::Printf(TEXT("HTTP_%d"), InStatus);
-	}
-
-	return Error;
-}
-
-FText UWarriorAuthSubsystem::CommonErrorToText(const FString& InCode, int32 InStatus)
-{
-	if (InCode == TEXT("SERVICE_UNAVAILABLE") || InCode == TEXT("INTERNAL_ERROR") || InStatus >= 500)
-	{
-		return LOCTEXT("ServerBusy", "서버가 잠시 응답하지 않습니다. 잠시 뒤 다시 시도해 주세요.");
-	}
-	if (InCode == TEXT("NETWORK_ERROR"))
-	{
-		return LOCTEXT("Network", "서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.");
-	}
-
-	return FText::GetEmpty();
+	return UWarriorApiSubsystem::ParseError(InStatus, InBody);
 }
 
 //~ End 공통 HTTP
@@ -288,14 +286,6 @@ void UWarriorAuthSubsystem::HandleSignupResponse(int32 Status, const FString& Bo
 
 FText UWarriorAuthSubsystem::SignupErrorToText(const FWarriorApiError& InError, int32 InStatus)
 {
-	if (InError.Code == TEXT("ACCOUNT_LOGIN_ID_DUPLICATED"))
-	{
-		return LOCTEXT("SignupLoginIdDuplicated", "이미 사용 중인 아이디입니다.");
-	}
-	if (InError.Code == TEXT("ACCOUNT_NICKNAME_DUPLICATED"))
-	{
-		return LOCTEXT("SignupNicknameDuplicated", "이미 사용 중인 닉네임입니다.");
-	}
 	if (InError.Code == TEXT("VALIDATION_FAILED"))
 	{
 		//명세 제안: 칸별 오류(errors[].message)를 보여 준다. 지금은 문구 칸이 하나라 줄을 바꿔 모두 보여 준다
@@ -307,19 +297,16 @@ FText UWarriorAuthSubsystem::SignupErrorToText(const FWarriorApiError& InError, 
 				Lines.Add(FieldError.Message);
 			}
 		}
-		return Lines.Num() > 0
-			? FText::FromString(FString::Join(Lines, TEXT("\n")))
-			: LOCTEXT("SignupValidation", "입력한 값을 다시 확인해 주세요.");
+		if (Lines.Num() > 0)
+		{
+			return FText::FromString(FString::Join(Lines, TEXT("\n")));
+		}
 	}
 
-	const FText CommonText = CommonErrorToText(InError.Code, InStatus);
-	if (!CommonText.IsEmpty())
-	{
-		return CommonText;
-	}
-
-	//INVALID_REQUEST_BODY, 모르는 코드
-	return LOCTEXT("SignupUnknown", "가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+	//나머지(중복·서버 장애·연결 실패·모르는 코드)는 문구 표에서 고른다
+	FWarriorApiError Error = InError;
+	Error.HttpStatus = InStatus;
+	return FWarriorErrorText::Resolve(Error, WarriorErrorContext::Signup).Text;
 }
 
 //~ End 회원가입
@@ -494,33 +481,30 @@ void UWarriorAuthSubsystem::ApplyAccountSnapshot(const FWarriorAccountSnapshotDt
 
 FText UWarriorAuthSubsystem::LoginErrorToText(const FString& InCode, int32 InStatus, int32 InRetryAfterSeconds)
 {
-	if (InCode == TEXT("AUTH_INVALID_CREDENTIALS") || InStatus == 401)
+	//로그인의 401·429·403은 본문을 못 읽어도 뜻이 하나다
+	FWarriorApiError Error;
+	Error.Code = InCode;
+	Error.HttpStatus = InStatus;
+	if (InStatus == 401)
 	{
-		return LOCTEXT("LoginInvalidCredentials", "아이디 또는 비밀번호가 맞지 않습니다.");
+		Error.Code = TEXT("AUTH_INVALID_CREDENTIALS");
 	}
-	if (InCode == TEXT("AUTH_LOGIN_LOCKED") || InStatus == 429)
+	else if (InStatus == 429)
 	{
-		return InRetryAfterSeconds > 0
-			? FText::Format(LOCTEXT("LoginLockedSeconds", "로그인 시도가 너무 많습니다. {0}초 뒤 다시 시도해 주세요."), InRetryAfterSeconds)
-			: LOCTEXT("LoginLocked", "로그인 시도가 너무 많습니다. 잠시 뒤 다시 시도해 주세요.");
+		Error.Code = TEXT("AUTH_LOGIN_LOCKED");
 	}
-	if (InCode == TEXT("ACCOUNT_SUSPENDED") || InStatus == 403)
+	else if (InStatus == 403)
 	{
-		return LOCTEXT("LoginSuspended", "이용이 제한된 계정입니다.");
-	}
-	if (InCode == TEXT("VALIDATION_FAILED"))
-	{
-		return LOCTEXT("LoginValidation", "아이디와 비밀번호를 입력해 주세요.");
+		Error.Code = TEXT("ACCOUNT_SUSPENDED");
 	}
 
-	const FText CommonText = CommonErrorToText(InCode, InStatus);
-	if (!CommonText.IsEmpty())
+	//잠김은 남은 초가 있으면 숫자를 넣은 문구(숫자가 들어가는 변형은 부르는 쪽에서 만든다)
+	if (Error.Code == TEXT("AUTH_LOGIN_LOCKED") && InRetryAfterSeconds > 0)
 	{
-		return CommonText;
+		return FText::Format(LOCTEXT("LoginLockedSeconds", "로그인 시도가 너무 많습니다. {0}초 뒤 다시 시도해 주세요."), InRetryAfterSeconds);
 	}
 
-	//INVALID_REQUEST_BODY, INVALID_RESPONSE, 모르는 코드
-	return LOCTEXT("LoginUnknown", "로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+	return FWarriorErrorText::Resolve(Error, WarriorErrorContext::Login).Text;
 }
 
 //~ End 로그인
@@ -606,17 +590,18 @@ bool UWarriorAuthSubsystem::ConsumePendingSessionEnd(EWarriorSessionEndReason& O
 
 FText UWarriorAuthSubsystem::SessionEndToText(EWarriorSessionEndReason InReason)
 {
+	//문구는 문구 표(FWarriorErrorText)의 401 코드 줄을 쓴다
 	switch (InReason)
 	{
 	case EWarriorSessionEndReason::Expired:
-		//만료·제재로 끊김이 같은 코드로 오므로 둘 다에 맞는 문장을 쓴다
-		return LOCTEXT("SessionExpired", "접속이 종료되었습니다. 다시 로그인해 주세요.");
+		//만료·제재로 끊김이 같은 코드로 오므로 둘 다에 맞는 문장이다
+		return FWarriorErrorText::GetText(TEXT("AUTH_SESSION_NOT_FOUND"));
 	case EWarriorSessionEndReason::Replaced:
-		return LOCTEXT("SessionReplaced", "다른 곳에서 같은 계정으로 로그인하여 접속이 종료되었습니다.");
+		return FWarriorErrorText::GetText(TEXT("AUTH_SESSION_REPLACED"));
 	case EWarriorSessionEndReason::InvalidToken:
-		return LOCTEXT("SessionInvalidToken", "로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.");
+		return FWarriorErrorText::GetText(TEXT("AUTH_TOKEN_INVALID"));
 	case EWarriorSessionEndReason::ConnectionLost:
-		return LOCTEXT("SessionConnectionLost", "서버와 연결이 끊어졌습니다. 다시 로그인해 주세요.");
+		return FWarriorErrorText::GetText(TEXT("SESSION_CONNECTION_LOST"));
 	default:
 		//LoggedOut은 플레이어가 직접 한 일이라 안내하지 않는다
 		return FText::GetEmpty();
