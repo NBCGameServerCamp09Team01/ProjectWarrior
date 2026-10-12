@@ -96,16 +96,6 @@ void UWarriorAuthSubsystem::NotifyUnauthorized(const FWarriorApiError& InError, 
 	}
 }
 
-void UWarriorAuthSubsystem::ApplyServerAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot)
-{
-	if (!bLoggedIn || InSnapshot.AccountId != Account.AccountId)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Server account snapshot ignored (not logged in or another account)."));
-		return;
-	}
-	ApplyAccountSnapshot(InSnapshot);
-}
-
 bool UWarriorAuthSubsystem::SendHttp(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone, float InTimeoutSeconds)
 {
 	const FString Url = BaseUrl + InPath;

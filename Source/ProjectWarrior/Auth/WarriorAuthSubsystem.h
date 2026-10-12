@@ -83,9 +83,6 @@ public:
 
 	//인증 요청이 401을 받았다. 보낼 때의 세션(InSentSessionSerial)이 아직 이어질 때만 코드로 이유를 골라 로그인 상태를 끝낸다
 	void NotifyUnauthorized(const FWarriorApiError& InError, int32 InSentSessionSerial);
-
-	//서버가 돌려준 계정 스냅샷(결과 제출 응답의 account 등)을 적용한다. 로그인하지 않았으면 무시한다
-	void ApplyServerAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot);
 	//~ End UWarriorApiSubsystem이 쓰는 함수
 
 	UFUNCTION(BlueprintPure, Category = "Warrior|Auth")

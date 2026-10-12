@@ -582,12 +582,14 @@ void UWarriorApiSubsystem::ResendNext()
 			FWarriorPendingRequestStore::Remove(This->ResendAccountId, Entry.RequestId);
 			++This->ResendSent;
 
-			//결과 제출처럼 응답에 계정 값이 있으면 메인메뉴 값을 새로 맞춘다
+			//결과 제출처럼 응답에 계정 값이 있으면 메인메뉴 값을 새로 맞춘다.
+			//응답이 오는 사이 로그아웃·다른 계정 로그인이 있었으면 적용하지 않는다(그 계정의 값이 아니다)
 			FWarriorAccountSnapshotDto Snapshot;
 			UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(This);
-			if (Auth && WarriorApi::ReadAccountSnapshot(Result.Body, Snapshot))
+			if (Auth && Auth->IsLoggedIn() && Auth->GetSessionSerial() == This->ResendSessionSerial
+				&& WarriorApi::ReadAccountSnapshot(Result.Body, Snapshot) && Snapshot.AccountId == This->ResendAccountId)
 			{
-				Auth->ApplyServerAccountSnapshot(Snapshot);
+				Auth->ApplyAccountSnapshot(Snapshot);
 			}
 		}
 		else if (Result.HttpStatus == 401)
