@@ -7,6 +7,8 @@
 #include "WarriorSkillLibrary.generated.h"
 
 class UDataAsset_SkillTree;
+struct FWarriorServerSkillView;
+struct FWarriorServerSkillRequirement;
 
 /**
  * 스킬 평가에 쓰는 입력 값 모음.
@@ -32,9 +34,11 @@ struct PROJECTWARRIOR_API FWarriorSkillEvalContext
 };
 
 /**
- * 스킬 조건 평가와 해금 요청 (SK).
+ * 스킬 조건 평가 (SK).
  * - 평가 함수는 입력(FWarriorSkillEvalContext)만 보고 계산한다. 상태를 저장하지 않는다.
- * - 해금은 계정(UWarriorAccountSubsystem::UnlockSkill)에 맡긴다. 스탯 포인트 차감·해금 기록은 계정이 한다.
+ * - 로그인 상태에서는 서버가 판정한 진행도(K2, UWarriorSkillUnlockSubsystem)로 상태·진행도를 덮어쓴다(ApplyServerProgress).
+ *   DA는 이름·설명·아이콘·조건 문구를 주고, 판정 값은 서버가 준다(S4, 루트 docs/contracts/skill-api.md).
+ * - 해금은 서버만 한다(UWarriorSkillUnlockSubsystem). 로컬 해금 길은 없다.
  */
 UCLASS()
 class PROJECTWARRIOR_API UWarriorSkillLibrary : public UBlueprintFunctionLibrary
@@ -63,8 +67,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Skill", meta = (WorldContext = "WorldContextObject"))
 	static TArray<FWarriorSkillView> BuildSkillViews(const UObject* WorldContextObject, const UDataAsset_SkillTree* SkillTree);
 
-	//~ 해금
-	/** 다시 평가해서 Unlockable일 때만 계정에 해금을 요청한다. 성공하면 true */
-	UFUNCTION(BlueprintCallable, Category = "Warrior|Skill", meta = (WorldContext = "WorldContextObject"))
-	static bool TryUnlockSkill(const UObject* WorldContextObject, const UDataAsset_SkillTree* SkillTree, FGameplayTag SkillTag);
+	//~ 서버 진행도
+	/**
+	 * 서버가 판정한 스킬 상태·진행도로 화면 값을 덮어쓴다. DA의 조건마다 같은 종류의 서버 조건 값을 쓴다.
+	 * 서버에 없는 스킬(DA에만 있음)은 해금할 수 없으므로 잠금으로 둔다. 서버가 판정하지 않는 DA 조건은 로컬 값 그대로다
+	 */
+	static void ApplyServerProgress(TArray<FWarriorSkillView>& Views, const TArray<FWarriorServerSkillView>& ServerSkills);
+
+	/** 서버 조건 목록 하나를 화면 값 하나에 덮어쓴다(진행도·선행 스킬). 상태는 바꾸지 않는다 */
+	static void ApplyServerRequirements(FWarriorSkillView& View, const TArray<FWarriorServerSkillRequirement>& Requirements);
 };

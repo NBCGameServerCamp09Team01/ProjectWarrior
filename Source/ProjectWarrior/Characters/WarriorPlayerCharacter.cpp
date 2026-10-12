@@ -94,6 +94,7 @@ void AWarriorPlayerCharacter::PossessedBy(AController* NewController)
 
     // 스타트업 GE로 기본값이 잡힌 뒤에 계정 보너스를 추가.
     ApplyAccountStatBonuses();
+    ApplyAccountSkillTags();
 }
 
 void AWarriorPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -282,6 +283,20 @@ void AWarriorPlayerCharacter::DebugAddGold(int32 InAmount)
         Inventory->AddGold(InAmount);
         UE_LOG(LogTemp, Log, TEXT("DebugAddGold: +%d -> %d"), InAmount, Inventory->GetGold());
     }
+}
+
+void AWarriorPlayerCharacter::ApplyAccountSkillTags()
+{
+    const UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this);
+    if (!Account || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+
+    // 해금은 메인메뉴에서만 하고 스테이지마다 캐릭터가 새로 생기므로, 들어올 때 한 번 붙이면 된다
+    const FGameplayTagContainer& UnlockedSkills = Account->GetAccountData().UnlockedSkills;
+    WarriorAbilitySystemComponent->AddLooseGameplayTags(UnlockedSkills);
+    UE_LOG(LogTemp, Log, TEXT("[Skill] Applied unlocked skill tags: %s"), *UnlockedSkills.ToStringSimple());
 }
 
 void AWarriorPlayerCharacter::ApplyAccountStatBonuses()

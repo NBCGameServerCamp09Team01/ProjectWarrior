@@ -16,8 +16,10 @@ class UWarriorSkillEntryWidget;
 /**
  * 스킬 화면의 베이스 (SK).
  * - 열릴 때와 계정 값이 바뀔 때(해금, 레벨 업 등) 스킬 목록을 다시 평가해 BP_OnSkillsRefreshed로 넘긴다.
+ * - 로그인 상태면 열릴 때 서버 진행도(K2)를 받아 그 값으로 그린다(S4). 받기 전·로그인 전에는 DA + 로컬 통계로 그린다.
  * - SkillList와 EntryWidgetClass가 있으면 스킬마다 줄 위젯을 만들어 채운다. BP 그래프 없이 목록이 나온다.
- * - 버튼은 RequestUnlock / RequestBack만 부른다. 해금 판단과 포인트 차감은 UWarriorSkillLibrary와 계정이 한다.
+ * - 버튼은 RequestUnlock / RequestBack만 부른다. 해금 판단과 포인트 차감은 서버가 한다(UWarriorSkillUnlockSubsystem).
+ * - 해금 결과 문구는 Text_Message(있으면)와 BP_OnUnlockFinished로 알린다. 응답을 기다리는 동안 해금 버튼은 꺼진다(IsUnlocking).
  * - 화면 배치는 WBP에서 한다. 지금은 목록 틀, 디자인 단계에서 트리로 바꿔도 넘기는 값은 같다.
  */
 UCLASS(Abstract)
@@ -28,9 +30,13 @@ class PROJECTWARRIOR_API UWarriorSkillWidget : public UUserWidget
 public:
 	UWarriorSkillWidget(const FObjectInitializer& ObjectInitializer);
 
-	/** 스킬 하나 해금 요청. 성공하면 계정 변경 알림으로 화면이 갱신된다. 실패하면 false */
+	/** 스킬 하나 해금 요청(서버). 요청을 보냈으면 true(결과는 BP_OnUnlockFinished). 이미 기다리는 중이면 false */
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Skill")
 	bool RequestUnlock(FGameplayTag SkillTag);
+
+	/** 해금 요청을 보내고 응답을 기다리는 중 */
+	UFUNCTION(BlueprintPure, Category = "Warrior|Skill")
+	bool IsUnlocking() const;
 
 	/** 메인메뉴로 돌아간다 */
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Skill")
@@ -74,12 +80,22 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Skill")
 	void BP_OnSkillsRefreshed(const TArray<FWarriorSkillView>& Views, int32 AccountLevel, int32 StatPoints);
 
-	/** 해금 요청이 거절됐을 때 (상태가 바뀌었거나 계정에 등록되지 않은 스킬). 안내 문구를 띄울 때 쓴다 */
+	/** 해금 요청이 거절됐을 때 (조건 미충족·이미 해금·로그인 필요 등). 안내 문구를 띄울 때 쓴다 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Skill")
 	void BP_OnUnlockFailed(FGameplayTag SkillTag);
 
+	/** 해금 요청이 끝났을 때(성공·실패). 실패면 Message에 화면 문구, 성공이면 빈 문구 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Skill")
+	void BP_OnUnlockFinished(FGameplayTag SkillTag, bool bSuccess, const FText& Message);
+
 	UFUNCTION()
 	void HandleAccountChanged(const FWarriorAccountData& InAccountData);
+
+	UFUNCTION()
+	void HandleUnlockCompleted(bool bSuccess, FGameplayTag SkillTag, const FString& ErrorCode, const FText& Message);
+
+	UFUNCTION()
+	void HandleSkillsReceived(bool bSuccess);
 
 	UFUNCTION()
 	void HandleBackButtonClicked();
@@ -109,6 +125,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Back;
+
+	//해금 결과 문구("해금했습니다." / 실패 문구)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_Message;
 	//~ End 없어도 되는 위젯
 
 	//{0} 계정 레벨
@@ -118,6 +138,10 @@ protected:
 	//{0} 남은 스탯 포인트
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Skill|Text")
 	FText StatPointsFormat;
+
+	//해금 성공 문구
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Skill|Text")
+	FText UnlockSucceededText;
 
 private:
 	UPROPERTY(Transient)
