@@ -371,7 +371,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_PeriodWeekly;
 
-	//점수 설명 한 줄
+	//점수 설명 한 줄. 지금 탭의 문구(TotalMeta·RegionMeta)가 비어 있으면 접힌다
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_Meta;
 

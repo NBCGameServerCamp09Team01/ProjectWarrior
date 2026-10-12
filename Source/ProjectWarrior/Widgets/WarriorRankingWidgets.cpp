@@ -465,7 +465,8 @@ UWarriorRankingPopupWidget::UWarriorRankingPopupWidget(const FObjectInitializer&
 {
 	TotalTitle = LOCTEXT("TotalTitle", "랭킹 · 전체 총합");
 	RegionTitle = LOCTEXT("RegionTitle", "랭킹 · 지역 총합");
-	TotalMeta = LOCTEXT("TotalMeta", "전체 총합 = 모든 지역 스테이지마다 내 최고 점수의 합 · 같으면 먼저 달성한 사람이 위");
+	//전체 총합 탭은 설명 문구 없음(10/12 Sang 결정). 비어 있으면 Text_Meta를 접는다
+	TotalMeta = FText::GetEmpty();
 	RegionMeta = LOCTEXT("RegionMeta", "지역 총합 = 그 지역 스테이지마다 내 최고 점수의 합 · 같으면 먼저 달성한 사람이 위");
 	//"더 보기" 버튼 대신 스크롤 자동 받기
 	bAllowMore = false;
@@ -720,11 +721,14 @@ void UWarriorRankingPopupWidget::FillRegions()
 void UWarriorRankingPopupWidget::RequestCurrent()
 {
 	WarriorRankingView::SetText(Text_Title, bTotalTab ? TotalTitle : RegionTitle);
-	WarriorRankingView::SetText(Text_Meta, bTotalTab ? TotalMeta : RegionMeta);
+	//설명 문구가 비어 있으면 줄째 접는다(전체 총합은 문구 없음)
+	const FText& Meta = bTotalTab ? TotalMeta : RegionMeta;
+	WarriorRankingView::SetText(Text_Meta, Meta);
+	WarriorRankingView::SetShown(Text_Meta, !Meta.IsEmpty());
 	if (ComboBox_Region)
 	{
-		//지역 총합 탭에서만, 지역이 둘 이상일 때만 고르기를 보인다
-		ComboBox_Region->SetVisibility(!bTotalTab && RegionIds.Num() > 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		//지역 총합 탭에서만 고르기를 보인다(지역이 하나여도 지금 어느 지역인지 보이게)
+		ComboBox_Region->SetVisibility(!bTotalTab && RegionIds.Num() > 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	}
 	BP_OnTabSet(bTotalTab, Period);
 
