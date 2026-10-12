@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "WarriorGameMode.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
+#include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "WarriorStageGameMode.generated.h"
 
 class AWarriorStageFlowManager;
@@ -65,6 +66,8 @@ protected:
 	//~ End AActor Interface
 
 	//~ Begin AGameModeBase Interface.
+	//레벨 액터의 BeginPlay보다 먼저 불린다. 여기서 이 판의 스테이지를 정한다(FlowManager가 GameMode보다 먼저 등록될 수 있음).
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual void RestartPlayer(AController* NewPlayer) override;
 	//~ End AGameModeBase Interface
 
@@ -84,7 +87,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage", meta = (ClampMin = "0.0"))
 	float RestTime = 20.f;
 
-	//결과에 기록되는 스테이지 식별자. 비어 있으면 레벨 이름을 쓴다.
+	//선택 화면을 거치지 않고 이 레벨을 열었을 때 쓸 스테이지 키(서버 stageId, 예: stage.01.01).
+	//비어 있으면 스테이지 목록에서 이 레벨의 첫 스테이지, 그것도 없으면 레벨 이름을 쓴다.
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
 	FName StageId;
 
@@ -111,7 +115,16 @@ private:
 	//한 판 끝. 결과를 확정해 GameState에 넘긴다. 끝 상태로 바뀌기 직전에 한 번 호출된다.
 	void FinishRun(bool bInCleared);
 
-	FName GetResolvedStageId() const;
+	//이 판의 스테이지를 정한다. 순서: 선택 화면의 실행 정보 → StageId 칸 → 목록에서 이 레벨의 첫 스테이지 → 레벨 이름
+	void ResolveStageLaunch();
+
+	//목록에 웨이브가 있으면 FlowManager의 웨이브를 바꾼다. 첫 웨이브 전에 불러야 한다.
+	void ApplyStageWaveData(AWarriorStageFlowManager* InFlowManager) const;
+
+	//InitGame에서 정한 스테이지 키. 판 끝까지 바뀌지 않는다.
+	FName GetResolvedStageId() const { return ResolvedLaunchInfo.StageId; }
+
+	FWarriorStageLaunchInfo ResolvedLaunchInfo;
 
 	TWeakObjectPtr<AWarriorStageFlowManager> StageFlowManager;
 
