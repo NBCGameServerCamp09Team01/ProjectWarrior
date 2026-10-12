@@ -104,12 +104,31 @@ void AWarriorStageFlowManager::StopAll()
 
 int32 AWarriorStageFlowManager::GetTotalWaveCount() const
 {
-	if (bUseDebugWaves)
+	//디버그 웨이브도 DataAsset이 있으면 그 수만큼 돈다. 서버는 DataAsset과 같은 waveCount로 결과를 검사한다.
+	if (IsValid(StageWaveData))
 	{
-		return DebugWaveCount;
+		return StageWaveData->GetWaveCount();
 	}
 
-	return IsValid(StageWaveData) ? StageWaveData->GetWaveCount() : 0;
+	return bUseDebugWaves ? DebugWaveCount : 0;
+}
+
+void AWarriorStageFlowManager::SetStageWaveData(UWarriorStageWaveDataAsset* InStageWaveData)
+{
+	if (!IsValid(InStageWaveData) || InStageWaveData == StageWaveData)
+	{
+		return;
+	}
+
+	if (ActiveWaveNumber > 0 || LastClearedWaveNumber > 0)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] %s: wave data %s ignored. Waves have already started."), *GetName(), *InStageWaveData->GetName());
+		return;
+	}
+
+	StageWaveData = InStageWaveData;
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] %s uses wave data %s (%d waves)"), *GetName(), *StageWaveData->GetName(), StageWaveData->GetWaveCount());
 }
 
 bool AWarriorStageFlowManager::IsLastWave(int32 InWaveIndex) const
@@ -119,7 +138,7 @@ bool AWarriorStageFlowManager::IsLastWave(int32 InWaveIndex) const
 
 bool AWarriorStageFlowManager::IsBossWave(int32 InWaveIndex) const
 {
-	if (bUseDebugWaves)
+	if (bUseDebugWaves && !IsValid(StageWaveData))
 	{
 		return InWaveIndex == DebugWaveCount - 1;
 	}
