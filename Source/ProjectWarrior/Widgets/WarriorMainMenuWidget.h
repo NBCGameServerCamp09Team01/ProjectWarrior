@@ -37,6 +37,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void RequestOpenSkill();
 
+	//랭킹 팝업을 연다. 소유 컨트롤러의 OpenRanking을 호출한다(랭킹 M7)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void RequestOpenRanking();
+
 protected:
 	//~ Begin UUserWidget Interface.
 	virtual void NativeConstruct() override;
@@ -54,6 +58,9 @@ protected:
 
 	UFUNCTION()
 	void HandleSkillButtonClicked();
+
+	UFUNCTION()
+	void HandleRankingButtonClicked();
 
 	//소유 컨트롤러의 Logout을 부른다. 화면 이동은 컨트롤러가 OnSessionEnded를 받아 한다
 	UFUNCTION()
@@ -77,6 +84,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Skill;
+
+	//스킬과 로그아웃 사이(랭킹 M7)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Ranking;
 
 	//"OOO 영웅님, 환영합니다."
 	UPROPERTY(meta = (BindWidgetOptional))

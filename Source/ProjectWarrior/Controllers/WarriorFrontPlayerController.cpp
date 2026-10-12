@@ -13,6 +13,7 @@
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
+#include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 #include "ProjectWarrior/Widgets/WarriorStageSelectWidgets.h"
 
 namespace
@@ -24,6 +25,8 @@ namespace
 	const int32 ReconnectIndicatorZOrder = 40;
 	//화면 위젯(0)보다 위, 안내 팝업보다 아래
 	const int32 StageSelectPopupZOrder = 20;
+	//메인메뉴 랭킹 팝업(스테이지 선택 팝업과 같은 층, 둘이 함께 뜨지 않음)
+	const int32 RankingPopupZOrder = 20;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -292,6 +295,45 @@ void AWarriorFrontPlayerController::OpenStageSelect()
 	FocusTopWidget();
 }
 
+void AWarriorFrontPlayerController::OpenRanking()
+{
+	if (!RankingPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] RankingPopupClass is not set. Ranking is not opened."));
+		return;
+	}
+
+	if (!RankingPopup)
+	{
+		RankingPopup = CreateWidget<UWarriorRankingPopupWidget>(this, RankingPopupClass);
+		if (!RankingPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create ranking popup."));
+			return;
+		}
+
+		RankingPopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleRankingClosed);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(RankingPopup);
+		}
+	}
+
+	if (!RankingPopup->IsInViewport())
+	{
+		RankingPopup->AddToViewport(RankingPopupZOrder);
+	}
+
+	RankingPopup->Open();
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::HandleRankingClosed()
+{
+	FocusTopWidget();
+}
+
 void AWarriorFrontPlayerController::EnterStage(FName InStageId)
 {
 	//열린 스테이지만 들어간다. 판정은 서버 status(목록 서브시스템이 받은 값)
@@ -428,6 +470,10 @@ void AWarriorFrontPlayerController::FocusTopWidget()
 	else if (StageSelectPopup && StageSelectPopup->IsInViewport())
 	{
 		FocusWidget = StageSelectPopup;
+	}
+	else if (RankingPopup && RankingPopup->IsInViewport())
+	{
+		FocusWidget = RankingPopup;
 	}
 	else
 	{
