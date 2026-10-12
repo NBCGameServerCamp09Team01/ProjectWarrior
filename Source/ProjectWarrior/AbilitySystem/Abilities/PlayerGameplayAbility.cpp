@@ -109,15 +109,25 @@ bool UPlayerGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle
 		return false;
 	}
 
-	// 회피 숙련(S4): 설정이 켜져 있으면 회피는 해금 태그가 있어야 나간다(시연용. 끄면 예전처럼 늘 나감)
-	if (GetDefault<UWarriorSkillEffectSettings>()->bDodgeRequiresDodgeMastery
-		&& GetAssetTags().HasTagExact(WarriorGameplayTags::Player_Ability_Dodge))
+	// 해금해야 나가는 능력(S4 시연용): 설정이 켜져 있고 이 능력이 그 능력이면, 계정 해금 태그가 있어야 나간다.
+	// 끄면 예전처럼 늘 나간다. GA .uasset은 고치지 않는다(능력 태그로 가린다)
+	const UWarriorSkillEffectSettings* Settings = GetDefault<UWarriorSkillEffectSettings>();
+	const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	const FGameplayTagContainer& OwnAssetTags = GetAssetTags();
+	auto IsLocked = [&OwnAssetTags, ASC](bool bEnabled, const FGameplayTag& AbilityTag, const FGameplayTag& SkillTag)
 	{
-		const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
-		if (!ASC || !ASC->HasMatchingGameplayTag(WarriorAccountTags::Account_Skill_DodgeMastery))
-		{
-			return false;
-		}
+		return bEnabled && OwnAssetTags.HasTagExact(AbilityTag) && (!ASC || !ASC->HasMatchingGameplayTag(SkillTag));
+	};
+
+	// 회피 숙련: 회피(더블 탭 스텝)
+	if (IsLocked(Settings->bDodgeRequiresDodgeMastery, WarriorGameplayTags::Player_Ability_Dodge, WarriorAccountTags::Account_Skill_DodgeMastery))
+	{
+		return false;
+	}
+	// 콤보 4타: 약공격 4타(GA_Katana_LightAttack_04). 해금 전에는 3타에서 콤보가 끝난다
+	if (IsLocked(Settings->bCombo4RequiresUnlock, WarriorGameplayTags::Player_Ability_Attack_Katana_Light_4, WarriorAccountTags::Account_Skill_Combo4))
+	{
+		return false;
 	}
 	return true;
 }
