@@ -30,7 +30,7 @@ struct FWarriorAccountStatBonus
  * - 스테이지가 끝나면 통계 서브시스템이 기록을 확정하고 OnStageRecorded를 방송한다.
  *   이 서브시스템이 그것을 받아 경험치를 주고, 경험치가 차면 레벨을 올리며 오른 레벨마다 스탯 포인트를 준다.
  *   스탯 포인트는 레벨 업으로만 생긴다(클리어·실패가 직접 주지 않는다).
- * - 메인메뉴의 성장 화면이 InvestStatPoint·UnlockSkill을 호출한다.
+ * - 메인메뉴의 성장 화면이 UnlockSkill을 호출한다. 스탯 투자는 UWarriorStatInvestSubsystem이 서버로 보낸다(S3).
  * - 스테이지 시작 때 캐릭터가 BuildStatBonuses로 투자 내역을 읽어 GAS에 적용한다(적용은 성장 담당).
  *
  * 서버 연동 전략(2주차)
@@ -123,9 +123,8 @@ public:
 	bool GetLastStageReward(FWarriorStageReward& OutReward) const;
 
 	//~ 변경 (성장 화면)
-	//스탯 포인트를 투자한다. 포인트가 모자라거나 최대치를 넘으면 false
-	UFUNCTION(BlueprintCallable, Category = "Warrior|Account")
-	bool InvestStatPoint(FGameplayTag StatTag, int32 Points = 1);
+	//스탯 투자는 여기서 하지 않는다. UWarriorStatInvestSubsystem이 서버에 보내고, 응답 계정 값이 ApplyServerSnapshot으로 들어온다(S3).
+	//로컬 투자 길은 없다(d 10/12: 서버가 최종 기준, 시험할 때도 서버를 켠다)
 
 	//스킬을 해금한다. 이미 해금했거나 포인트가 모자라면 false
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Account")
@@ -152,7 +151,6 @@ public:
 	int64 GetExternalCurrency(FName InCurrency) const;
 
 	//서버가 알려 준 외부 재화 잔액을 반영한다. 변경 내역에도 남긴다.
-	//TODO(server): 스탯 투자에 외부 재화를 쓰는 기획이 확정되면, InvestStatPoint를 "서버에 투자 요청 → 응답 스냅샷 적용"으로 바꾼다.
 	void SetExternalCurrencyFromServer(FName InCurrency, int64 InBalance);
 
 	//~ 알림
