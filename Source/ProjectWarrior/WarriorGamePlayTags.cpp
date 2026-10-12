@@ -142,6 +142,24 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_SuperArmor, "AI.Status.Boss.SuperArmor");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Airborne, "AI.Status.Boss.Airborne");
 
+	/** Nonhumanoid monster tags (Megaspikan / Larvae / Larvae Stalker) **/
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_ClawLeft, "AI.Ability.Megaspikan.ClawLeft");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_ClawRight, "AI.Ability.Megaspikan.ClawRight");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SmashLeft, "AI.Ability.Megaspikan.SmashLeft");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SmashRight, "AI.Ability.Megaspikan.SmashRight");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SmashForward, "AI.Ability.Megaspikan.SmashForward");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_Spit, "AI.Ability.Megaspikan.Spit");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_BigSpit, "AI.Ability.Megaspikan.BigSpit");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SpawnLarvae, "AI.Ability.Megaspikan.SpawnLarvae");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Larvae_Bite, "AI.Ability.Larvae.Bite");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_LarvaeStalker_Bite, "AI.Ability.LarvaeStalker.Bite");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_LarvaeStalker_Pounce, "AI.Ability.LarvaeStalker.Pounce");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_LarvaeStalker_Burrow, "AI.Ability.LarvaeStalker.Burrow");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Megaspikan_SpawnLarvae, "AI.Event.Megaspikan.SpawnLarvae");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Burrowing, "AI.Status.Burrowing");
+
 	/** Shared tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact, "Shared.Ability.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact_Light, "Shared.Ability.HitReact.Light");

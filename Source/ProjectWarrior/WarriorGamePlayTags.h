@@ -161,6 +161,27 @@ namespace WarriorGameplayTags
 	// 도약 공중 구간 (이륙~착지). 이 동안에는 페이즈 전환 연출을 미룸
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_Airborne);
 
+	/** Nonhumanoid monster tags (Megaspikan / Larvae / Larvae Stalker) **/
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_ClawLeft);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_ClawRight);
+	// 근접 범위공격(내리찍기). 현재 BT/StartupData에서 빠져 있어 미사용
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_SmashLeft);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_SmashRight);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_SmashForward);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_Spit);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_BigSpit);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_SpawnLarvae);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Larvae_Bite);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_LarvaeStalker_Bite);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_LarvaeStalker_Pounce);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_LarvaeStalker_Burrow);
+
+	// 소환 몽타주 노티파이 -> 라바 소환 어빌리티: 소환 시점
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Megaspikan_SpawnLarvae);
+
+	// 땅파기 중. 이 태그를 가진 개체 수로 동시 땅파기 수를 제한
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Burrowing);
+
 	/** Shared tags **/
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Ability_HitReact);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Ability_HitReact_Light);
