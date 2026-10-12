@@ -63,6 +63,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestLogout();
 
+	//메인화면 값을 계정 데이터로 옮겨 적용한다. 스냅샷에 없는 칸(보상 기록·재화·누적 경험치)은 지금 값을 유지한다.
+	//version이 마지막으로 적용한 값보다 작으면 무시한다. 로그인 응답과, 계정 값을 바꾸는 요청의 응답 account(스탯 투자 등)가 같이 쓴다
+	void ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot);
+
 	//인증이 필요한 요청을 다른 서브시스템이 보낼 때 쓴다(예: 스테이지 플레이·결과). InVerb는 GET·POST.
 	//BaseUrl·토큰·제한 시간은 이 서브시스템 값을 그대로 쓰고, 토큰은 밖으로 내보내지 않는다.
 	//로그인하지 않았거나 요청을 시작하지 못하면 보내지 않고 false(OnDone은 부르지 않는다).
@@ -181,8 +185,6 @@ private:
 	//로그인 응답 처리. Status 0은 연결 실패(응답 없음)
 	void HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body);
 
-	//메인화면 값을 계정 데이터로 옮겨 적용한다. 스냅샷에 없는 칸(보상 기록·재화·누적 경험치)은 지금 값을 유지한다
-	void ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot);
 
 	//오류 코드(없으면 HTTP 상태)로 화면에 보여 줄 문장을 고른다. 서버 message는 개발 확인용이라 쓰지 않는다
 	//InRetryAfterSeconds는 429 잠김의 남은 초(없으면 0)
