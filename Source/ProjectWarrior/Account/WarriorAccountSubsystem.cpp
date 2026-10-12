@@ -122,41 +122,6 @@ bool UWarriorAccountSubsystem::GetLastStageReward(FWarriorStageReward& OutReward
 	return true;
 }
 
-bool UWarriorAccountSubsystem::InvestStatPoint(FGameplayTag StatTag, int32 Points)
-{
-	const FStatDefinition* Definition = FindStatDefinition(StatTag);
-	if (!Definition)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Invest ignored. %s is not an investable stat."), *StatTag.ToString());
-		return false;
-	}
-
-	if (Points <= 0 || Data.StatPoints < Points)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Invest rejected. Need %d points, have %d."), Points, Data.StatPoints);
-		return false;
-	}
-
-	const int32 Invested = GetInvestedPoints(StatTag);
-	if (Invested + Points > Definition->MaxPoints)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Invest rejected. %s is limited to %d points (now %d)."), *StatTag.ToString(), Definition->MaxPoints, Invested);
-		return false;
-	}
-
-	//TODO(server): 서버 연동 뒤에는 여기서 직접 바꾸지 않고 "투자 요청(스탯, 포인트, 요청 번호)"을 서버에 보낸다.
-	//서버가 판정해 돌려준 계정 데이터를 ApplyServerSnapshot으로 적용하면 된다. 아래 변경 내역의 EntryId가 요청 번호다.
-	Data.StatPoints -= Points;
-	Data.InvestedStats.Add(StatTag, Invested + Points);
-	AddLedgerEntry(EWarriorAccountLedgerType::StatInvest, StatPointName, -Points, StatTag);
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Invested %d in %s. Now %d (bonus %.1f), %d points left."),
-		Points, *StatTag.ToString(), Invested + Points, GetStatBonus(StatTag), Data.StatPoints);
-
-	BroadcastAccountChanged();
-	return true;
-}
-
 bool UWarriorAccountSubsystem::UnlockSkill(FGameplayTag SkillTag)
 {
 	const int32 Cost = GetSkillCost(SkillTag);
@@ -178,7 +143,7 @@ bool UWarriorAccountSubsystem::UnlockSkill(FGameplayTag SkillTag)
 		return false;
 	}
 
-	//TODO(server): InvestStatPoint와 같이, 서버 연동 뒤에는 서버에 요청하고 응답 스냅샷을 적용한다.
+	//TODO(server): S4에서 스탯 투자(UWarriorStatInvestSubsystem)와 같이, 서버에 요청하고 응답 스냅샷을 적용한다.
 	Data.StatPoints -= Cost;
 	Data.UnlockedSkills.AddTag(SkillTag);
 	AddLedgerEntry(EWarriorAccountLedgerType::SkillUnlock, StatPointName, -Cost, SkillTag);
