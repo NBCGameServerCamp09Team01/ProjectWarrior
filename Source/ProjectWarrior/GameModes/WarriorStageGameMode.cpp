@@ -4,6 +4,7 @@
 #include "WarriorStageGameMode.h"
 #include "WarriorStageGameState.h"
 #include "ProjectWarrior/Stage/WarriorStageFlowManager.h"
+#include "ProjectWarrior/Stage/WarriorStageWaveDataAsset.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_Initializing.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_Preparing.h"
 #include "ProjectWarrior/Stage/States/WarriorStageState_InProgress.h"
@@ -24,6 +25,13 @@
 AWarriorStageGameMode::AWarriorStageGameMode()
 {
 	GameStateClass = AWarriorStageGameState::StaticClass();
+}
+
+void AWarriorStageGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+
+	ResolveStageLaunch();
 }
 
 void AWarriorStageGameMode::BeginPlay()
@@ -103,6 +111,9 @@ void AWarriorStageGameMode::RegisterStageFlowManager(AWarriorStageFlowManager* I
 
 	StageFlowManager = InFlowManager;
 	InFlowManager->OnWaveCleared.AddUniqueDynamic(this, &ThisClass::HandleWaveCleared);
+
+	//웨이브 수를 GameState에 알리기 전에 이 스테이지의 웨이브로 바꾼다.
+	ApplyStageWaveData(InFlowManager);
 
 	if (AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>())
 	{
@@ -360,8 +371,72 @@ void AWarriorStageGameMode::FinishRun(bool bInCleared)
 	}
 }
 
-FName AWarriorStageGameMode::GetResolvedStageId() const
+void AWarriorStageGameMode::ResolveStageLaunch()
 {
-	return StageId.IsNone() ? FName(*UGameplayStatics::GetCurrentLevelName(this)) : StageId;
+	//PIE에서는 패키지 이름에 UEDPIE 접두사가 붙으므로 떼고 목록과 비교한다.
+	const FString LevelPackageName = UWorld::RemovePIEPrefix(GetWorld()->GetOutermost()->GetName());
+
+	const UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+	const TCHAR* Source = nullptr;
+
+	if (LaunchSubsystem && LaunchSubsystem->HasLaunchInfo())
+	{
+		ResolvedLaunchInfo = LaunchSubsystem->GetLaunchInfo();
+		Source = TEXT("selection");
+	}
+	else if (!StageId.IsNone())
+	{
+		UWarriorStageLaunchSubsystem::BuildLaunchInfo(StageId, ResolvedLaunchInfo);
+		Source = TEXT("GameMode StageId");
+	}
+	else if (UWarriorStageLaunchSubsystem::BuildLaunchInfoForLevel(LevelPackageName, ResolvedLaunchInfo))
+	{
+		Source = TEXT("catalog level");
+	}
+	else
+	{
+		ResolvedLaunchInfo = FWarriorStageLaunchInfo();
+		ResolvedLaunchInfo.StageId = FName(*UGameplayStatics::GetCurrentLevelName(this));
+
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] No stage key for level %s. Using the level name as the stage id; the server will reject it."), *LevelPackageName);
+		return;
+	}
+
+	if (!ResolvedLaunchInfo.bFromCatalog)
+	{
+		//임시: 목록에 없는 키도 그대로 쓴다. 게임 파일 검사 단계가 생기면 거기서 막는다. 인계: stage-p4-handover-1009.md
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Stage %s is not in the stage catalog. The level's own waves will be used."), *ResolvedLaunchInfo.StageId.ToString());
+	}
+	else if (!ResolvedLaunchInfo.Level.IsNull() && ResolvedLaunchInfo.Level.ToSoftObjectPath().GetLongPackageName() != LevelPackageName)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Stage %s is listed for level %s, but %s is open."),
+			*ResolvedLaunchInfo.StageId.ToString(),
+			*ResolvedLaunchInfo.Level.ToSoftObjectPath().GetLongPackageName(),
+			*LevelPackageName);
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Stage %s resolved from %s. Waves: %s"),
+		*ResolvedLaunchInfo.StageId.ToString(),
+		Source,
+		ResolvedLaunchInfo.WaveData.IsNull() ? TEXT("level") : *ResolvedLaunchInfo.WaveData.ToSoftObjectPath().GetAssetName());
+}
+
+void AWarriorStageGameMode::ApplyStageWaveData(AWarriorStageFlowManager* InFlowManager) const
+{
+	if (!InFlowManager || ResolvedLaunchInfo.WaveData.IsNull())
+	{
+		return;
+	}
+
+	UWarriorStageWaveDataAsset* WaveData = ResolvedLaunchInfo.WaveData.LoadSynchronous();
+	if (!WaveData)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] Wave data %s for stage %s could not be loaded. The level's own waves will be used."),
+			*ResolvedLaunchInfo.WaveData.ToString(),
+			*ResolvedLaunchInfo.StageId.ToString());
+		return;
+	}
+
+	InFlowManager->SetStageWaveData(WaveData);
 }
 

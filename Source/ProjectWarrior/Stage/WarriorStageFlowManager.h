@@ -16,6 +16,7 @@ class AWarriorWaveSpawner;
  *
  * GameMode와의 이음매. "GameMode가 호출" 구역의 이름·인자·반환형은 바꾸지 않는다.
  * bUseDebugWaves가 false이면 DataAsset의 웨이브를 WaveSpawner로 실행한다.
+ * bUseDebugWaves가 true여도 DataAsset이 있으면 웨이브 수·보스 웨이브는 DataAsset을 따른다(서버 waveCount와 맞추기 위해).
  */
 UCLASS()
 class PROJECTWARRIOR_API AWarriorStageFlowManager : public AActor
@@ -42,6 +43,11 @@ public:
 	float GetRestTimeOverride(int32 InWaveIndex) const;
 	//~ End GameMode가 호출
 
+	//레벨에 둔 웨이브 대신 스테이지 목록의 웨이브를 쓴다. GameMode가 등록 직후(첫 웨이브 전) 호출한다.
+	//웨이브가 이미 시작됐거나 nullptr이면 무시한다.
+	//서버가 웨이브 내용을 내려주게 되면(TD-28 2단계) 그 데이터로 만든 웨이브도 이 입구로 넣는다.
+	void SetStageWaveData(UWarriorStageWaveDataAsset* InStageWaveData);
+
 	//현재 웨이브의 적이 전멸했고 대기 스폰도 없음. 직접 Broadcast 하지 말고 ReportWaveCleared를 쓴다.
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
 	FOnWarriorWaveCleared OnWaveCleared;
@@ -61,6 +67,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Warrior|Stage|Debug")
 	bool bUseDebugWaves = true;
 
+	//StageWaveData가 없을 때만 쓴다
 	UPROPERTY(EditAnywhere, Category = "Warrior|Stage|Debug", meta = (EditCondition = "bUseDebugWaves", ClampMin = "1"))
 	int32 DebugWaveCount = 5;
 

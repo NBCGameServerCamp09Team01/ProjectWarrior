@@ -10,7 +10,10 @@
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
+#include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
+#include "ProjectWarrior/Widgets/WarriorStageSelectWidgets.h"
 
 namespace
 {
@@ -19,6 +22,8 @@ namespace
 
 	//화면 위, 안내 팝업 아래
 	const int32 ReconnectIndicatorZOrder = 40;
+	//화면 위젯(0)보다 위, 안내 팝업보다 아래
+	const int32 StageSelectPopupZOrder = 20;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -59,7 +64,8 @@ void AWarriorFrontPlayerController::BeginPlay()
 		return;
 	}
 
-	ShowScreen(EWarriorFrontScreen::Title);
+	//스테이지에서 메인메뉴로 돌아왔으면(로그인 상태가 남아 있음) 타이틀을 건너뛰고 메인메뉴. 게임을 처음 켜면 로그인 전이라 타이틀
+	ShowScreen(Auth && Auth->IsLoggedIn() ? EWarriorFrontScreen::MainMenu : EWarriorFrontScreen::Title);
 }
 
 void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -136,6 +142,12 @@ void AWarriorFrontPlayerController::ShowScreen(EWarriorFrontScreen InScreen)
 	if (InScreen == CurrentScreen)
 	{
 		return;
+	}
+
+	//스테이지 선택 팝업은 메인메뉴 위에만 뜬다. 다른 화면으로 가면(로그인 상태 끝 등) 닫는다
+	if (StageSelectPopup && StageSelectPopup->IsInViewport())
+	{
+		StageSelectPopup->RemoveFromParent();
 	}
 
 	//다음 위젯부터 확보한다. 실패하면 현재 화면을 그대로 둔다(빈 화면 방지).
@@ -221,9 +233,19 @@ void AWarriorFrontPlayerController::PlayScreenSound(EWarriorFrontScreen InPrevio
 
 void AWarriorFrontPlayerController::StartStage()
 {
-	if (StageLevel.IsNull())
+	//스테이지 선택 팝업에서 고른 스테이지의 레벨. 고른 것이 없으면(예전 길) BP의 StageLevel
+	TSoftObjectPtr<UWorld> LevelToOpen = StageLevel;
+	if (const UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this))
 	{
-		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] StageLevel is not set."));
+		if (LaunchSubsystem->HasLaunchInfo() && !LaunchSubsystem->GetLaunchInfo().Level.IsNull())
+		{
+			LevelToOpen = LaunchSubsystem->GetLaunchInfo().Level;
+		}
+	}
+
+	if (LevelToOpen.IsNull())
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] No stage level to open (no selected stage and StageLevel is not set)."));
 		return;
 	}
 
@@ -231,9 +253,75 @@ void AWarriorFrontPlayerController::StartStage()
 	UWidgetBlueprintLibrary::SetInputMode_GameOnly(this);
 	bShowMouseCursor = false;
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Front] Open stage level %s"), *StageLevel.ToString());
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Front] Open stage level %s"), *LevelToOpen.ToString());
 
-	UGameplayStatics::OpenLevelBySoftObjectPtr(this, StageLevel);
+	UGameplayStatics::OpenLevelBySoftObjectPtr(this, LevelToOpen);
+}
+
+void AWarriorFrontPlayerController::OpenStageSelect()
+{
+	if (!StageSelectPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] StageSelectPopupClass is not set. Stage select is not opened."));
+		return;
+	}
+
+	if (!StageSelectPopup)
+	{
+		StageSelectPopup = CreateWidget<UWarriorStageSelectPopupWidget>(this, StageSelectPopupClass);
+		if (!StageSelectPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create stage select popup."));
+			return;
+		}
+
+		StageSelectPopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleStageSelectClosed);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(StageSelectPopup);
+		}
+	}
+
+	if (!StageSelectPopup->IsInViewport())
+	{
+		StageSelectPopup->AddToViewport(StageSelectPopupZOrder);
+	}
+
+	StageSelectPopup->Refresh();
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::EnterStage(FName InStageId)
+{
+	//열린 스테이지만 들어간다. 판정은 서버 status(목록 서브시스템이 받은 값)
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const FWarriorStageListEntry* Stage = StageList ? StageList->FindStage(InStageId) : nullptr;
+	if (!Stage || !Stage->bCanEnter)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] Enter ignored. Stage %s is not open or not in the list."), *InStageId.ToString());
+		if (StageSelectPopup)
+		{
+			StageSelectPopup->HandleEnterFailed();
+		}
+		return;
+	}
+
+	UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+	if (!LaunchSubsystem)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] No stage launch subsystem. Stage %s is not entered."), *InStageId.ToString());
+		if (StageSelectPopup)
+		{
+			StageSelectPopup->HandleEnterFailed();
+		}
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Front] Enter stage %s"), *InStageId.ToString());
+
+	LaunchSubsystem->SelectStage(InStageId);
+	StartStage();
 }
 
 void AWarriorFrontPlayerController::QuitGame()
@@ -322,8 +410,32 @@ void AWarriorFrontPlayerController::ShowNotice(const FText& InMessage)
 
 void AWarriorFrontPlayerController::HandleNoticeClosed()
 {
-	if (UUserWidget* CurrentWidget = ScreenWidgets.FindRef(CurrentScreen))
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::HandleStageSelectClosed()
+{
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::FocusTopWidget()
+{
+	UUserWidget* FocusWidget = nullptr;
+	if (NoticePopup && NoticePopup->IsInViewport())
 	{
-		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, CurrentWidget);
+		FocusWidget = NoticePopup;
+	}
+	else if (StageSelectPopup && StageSelectPopup->IsInViewport())
+	{
+		FocusWidget = StageSelectPopup;
+	}
+	else
+	{
+		FocusWidget = ScreenWidgets.FindRef(CurrentScreen);
+	}
+
+	if (FocusWidget)
+	{
+		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, FocusWidget);
 	}
 }

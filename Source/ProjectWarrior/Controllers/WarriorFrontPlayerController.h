@@ -10,6 +10,7 @@
 
 class UUserWidget;
 class UWarriorNoticePopupWidget;
+class UWarriorStageSelectPopupWidget;
 
 //프론트 레벨의 화면 단계. 흐름은 Title → (로그인 안 했으면 Login ↔ Signup) → MainMenu.
 //BP에 저장된 값이 바뀌지 않도록 새 값은 끝에 추가한다.
@@ -40,9 +41,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void ShowScreen(EWarriorFrontScreen InScreen);
 
-	//StageLevel로 이동한다
+	//고른 스테이지의 레벨로 이동한다(UWarriorStageLaunchSubsystem의 실행 정보). 고른 스테이지가 없으면 StageLevel로
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void StartStage();
+
+	//메인메뉴의 "스테이지 선택" 버튼. 메인메뉴 위에 스테이지 선택 팝업을 띄우고 목록을 다시 받는다
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void OpenStageSelect();
+
+	//팝업에서 "입장"을 눌렀을 때. 열린 스테이지면 고르고 그 레벨로 이동한다.
+	//서버 판정(잠김 등)은 지금 스테이지 레벨의 플레이 시작에서 한다(로딩 전 확인으로 바꾸는 일은 기술부채 TD-30)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void EnterStage(FName InStageId);
 
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void QuitGame();
@@ -69,7 +79,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TMap<EWarriorFrontScreen, TSubclassOf<UUserWidget>> ScreenWidgetClasses;
 
-	//"스테이지 시작"으로 이동할 레벨 (BP에서 L_Stage_Test 지정)
+	//고른 스테이지가 없을 때 StartStage가 열 레벨 (BP에서 L_Stage_Test 지정). 보통은 스테이지 선택 팝업에서 고른 레벨로 간다
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TSoftObjectPtr<UWorld> StageLevel;
 
@@ -81,6 +91,9 @@ protected:
 	//입력을 막지 않고 포커스도 가져가지 않는다. 비어 있으면 표시 없이 로그만 남긴다
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TSubclassOf<UUserWidget> ReconnectIndicatorClass;
+	//스테이지 선택 팝업 (BP_FrontPlayerController에서 WBP_StageSelectPopup 지정)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
+	TSubclassOf<UWarriorStageSelectPopupWidget> StageSelectPopupClass;
 
 private:
 	//실시간 연결 상태가 바뀌었을 때(UWarriorRealtimeSubsystem::OnStateChanged). Reconnecting이면 표시를 띄우고 아니면 내린다
@@ -102,6 +115,13 @@ private:
 	UFUNCTION()
 	void HandleNoticeClosed();
 
+	//스테이지 선택 팝업이 닫히면 아래 화면으로 입력 포커스를 돌려준다
+	UFUNCTION()
+	void HandleStageSelectClosed();
+
+	//가장 위에 떠 있는 위젯(안내 팝업 → 스테이지 선택 팝업 → 지금 화면)으로 입력 포커스를 준다
+	void FocusTopWidget();
+
 	//화면이 바뀐 뒤 음악 상황을 알리고 전환 소리를 낸다(어떤 소리인지는 사운드 표가 정함)
 	void PlayScreenSound(EWarriorFrontScreen InPreviousScreen, EWarriorFrontScreen InNextScreen);
 
@@ -115,6 +135,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> ReconnectIndicator;
+	//한 번 만든 스테이지 선택 팝업을 재사용
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorStageSelectPopupWidget> StageSelectPopup;
 
 	EWarriorFrontScreen CurrentScreen = EWarriorFrontScreen::None;
 };
