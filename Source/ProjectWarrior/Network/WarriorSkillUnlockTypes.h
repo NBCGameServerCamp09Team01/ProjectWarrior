@@ -126,7 +126,7 @@ struct PROJECTWARRIOR_API FWarriorServerSkillView
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Skill")
 	int32 Cost = 0;
 
-	//선행 → 비용 → 나머지 조건 순서. UNLOCKED면 비어 있다
+	//선행 → 비용 → 나머지 조건 순서. 해금한 스킬도 온다(표시용)
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Skill")
 	TArray<FWarriorServerSkillRequirement> Requirements;
 };

@@ -165,20 +165,20 @@ void UWarriorSkillLibrary::ApplyServerProgress(TArray<FWarriorSkillView>& Views,
 			}
 			continue;
 		}
-		// 계정 값(해금 응답·로그인 응답의 unlockedSkills)에 이미 해금으로 있으면 그대로 둔다.
-		// 해금 직후에는 계정 값이 먼저 바뀌고 서버 진행도는 다시 받는 중이라, 지난 진행도가 해금 전 상태일 수 있다.
-		if (View.IsUnlocked())
-		{
-			continue;
-		}
+		// 진행도는 해금한 스킬도 서버 값으로 그린다(로컬 통계는 이 PC 것이라 서버 기록보다 적을 수 있다. 예: 클리어 1/1이 0/1로 보임).
 		ApplyServerRequirements(View, Server->Requirements);
-		View.State = Server->State;
+		// 상태는 계정 값(해금 응답·로그인 응답의 unlockedSkills)에 이미 해금으로 있으면 그대로 둔다.
+		// 해금 직후에는 계정 값이 먼저 바뀌고 서버 진행도는 다시 받는 중이라, 지난 진행도가 해금 전 상태일 수 있다.
+		if (!View.IsUnlocked())
+		{
+			View.State = Server->State;
+		}
 	}
 }
 
 void UWarriorSkillLibrary::ApplyServerRequirements(FWarriorSkillView& View, const TArray<FWarriorServerSkillRequirement>& Requirements)
 {
-	// 해금한 스킬은 서버가 조건을 보내지 않는다. 진행도는 로컬 값 그대로 보여 준다.
+	// 조건이 없으면(예전 서버는 해금한 스킬의 조건을 보내지 않았음) 로컬 값 그대로 둔다.
 	if (Requirements.IsEmpty())
 	{
 		return;
