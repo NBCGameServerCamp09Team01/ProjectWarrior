@@ -8,7 +8,9 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "IWebSocket.h"
 #include "JsonObjectConverter.h"
+#include "WebSocketsModule.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 
@@ -568,6 +570,7 @@ void UWarriorAuthSubsystem::EndSession(EWarriorSessionEndReason InReason)
 	}
 
 	StopHeartbeat();
+	bRealtimeConnected = false;
 
 	//로그인 때 채운 값을 모두 되돌린다. 토큰은 로그에 남기지 않는다
 	AccessToken.Reset();
@@ -680,7 +683,7 @@ void UWarriorAuthSubsystem::StartHeartbeat()
 	HeartbeatTickerHandle = FTSTicker::GetCoreTicker().AddTicker(
 		FTickerDelegate::CreateUObject(this, &ThisClass::HandleHeartbeatTick), Interval);
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Heartbeat started. interval=%.0fs maxFailures=%d"), Interval, HeartbeatMaxConsecutiveFailures);
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Heartbeat started. interval=%.0fs"), Interval);
 }
 
 void UWarriorAuthSubsystem::StopHeartbeat()
@@ -766,18 +769,77 @@ void UWarriorAuthSubsystem::HandleHeartbeatResponse(int32 InSessionSerial, int32
 		return;
 	}
 
-	//── 연결 실패·503·그 밖: 잠깐 끊긴 것일 수 있으므로 허용 횟수까지 다음 차례에 다시 본다
+	//── 연결 실패·503·그 밖: 로그인은 끝내지 않고 다음 차례에 다시 본다(realtime-api.md v1.1 "다시 연결").
+	//서버가 돌아오면 세션이 살아 있는 한 그대로 이어지고, 10분 넘게 끊겼다면 다음 점검이 401이 되어 그때 끝난다
 	++HeartbeatFailureCount;
-	UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Heartbeat failed (%d/%d). status=%d code=%s"),
-		HeartbeatFailureCount, HeartbeatMaxConsecutiveFailures, Status, *Error.Code);
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Heartbeat failed (%d in a row). status=%d code=%s. Keeping the session and retrying."),
+		HeartbeatFailureCount, Status, *Error.Code);
+}
 
-	if (HeartbeatFailureCount >= HeartbeatMaxConsecutiveFailures)
-	{
-		EndSession(EWarriorSessionEndReason::ConnectionLost);
-	}
+void UWarriorAuthSubsystem::CheckSessionNow()
+{
+	SendHeartbeat();
 }
 
 //~ End 접속 점검
+
+//~ Begin 실시간 연결
+
+TSharedPtr<IWebSocket> UWarriorAuthSubsystem::CreateRealtimeSocket(const FString& InPath) const
+{
+	if (!bLoggedIn || AccessToken.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	//http(s)://host → ws(s)://host. 토큰은 주소가 아니라 헤더에만 싣는다(주소는 로그에 남을 수 있다)
+	FString Url = BaseUrl;
+	if (Url.StartsWith(TEXT("https://")))
+	{
+		Url = TEXT("wss://") + Url.RightChop(8);
+	}
+	else if (Url.StartsWith(TEXT("http://")))
+	{
+		Url = TEXT("ws://") + Url.RightChop(7);
+	}
+	Url += InPath;
+
+	TMap<FString, FString> UpgradeHeaders;
+	UpgradeHeaders.Add(TEXT("Authorization"), TEXT("Bearer ") + AccessToken);
+
+	return FModuleManager::LoadModuleChecked<FWebSocketsModule>(TEXT("WebSockets")).CreateWebSocket(Url, FString(), UpgradeHeaders);
+}
+
+void UWarriorAuthSubsystem::EndSessionByServer(EWarriorSessionEndReason InReason)
+{
+	EndSession(InReason);
+}
+
+void UWarriorAuthSubsystem::SetRealtimeConnected(bool bConnected)
+{
+	if (bRealtimeConnected == bConnected)
+	{
+		return;
+	}
+	bRealtimeConnected = bConnected;
+
+	if (!bPauseHeartbeatWhileRealtimeConnected || !bLoggedIn)
+	{
+		return;
+	}
+
+	//연결이 붙어 있으면 Ping/Pong이 세션을 늘리므로 접속 점검을 쉬고, 끊기면 다시 돌린다
+	if (bConnected)
+	{
+		StopHeartbeat();
+	}
+	else
+	{
+		StartHeartbeat();
+	}
+}
+
+//~ End 실시간 연결
 
 bool UWarriorAuthSubsystem::ConsumeRecentSignup()
 {

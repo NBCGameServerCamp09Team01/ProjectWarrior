@@ -18,7 +18,7 @@ enum class EWarriorSessionEndReason : uint8
 	Expired,		// 401 AUTH_SESSION_NOT_FOUND. 만료·로그아웃·제재로 끊김(게임은 구분할 수 없다) → 로그인 화면
 	Replaced,		// 401 AUTH_SESSION_REPLACED. 다른 곳에서 같은 계정으로 로그인함 → 안내 후 타이틀
 	InvalidToken,	// 401 AUTH_TOKEN_MISSING·AUTH_TOKEN_INVALID. 게임 쪽 버그 → 로그인 화면
-	ConnectionLost	// 접속 점검이 연속으로 실패함(연결 실패·5xx) → 안내 후 타이틀
+	ConnectionLost	// 쓰지 않음(realtime-api.md v1.1: 연결이 끊긴 것만으로는 로그인을 끝내지 않는다). BP에 저장된 값이 밀리지 않게 남겨 둔다
 };
 
 /**
