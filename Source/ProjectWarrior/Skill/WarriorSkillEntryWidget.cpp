@@ -53,10 +53,10 @@ void UWarriorSkillEntryWidget::SetView(const FWarriorSkillView& InView, UWarrior
 		Text_State->SetText(UWarriorSkillWidget::GetStateText(View.State));
 	}
 
-	// 해금 가능일 때만 누를 수 있다. 해금된 스킬은 "완료"로 표시한다.
+	// 해금 가능일 때만 누를 수 있다(서버 응답을 기다리는 동안은 끔). 해금된 스킬은 "완료"로 표시한다.
 	if (Button_Unlock)
 	{
-		Button_Unlock->SetIsEnabled(View.CanUnlock());
+		Button_Unlock->SetIsEnabled(View.CanUnlock() && !(InOwner && InOwner->IsUnlocking()));
 	}
 
 	if (Text_Unlock)

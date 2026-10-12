@@ -3,6 +3,8 @@
 #include "DataAsset_SkillTree.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/Network/WarriorSkillUnlockSubsystem.h"
+#include "ProjectWarrior/Network/WarriorSkillUnlockTypes.h"
 #include "ProjectWarrior/Stats/WarriorProfileStatsSubsystem.h"
 
 bool UWarriorSkillLibrary::MakeEvalContext(const UObject* WorldContextObject, FWarriorSkillEvalContext& OutContext)
@@ -146,36 +148,79 @@ TArray<FWarriorSkillView> UWarriorSkillLibrary::BuildSkillViews(const UObject* W
 	return EvaluateSkillTree(SkillTree, Context);
 }
 
-bool UWarriorSkillLibrary::TryUnlockSkill(const UObject* WorldContextObject, const UDataAsset_SkillTree* SkillTree, FGameplayTag SkillTag)
+void UWarriorSkillLibrary::ApplyServerProgress(TArray<FWarriorSkillView>& Views, const TArray<FWarriorServerSkillView>& ServerSkills)
 {
-	const FWarriorSkillDefinition* Definition = SkillTree ? SkillTree->FindSkill(SkillTag) : nullptr;
-	if (!Definition)
+	for (FWarriorSkillView& View : Views)
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Skill] Unlock ignored. %s is not in the skill tree."), *SkillTag.ToString());
-		return false;
+		const FWarriorServerSkillView* Server = ServerSkills.FindByPredicate([&View](const FWarriorServerSkillView& Candidate)
+		{
+			return Candidate.SkillTag == View.Definition.SkillTag;
+		});
+		if (!Server)
+		{
+			// DA에만 있는 스킬은 서버가 해금하지 않는다(skills.json에 없음). 누르지 못하게 잠금으로 둔다.
+			if (!View.IsUnlocked())
+			{
+				View.State = EWarriorSkillState::Locked;
+			}
+			continue;
+		}
+		// 계정 값(해금 응답·로그인 응답의 unlockedSkills)에 이미 해금으로 있으면 그대로 둔다.
+		// 해금 직후에는 계정 값이 먼저 바뀌고 서버 진행도는 다시 받는 중이라, 지난 진행도가 해금 전 상태일 수 있다.
+		if (View.IsUnlocked())
+		{
+			continue;
+		}
+		ApplyServerRequirements(View, Server->Requirements);
+		View.State = Server->State;
+	}
+}
+
+void UWarriorSkillLibrary::ApplyServerRequirements(FWarriorSkillView& View, const TArray<FWarriorServerSkillRequirement>& Requirements)
+{
+	// 해금한 스킬은 서버가 조건을 보내지 않는다. 진행도는 로컬 값 그대로 보여 준다.
+	if (Requirements.IsEmpty())
+	{
+		return;
 	}
 
-	UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(WorldContextObject);
-	FWarriorSkillEvalContext Context;
-	if (!Account || !MakeEvalContext(WorldContextObject, Context))
+	View.MissingPrerequisites.Reset();
+	for (const FWarriorServerSkillRequirement& Requirement : Requirements)
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Skill] Unlock ignored. No account subsystem."));
-		return false;
+		if (Requirement.Type == TEXT("PREREQUISITE") && !Requirement.bMet)
+		{
+			const FGameplayTag Prerequisite = FGameplayTag::RequestGameplayTag(FName(Requirement.Key), false);
+			if (Prerequisite.IsValid())
+			{
+				View.MissingPrerequisites.Add(Prerequisite);
+			}
+		}
 	}
 
-	// 화면이 열려 있는 동안 값이 바뀌었을 수 있으니 해금 직전에 다시 평가한다.
-	const FWarriorSkillView View = EvaluateSkill(*Definition, Context);
-	if (!View.CanUnlock())
+	// DA 조건 순서대로, 같은 종류의 서버 조건을 하나씩 짝짓는다(같은 종류가 둘이면 앞에서부터).
+	TArray<bool> Used;
+	Used.Init(false, Requirements.Num());
+	const int32 Count = FMath::Min(View.Definition.Requirements.Num(), View.Requirements.Num());
+	for (int32 Index = 0; Index < Count; ++Index)
 	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Skill] Unlock rejected. %s is %s."), *SkillTag.ToString(), *UEnum::GetValueAsString(View.State));
-		return false;
+		const EWarriorSkillRequirementType LocalType = View.Definition.Requirements[Index].Type;
+		for (int32 ServerIndex = 0; ServerIndex < Requirements.Num(); ++ServerIndex)
+		{
+			EWarriorSkillRequirementType ServerType;
+			if (Used[ServerIndex] || !UWarriorSkillUnlockSubsystem::ToRequirementType(Requirements[ServerIndex].Type, ServerType)
+				|| ServerType != LocalType)
+			{
+				continue;
+			}
+			const FWarriorServerSkillRequirement& Server = Requirements[ServerIndex];
+			FWarriorSkillRequirementProgress& Progress = View.Requirements[Index];
+			Progress.Target = Server.Target;
+			Progress.Current = Server.bHasCurrent ? Server.Current : 0.0;
+			Progress.bHasValue = Server.bHasCurrent;
+			Progress.bMet = Server.bMet;
+			Progress.bUpperBound = Server.bUpperBound;
+			Used[ServerIndex] = true;
+			break;
+		}
 	}
-
-	// 비용은 스킬 정의(DA_SkillTree)가 기준이다. 포인트 차감과 해금 기록은 계정이 한다.
-	const bool bUnlocked = Account->UnlockSkillWithCost(SkillTag, Definition->StatPointCost);
-	if (bUnlocked)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Skill] Unlocked %s."), *SkillTag.ToString());
-	}
-	return bUnlocked;
 }

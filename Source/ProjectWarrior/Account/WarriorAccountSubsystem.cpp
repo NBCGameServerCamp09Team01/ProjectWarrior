@@ -76,12 +76,6 @@ float UWarriorAccountSubsystem::GetStatBonus(FGameplayTag StatTag) const
 	return Definition ? GetInvestedPoints(StatTag) * Definition->BonusPerPoint : 0.f;
 }
 
-int32 UWarriorAccountSubsystem::GetSkillCost(FGameplayTag SkillTag) const
-{
-	const int32* Cost = SkillCosts.Find(SkillTag);
-	return Cost ? *Cost : -1;
-}
-
 TArray<FGameplayTag> UWarriorAccountSubsystem::GetInvestableStats() const
 {
 	TArray<FGameplayTag> Tags;
@@ -122,68 +116,6 @@ bool UWarriorAccountSubsystem::GetLastStageReward(FWarriorStageReward& OutReward
 	return true;
 }
 
-bool UWarriorAccountSubsystem::UnlockSkill(FGameplayTag SkillTag)
-{
-	const int32 Cost = GetSkillCost(SkillTag);
-	if (Cost < 0)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Unlock ignored. %s is not an unlockable skill."), *SkillTag.ToString());
-		return false;
-	}
-
-	if (IsSkillUnlocked(SkillTag))
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock ignored. %s is already unlocked."), *SkillTag.ToString());
-		return false;
-	}
-
-	if (Data.StatPoints < Cost)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock rejected. Need %d points, have %d."), Cost, Data.StatPoints);
-		return false;
-	}
-
-	//TODO(server): S4에서 스탯 투자(UWarriorStatInvestSubsystem)와 같이, 서버에 요청하고 응답 스냅샷을 적용한다.
-	Data.StatPoints -= Cost;
-	Data.UnlockedSkills.AddTag(SkillTag);
-	AddLedgerEntry(EWarriorAccountLedgerType::SkillUnlock, StatPointName, -Cost, SkillTag);
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlocked %s for %d points. %d points left."), *SkillTag.ToString(), Cost, Data.StatPoints);
-
-	BroadcastAccountChanged();
-	return true;
-}
-
-bool UWarriorAccountSubsystem::UnlockSkillWithCost(FGameplayTag SkillTag, int32 Cost)
-{
-	if (!SkillTag.IsValid() || Cost < 0)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Unlock ignored. Invalid skill %s or cost %d."), *SkillTag.ToString(), Cost);
-		return false;
-	}
-
-	if (IsSkillUnlocked(SkillTag))
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock ignored. %s is already unlocked."), *SkillTag.ToString());
-		return false;
-	}
-
-	if (Data.StatPoints < Cost)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock rejected. Need %d points, have %d."), Cost, Data.StatPoints);
-		return false;
-	}
-
-	//TODO(server): UnlockSkill과 같이, 서버 연동 뒤에는 서버에 요청하고 응답 스냅샷을 적용한다.
-	Data.StatPoints -= Cost;
-	Data.UnlockedSkills.AddTag(SkillTag);
-	AddLedgerEntry(EWarriorAccountLedgerType::SkillUnlock, StatPointName, -Cost, SkillTag);
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlocked %s for %d points. %d points left."), *SkillTag.ToString(), Cost, Data.StatPoints);
-
-	BroadcastAccountChanged();
-	return true;
-}
 
 void UWarriorAccountSubsystem::ApplyServerSnapshot(const FWarriorAccountData& InServerData)
 {
@@ -327,9 +259,6 @@ void UWarriorAccountSubsystem::BuildDefinitions()
 	AddStat(WarriorAccountTags::Account_Stat_MaxStamina.GetTag(), UWarriorAttributeSet::GetMaxStaminaAttribute(), 5.f, 10);
 	AddStat(WarriorAccountTags::Account_Stat_AttackPower.GetTag(), UWarriorAttributeSet::GetAttackPowerAttribute(), 0.5f, 10);
 	AddStat(WarriorAccountTags::Account_Stat_DefensePower.GetTag(), UWarriorAttributeSet::GetDefensePowerAttribute(), 1.f, 10);
-
-	SkillCosts.Reset();
-	SkillCosts.Add(WarriorAccountTags::Account_Skill_Combo4.GetTag(), 2);
 }
 
 const UWarriorAccountSubsystem::FStatDefinition* UWarriorAccountSubsystem::FindStatDefinition(const FGameplayTag& InStatTag) const

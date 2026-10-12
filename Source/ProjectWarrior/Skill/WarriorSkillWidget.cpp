@@ -8,6 +8,7 @@
 #include "Components/TextBlock.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
+#include "ProjectWarrior/Network/WarriorSkillUnlockSubsystem.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 
 #define LOCTEXT_NAMESPACE "WarriorSkill"
@@ -17,6 +18,7 @@ UWarriorSkillWidget::UWarriorSkillWidget(const FObjectInitializer& ObjectInitial
 {
 	AccountLevelFormat = LOCTEXT("AccountLevelFormat", "계정 레벨 {0}");
 	StatPointsFormat = LOCTEXT("StatPointsFormat", "스탯 포인트 {0}");
+	UnlockSucceededText = LOCTEXT("UnlockSucceeded", "해금했습니다.");
 }
 
 void UWarriorSkillWidget::NativeOnInitialized()
@@ -45,6 +47,18 @@ void UWarriorSkillWidget::NativeConstruct()
 	{
 		Account->OnAccountChanged.AddUniqueDynamic(this, &ThisClass::HandleAccountChanged);
 	}
+	if (UWarriorSkillUnlockSubsystem* SkillUnlock = UWarriorSkillUnlockSubsystem::Get(this))
+	{
+		SkillUnlock->OnUnlockCompleted.AddUniqueDynamic(this, &ThisClass::HandleUnlockCompleted);
+		SkillUnlock->OnSkillsReceived.AddUniqueDynamic(this, &ThisClass::HandleSkillsReceived);
+		// 서버 진행도를 받으면 HandleSkillsReceived가 다시 그린다. 그 전에는 지난 값(또는 로컬 값)으로 그린다
+		SkillUnlock->RequestSkills();
+	}
+	if (Text_Message)
+	{
+		Text_Message->SetText(FText::GetEmpty());
+	}
+
 	Refresh();
 }
 
@@ -59,6 +73,11 @@ void UWarriorSkillWidget::NativeDestruct()
 	{
 		Account->OnAccountChanged.RemoveDynamic(this, &ThisClass::HandleAccountChanged);
 	}
+	if (UWarriorSkillUnlockSubsystem* SkillUnlock = UWarriorSkillUnlockSubsystem::Get(this))
+	{
+		SkillUnlock->OnUnlockCompleted.RemoveDynamic(this, &ThisClass::HandleUnlockCompleted);
+		SkillUnlock->OnSkillsReceived.RemoveDynamic(this, &ThisClass::HandleSkillsReceived);
+	}
 
 	Super::NativeDestruct();
 }
@@ -68,6 +87,12 @@ void UWarriorSkillWidget::Refresh()
 	FWarriorSkillEvalContext Context;
 	UWarriorSkillLibrary::MakeEvalContext(this, Context);
 	SkillViews = UWarriorSkillLibrary::EvaluateSkillTree(SkillTree, Context);
+	// 로그인 상태에서 받은 서버 진행도가 있으면 그 값이 기준이다(로컬 통계는 이 PC 것이라 서버와 다를 수 있음)
+	const UWarriorSkillUnlockSubsystem* SkillUnlock = UWarriorSkillUnlockSubsystem::Get(this);
+	if (SkillUnlock && SkillUnlock->HasServerSkills())
+	{
+		UWarriorSkillLibrary::ApplyServerProgress(SkillViews, SkillUnlock->GetServerSkills());
+	}
 
 	UpdateSummaryTexts(Context.AccountLevel, Context.StatPoints);
 	UpdateEntries();
@@ -121,16 +146,30 @@ void UWarriorSkillWidget::UpdateEntries()
 
 bool UWarriorSkillWidget::RequestUnlock(FGameplayTag SkillTag)
 {
-	// 성공하면 계정이 OnAccountChanged를 방송해서 화면이 갱신된다.
-	if (UWarriorSkillLibrary::TryUnlockSkill(this, SkillTree, SkillTag))
+	UWarriorSkillUnlockSubsystem* SkillUnlock = UWarriorSkillUnlockSubsystem::Get(this);
+	if (!SkillUnlock || SkillUnlock->IsUnlockInFlight())
 	{
-		return true;
+		return false;
+	}
+	if (Text_Message)
+	{
+		Text_Message->SetText(FText::GetEmpty());
 	}
 
-	// 실패해도 그사이 값이 바뀌었을 수 있으니 다시 그린다.
-	Refresh();
-	BP_OnUnlockFailed(SkillTag);
-	return false;
+	// 결과는 HandleUnlockCompleted로 온다(로그인하지 않았으면 NOT_LOGGED_IN 실패가 이 호출 안에서 바로 온다).
+	// 기다리는 동안 해금 버튼을 끄도록 다시 그린다.
+	const bool bSent = SkillUnlock->RequestUnlock(SkillTag);
+	if (bSent)
+	{
+		UpdateEntries();
+	}
+	return bSent;
+}
+
+bool UWarriorSkillWidget::IsUnlocking() const
+{
+	const UWarriorSkillUnlockSubsystem* SkillUnlock = UWarriorSkillUnlockSubsystem::Get(this);
+	return SkillUnlock && SkillUnlock->IsUnlockInFlight();
 }
 
 void UWarriorSkillWidget::RequestBack()
@@ -158,6 +197,37 @@ bool UWarriorSkillWidget::FindSkillView(FGameplayTag SkillTag, FWarriorSkillView
 void UWarriorSkillWidget::HandleAccountChanged(const FWarriorAccountData& InAccountData)
 {
 	Refresh();
+}
+
+void UWarriorSkillWidget::HandleUnlockCompleted(bool bSuccess, FGameplayTag SkillTag, const FString& ErrorCode, const FText& Message)
+{
+	// 성공이면 계정 값이 이미 적용돼 화면이 다시 그려졌고, 서버 진행도도 다시 받는 중이다.
+	// 실패면 서버 값이 화면과 달랐을 수 있으니 진행도를 다시 받는다(받으면 HandleSkillsReceived가 다시 그림).
+	if (!bSuccess)
+	{
+		if (UWarriorSkillUnlockSubsystem* SkillUnlock = UWarriorSkillUnlockSubsystem::Get(this))
+		{
+			SkillUnlock->RequestSkills();
+		}
+	}
+	if (Text_Message)
+	{
+		Text_Message->SetText(bSuccess ? UnlockSucceededText : Message);
+	}
+	Refresh();
+	BP_OnUnlockFinished(SkillTag, bSuccess, Message);
+	if (!bSuccess)
+	{
+		BP_OnUnlockFailed(SkillTag);
+	}
+}
+
+void UWarriorSkillWidget::HandleSkillsReceived(bool bSuccess)
+{
+	if (bSuccess)
+	{
+		Refresh();
+	}
 }
 
 void UWarriorSkillWidget::HandleBackButtonClicked()
