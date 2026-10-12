@@ -10,9 +10,12 @@
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Network/WarriorApiSubsystem.h"
+#include "ProjectWarrior/Network/WarriorErrorPresenterSubsystem.h"
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
+#include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 #include "ProjectWarrior/Widgets/WarriorStageSelectWidgets.h"
 
 namespace
@@ -24,6 +27,8 @@ namespace
 	const int32 ReconnectIndicatorZOrder = 40;
 	//화면 위젯(0)보다 위, 안내 팝업보다 아래
 	const int32 StageSelectPopupZOrder = 20;
+	//메인메뉴 랭킹 팝업(스테이지 선택 팝업과 같은 층, 둘이 함께 뜨지 않음)
+	const int32 RankingPopupZOrder = 20;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -48,6 +53,12 @@ void AWarriorFrontPlayerController::BeginPlay()
 		Auth->OnSessionEnded.AddUniqueDynamic(this, &ThisClass::HandleSessionEnded);
 	}
 
+	//오류 팝업이 닫히면 아래 화면으로 포커스를 돌려준다
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.AddUniqueDynamic(this, &ThisClass::HandleNoticeClosed);
+	}
+
 	//스테이지에서 다시 연결하던 중에 이 레벨로 왔을 수도 있으므로 지금 상태를 한 번 맞춘다
 	if (UWarriorRealtimeSubsystem* Realtime = UWarriorRealtimeSubsystem::Get(this))
 	{
@@ -65,7 +76,17 @@ void AWarriorFrontPlayerController::BeginPlay()
 	}
 
 	//스테이지에서 메인메뉴로 돌아왔으면(로그인 상태가 남아 있음) 타이틀을 건너뛰고 메인메뉴. 게임을 처음 켜면 로그인 전이라 타이틀
-	ShowScreen(Auth && Auth->IsLoggedIn() ? EWarriorFrontScreen::MainMenu : EWarriorFrontScreen::Title);
+	const bool bLoggedIn = Auth && Auth->IsLoggedIn();
+	ShowScreen(bLoggedIn ? EWarriorFrontScreen::MainMenu : EWarriorFrontScreen::Title);
+
+	//타이틀에서 서버 상태를 한 번 확인한다. 연결할 수 없으면 안내 후 종료(E6, 대계획 Q2)
+	if (!bLoggedIn)
+	{
+		if (UWarriorApiSubsystem* Api = UWarriorApiSubsystem::Get(this))
+		{
+			Api->CheckServerOnTitle();
+		}
+	}
 }
 
 void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -83,6 +104,11 @@ void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	if (UWarriorRealtimeSubsystem* Realtime = UWarriorRealtimeSubsystem::Get(this))
 	{
 		Realtime->OnStateChanged.RemoveDynamic(this, &ThisClass::HandleRealtimeStateChanged);
+	}
+
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.RemoveDynamic(this, &ThisClass::HandleNoticeClosed);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -292,6 +318,45 @@ void AWarriorFrontPlayerController::OpenStageSelect()
 	FocusTopWidget();
 }
 
+void AWarriorFrontPlayerController::OpenRanking()
+{
+	if (!RankingPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] RankingPopupClass is not set. Ranking is not opened."));
+		return;
+	}
+
+	if (!RankingPopup)
+	{
+		RankingPopup = CreateWidget<UWarriorRankingPopupWidget>(this, RankingPopupClass);
+		if (!RankingPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create ranking popup."));
+			return;
+		}
+
+		RankingPopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleRankingClosed);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(RankingPopup);
+		}
+	}
+
+	if (!RankingPopup->IsInViewport())
+	{
+		RankingPopup->AddToViewport(RankingPopupZOrder);
+	}
+
+	RankingPopup->Open();
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::HandleRankingClosed()
+{
+	FocusTopWidget();
+}
+
 void AWarriorFrontPlayerController::EnterStage(FName InStageId)
 {
 	//열린 스테이지만 들어간다. 판정은 서버 status(목록 서브시스템이 받은 값)
@@ -420,6 +485,13 @@ void AWarriorFrontPlayerController::HandleStageSelectClosed()
 
 void AWarriorFrontPlayerController::FocusTopWidget()
 {
+	//오류 팝업(가장 위)이 떠 있으면 포커스는 그 팝업에 둔다. 닫히면 OnPopupClosed로 다시 불린다
+	const UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this);
+	if (Presenter && Presenter->IsShowing())
+	{
+		return;
+	}
+
 	UUserWidget* FocusWidget = nullptr;
 	if (NoticePopup && NoticePopup->IsInViewport())
 	{
@@ -428,6 +500,10 @@ void AWarriorFrontPlayerController::FocusTopWidget()
 	else if (StageSelectPopup && StageSelectPopup->IsInViewport())
 	{
 		FocusWidget = StageSelectPopup;
+	}
+	else if (RankingPopup && RankingPopup->IsInViewport())
+	{
+		FocusWidget = RankingPopup;
 	}
 	else
 	{

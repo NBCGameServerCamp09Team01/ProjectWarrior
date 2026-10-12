@@ -31,6 +31,9 @@ public class ProjectWarrior : ModuleRules
 
         // 서버 통신: JSON 변환(FJsonObjectConverter), HTTP 요청, 실시간 연결(S7 WebSocket, realtime-api.md)
         PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities", "HTTP", "WebSockets" });
+
+        // 랭킹 목록(UListView → SListView·STableViewBase가 Slate 모듈에 있음, 링크에 필요)
+        PrivateDependencyModuleNames.Add("Slate");
         // Uncomment if you are using Slate UI
         // PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 

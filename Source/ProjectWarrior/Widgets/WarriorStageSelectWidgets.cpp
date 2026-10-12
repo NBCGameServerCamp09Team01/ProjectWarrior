@@ -11,6 +11,7 @@
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
+#include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 
 #define LOCTEXT_NAMESPACE "WarriorStageSelect"
 
@@ -70,6 +71,11 @@ void UWarriorStageEntryWidget::NativeOnInitialized()
 	if (Button_Enter)
 	{
 		Button_Enter->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleEnterClicked);
+	}
+
+	if (Button_Ranking)
+	{
+		Button_Ranking->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRankingClicked);
 	}
 }
 
@@ -133,6 +139,12 @@ void UWarriorStageEntryWidget::ApplyStatusLook()
 		Button_Enter->SetVisibility(Stage.bCanEnter ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
 	}
 
+	//순위는 열린·클리어 스테이지만(잠긴 스테이지는 숨김, 도안 2.1판). 입장 요청 중에도 볼 수 있다
+	if (Button_Ranking)
+	{
+		Button_Ranking->SetVisibility(bLocked ? ESlateVisibility::Hidden : ESlateVisibility::Visible);
+	}
+
 	if (Text_StageLabel)
 	{
 		Text_StageLabel->SetColorAndOpacity(bLocked ? LockedLabelColor
@@ -160,6 +172,16 @@ void UWarriorStageEntryWidget::HandleEnterClicked()
 	}
 
 	OnEnterClicked.Broadcast(Stage.StageId);
+}
+
+void UWarriorStageEntryWidget::HandleRankingClicked()
+{
+	if (Stage.Status == EWarriorStageEntryStatus::Locked)
+	{
+		return;
+	}
+
+	OnRankingClicked.Broadcast(Stage.StageId);
 }
 
 void UWarriorStageEntryWidget::SetWavesExpanded(bool bInExpanded)
@@ -333,8 +355,53 @@ void UWarriorStageSelectPopupWidget::Refresh()
 
 void UWarriorStageSelectPopupWidget::Close()
 {
+	//순위 카드가 떠 있으면 같이 닫는다(카드는 이 팝업 위 한 겹)
+	if (StageRankingCard && StageRankingCard->IsInViewport())
+	{
+		StageRankingCard->RemoveFromParent();
+	}
 	RemoveFromParent();
 	OnClosed.Broadcast();
+}
+
+void UWarriorStageSelectPopupWidget::HandleStageRankingClicked(FName InStageId)
+{
+	if (!StageRankingCardClass)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[StageSelect] %s: StageRankingCardClass is not set."), *GetName());
+		return;
+	}
+
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const FWarriorStageListEntry* Stage = StageList ? StageList->FindStage(InStageId) : nullptr;
+	if (!Stage)
+	{
+		return;
+	}
+
+	if (!StageRankingCard)
+	{
+		StageRankingCard = CreateWidget<UWarriorStageRankingCardWidget>(GetOwningPlayer(), StageRankingCardClass);
+		if (!StageRankingCard)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[StageSelect] Failed to create stage ranking card."));
+			return;
+		}
+		StageRankingCard->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleStageRankingCardClosed);
+	}
+
+	if (!StageRankingCard->IsInViewport())
+	{
+		StageRankingCard->AddToViewport(StageRankingCardZOrder);
+	}
+	StageRankingCard->ShowStage(Stage->StageId, Stage->DisplayName, Stage->Order);
+	StageRankingCard->SetKeyboardFocus();
+}
+
+void UWarriorStageSelectPopupWidget::HandleStageRankingCardClosed()
+{
+	//카드를 닫으면 스테이지 선택으로 입력을 돌려준다
+	SetKeyboardFocus();
 }
 
 void UWarriorStageSelectPopupWidget::HandleEnterFailed()
@@ -508,6 +575,7 @@ void UWarriorStageSelectPopupWidget::RebuildStages()
 			StageEntry->SetStage(Stage);
 			StageEntry->SetInteractionLocked(bEnterPending);
 			StageEntry->OnEnterClicked.AddUObject(this, &ThisClass::HandleStageEnterClicked);
+			StageEntry->OnRankingClicked.AddUObject(this, &ThisClass::HandleStageRankingClicked);
 			ScrollBox_Stages->AddChild(StageEntry);
 			StageEntries.Add(StageEntry);
 		}
