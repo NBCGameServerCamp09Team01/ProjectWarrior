@@ -56,6 +56,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Burrow", meta = (ClampMin = "0.1"))
 	float BurrowPlayRate = 1.5f;
 
+	// 파고드는 동안 메시를 이 깊이만큼 부드럽게 내려 땅속으로 들어가는 것처럼 보이게 함 (0 = 사용 안 함)
+	UPROPERTY(EditDefaultsOnly, Category = "Burrow", meta = (ClampMin = "0.0", Units = "cm"))
+	float BurrowSinkDepth = 0.f;
+
+	// 파고들기 시간 중 가라앉기 시작하는 지점 (0 = 처음부터, 0.5 = 절반부터)
+	UPROPERTY(EditDefaultsOnly, Category = "Burrow", meta = (ClampMin = "0.0", ClampMax = "0.95"))
+	float BurrowSinkStartFraction = 0.2f;
+
+	// 가라앉는 가속 정도. 클수록 처음엔 거의 그대로 있다가 끝에서 빠르게 들어감 (1 = 일정한 속도)
+	UPROPERTY(EditDefaultsOnly, Category = "Burrow", meta = (ClampMin = "1.0", ClampMax = "8.0"))
+	float BurrowSinkEaseExponent = 3.f;
+
 	// 땅속에 머무는 시간. 튀어나올 위치의 위험 범위가 이 시간 + EmergeImpactDelay 동안 표시됨
 	UPROPERTY(EditDefaultsOnly, Category = "Burrow", meta = (ClampMin = "0.0", Units = "s"))
 	float UndergroundDuration = 0.8f;
@@ -158,6 +170,23 @@ private:
 	void ReleaseEmergeLocation();
 
 	void StopEmergeWarningEffect();
+
+	void StartBurrowSink(float BurrowDuration);
+
+	void TickBurrowSink();
+
+	// 메시 높이를 원래대로 되돌림
+	void StopBurrowSink();
+
+	FTimerHandle BurrowSinkTimerHandle;
+
+	float BurrowSinkStartTime = 0.f;
+	float BurrowSinkDuration = 0.f;
+
+	// 가라앉기 전 메시의 상대 Z
+	float MeshBaseRelativeZ = 0.f;
+
+	bool bMeshSunk = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> EmergeWarningComponent;

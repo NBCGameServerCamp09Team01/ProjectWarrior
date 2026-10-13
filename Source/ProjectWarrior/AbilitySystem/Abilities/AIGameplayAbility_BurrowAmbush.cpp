@@ -8,6 +8,8 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "TimerManager.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NiagaraFunctionLibrary.h"
@@ -116,6 +118,8 @@ void UAIGameplayAbility_BurrowAmbush::ActivateAbility(const FGameplayAbilitySpec
 		}
 	}
 
+	StartBurrowSink(BurrowDuration);
+
 	if (BurrowEffect)
 	{
 		const FVector OwnerFeet = OwnerCharacter->GetActorLocation() - FVector(0.f, 0.f, OwnerCharacter->GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
@@ -170,6 +174,7 @@ void UAIGameplayAbility_BurrowAmbush::HandleEmerge()
 	OwnerCharacter->TeleportTo(EmergeFeetLocation + FVector(0.f, 0.f, HalfHeight), EmergeFacing, false, true);
 	SetOwnerFacingRotation(EmergeFacing);
 
+	StopBurrowSink();
 	SetUnderground(false);
 	StopEmergeWarningEffect();
 
@@ -213,6 +218,7 @@ void UAIGameplayAbility_BurrowAmbush::EndAbility(const FGameplayAbilitySpecHandl
 {
 	// 땅속에서 취소(사망 등)되어도 숨김·충돌·이동·상태 태그가 남지 않도록 복구
 	AbortAmbushQuery();
+	StopBurrowSink();
 	SetUnderground(false);
 	SetBurrowingTag(false);
 	ReleaseEmergeLocation();
@@ -310,6 +316,81 @@ void UAIGameplayAbility_BurrowAmbush::ReleaseEmergeLocation()
 {
 	bHasReservedLocation = false;
 	GReservedAmbushes.Remove(this);
+}
+
+void UAIGameplayAbility_BurrowAmbush::StartBurrowSink(float BurrowDuration)
+{
+	const ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USkeletalMeshComponent* Mesh = OwnerCharacter ? OwnerCharacter->GetMesh() : nullptr;
+	UWorld* World = GetWorld();
+
+	if (BurrowSinkDepth <= 0.f || BurrowDuration <= 0.f || !Mesh || !World)
+	{
+		return;
+	}
+
+	StopBurrowSink();
+
+	MeshBaseRelativeZ = Mesh->GetRelativeLocation().Z;
+	bMeshSunk = true;
+
+	// 파고들기 시간 중 앞부분은 모션만, 나머지 구간에서 가라앉음 (끝나는 시점 = 숨김 시점)
+	const float StartFraction = FMath::Clamp(BurrowSinkStartFraction, 0.f, 0.95f);
+	BurrowSinkStartTime = World->GetTimeSeconds() + BurrowDuration * StartFraction;
+	BurrowSinkDuration = BurrowDuration * (1.f - StartFraction);
+
+	World->GetTimerManager().SetTimer(BurrowSinkTimerHandle, this, &ThisClass::TickBurrowSink, 1.f / 60.f, true);
+}
+
+void UAIGameplayAbility_BurrowAmbush::TickBurrowSink()
+{
+	const ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+	USkeletalMeshComponent* Mesh = OwnerCharacter ? OwnerCharacter->GetMesh() : nullptr;
+	UWorld* World = GetWorld();
+
+	if (!Mesh || !World)
+	{
+		StopBurrowSink();
+		return;
+	}
+
+	const float Alpha = FMath::Clamp((World->GetTimeSeconds() - BurrowSinkStartTime) / FMath::Max(BurrowSinkDuration, KINDA_SMALL_NUMBER), 0.f, 1.f);
+
+	// 처음엔 조금씩 내려가 파는 모션을 보여주고, 끝(숨김 직전)에서 빠르게 들어감
+	const float SinkOffset = BurrowSinkDepth * FMath::InterpEaseIn(0.f, 1.f, Alpha, FMath::Max(BurrowSinkEaseExponent, 1.f));
+
+	FVector RelativeLocation = Mesh->GetRelativeLocation();
+	RelativeLocation.Z = MeshBaseRelativeZ - SinkOffset;
+	Mesh->SetRelativeLocation(RelativeLocation);
+
+	if (Alpha >= 1.f)
+	{
+		World->GetTimerManager().ClearTimer(BurrowSinkTimerHandle);
+	}
+}
+
+void UAIGameplayAbility_BurrowAmbush::StopBurrowSink()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(BurrowSinkTimerHandle);
+	}
+
+	if (!bMeshSunk)
+	{
+		return;
+	}
+
+	bMeshSunk = false;
+
+	const ACharacter* OwnerCharacter = Cast<ACharacter>(GetAvatarActorFromActorInfo());
+
+	if (USkeletalMeshComponent* Mesh = OwnerCharacter ? OwnerCharacter->GetMesh() : nullptr)
+	{
+		FVector RelativeLocation = Mesh->GetRelativeLocation();
+		RelativeLocation.Z = MeshBaseRelativeZ;
+		Mesh->SetRelativeLocation(RelativeLocation);
+	}
 }
 
 void UAIGameplayAbility_BurrowAmbush::StopEmergeWarningEffect()
