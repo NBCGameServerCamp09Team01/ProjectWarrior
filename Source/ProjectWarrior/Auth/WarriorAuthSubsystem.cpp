@@ -13,6 +13,7 @@
 #include "WebSocketsModule.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
+#include "ProjectWarrior/Network/WarriorAccountSync.h"
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorErrorText.h"
 
@@ -415,7 +416,8 @@ void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 
 
 void UWarriorAuthSubsystem::ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot)
 {
-	if (InSnapshot.Version < LastAppliedAccountVersion)
+	//늦게 온 옛 응답(작은 version)은 버린다. 같으면 적용한다(account-api.md "버전 규칙")
+	if (!WarriorAccountSync::IsNotOlder(InSnapshot.Version, LastAppliedAccountVersion))
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[Auth] Account snapshot version %lld is older than %lld. Ignored."),
 			InSnapshot.Version, LastAppliedAccountVersion);

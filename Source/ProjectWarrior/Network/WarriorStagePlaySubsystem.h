@@ -21,6 +21,8 @@ struct FWarriorStageResumeInfo;
  * - GameMode의 FinishRun이 SubmitResult를 부른다. 서버가 검사·보상·저장을 하고 플레이를 CLEARED·FAILED로 끝낸다.
  *   결과 제출은 UWarriorApiSubsystem(S5)으로 보낸다: 자동 재시도 → "다시 시도 / 종료" → 계속 실패하면 디스크에 보관,
  *   다음 로그인 때 같은 requestId로 재전송한다. 서버가 거절하면(retryable false) 문구 표의 안내 팝업을 띄운다.
+ * - 결과가 저장되면(결과 응답, 판 시작 전 보관 결과 재전송) 응답의 계정 값을 ApplyAccountSnapshot으로 적용한다.
+ *   보낼 때와 같은 세션·계정일 때만(M25, account-api.md 동기화 시점 T2·T5b, WarriorAccountSync.h).
  * - 진행 중인 플레이가 남아 있으면(409 STAGE_PLAY_IN_PROGRESS) 그 플레이의 보관 결과가 있으면 먼저 보내고,
  *   없으면 포기한 뒤 한 번 다시 시작한다(stage-play-api.md P1).
  * - 시작·포기·현황 요청은 지금처럼 UWarriorAuthSubsystem::SendAuthorized로 보낸다(한 번 보내고 끝, 토큰·401 처리는 Auth가 맡는다).
@@ -84,7 +86,12 @@ private:
 	//POST /accounts/me/stage-plays/{id}/abandon → 다시 시작
 	void AbandonAndRestart(int32 InStartSerial, const FString& InStagePlayId, const FString& InStageId);
 
-	void HandleResultResult(const FString& InStagePlayId, const FWarriorApiResult& InResult);
+	//결과 응답. 성공이면 보낼 때와 같은 세션·계정일 때만 응답 account를 ApplyAccountSnapshot으로 적용한다(M25, 동기화 시점 T2)
+	void HandleResultResult(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId, const FWarriorApiResult& InResult);
+
+	//결과 응답 본문의 account를 사본에 적용한다. 보낼 때와 같은 세션·계정이 아니거나 account를 읽지 못하면 적용하지 않고 false
+	bool ApplyResultAccount(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId,
+		const FWarriorAccountSnapshotDto& InAccount);
 
 	//로그인 상태가 끝났다(UWarriorAuthSubsystem::OnSessionEnded). 플레이 ID를 비운다
 	UFUNCTION()

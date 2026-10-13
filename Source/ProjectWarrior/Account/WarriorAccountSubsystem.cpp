@@ -37,7 +37,7 @@ void UWarriorAccountSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	BuildDefinitions();
 
-	//TODO(server): 서버 연동 뒤에는 로그인 직후 서버의 계정 데이터로 ApplyServerSnapshot을 호출해 초기화한다.
+	//빈 값으로 시작한다. 로그인 응답의 계정 값은 UWarriorAuthSubsystem::ApplyAccountSnapshot이 ApplyServerSnapshot으로 넣는다(account-api.md 동기화 시점 T1).
 	Data = FWarriorAccountData();
 
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Init. Level %d, StatPoints %d"), Data.AccountLevel, Data.StatPoints);
@@ -221,8 +221,8 @@ void UWarriorAccountSubsystem::HandleStageRecorded(const FWarriorStageRecord& In
 		Data.RewardedRecordIds.RemoveAt(0);
 	}
 
-	//TODO(server): 보상은 서버가 계산한다. 서버 연동 뒤에는 이 기록(또는 결과 요약)을 서버에 보내고,
-	//서버가 돌려준 계정 데이터로 ApplyServerSnapshot을 호출한다. RecordId가 중복 지급 방지 키다.
+	//보상의 기준은 서버다. 결과는 UWarriorStagePlaySubsystem이 서버에 보내고, 결과 응답의 계정 값이 이 값을 덮는다(M25, 동기화 시점 T2).
+	//이 로컬 보상은 응답이 오기 전과 결과를 보관한 동안(저장 실패) 보이는 값이다. RecordId가 중복 지급 방지 키다.
 	AddLedgerEntry(EWarriorAccountLedgerType::StageReward, ExpName, Reward.ExpGained, FGameplayTag(), InStageRecord.RecordId);
 	if (Reward.StatPointsGained > 0)
 	{
