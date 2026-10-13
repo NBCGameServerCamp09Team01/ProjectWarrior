@@ -7,6 +7,7 @@
 #include "JsonObjectConverter.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Network/WarriorAccountSync.h"
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
 #include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
@@ -292,9 +293,10 @@ void UWarriorStagePlaySubsystem::ResendStoredThenRestart(int32 InStartSerial, co
 	Request.RequestId = InStored.RequestId;
 
 	const FString AccountId = Auth->GetAccount().AccountId;
+	const int32 SentSessionSerial = Auth->GetSessionSerial();
 	const FString StoredRequestId = InStored.RequestId;
 	const bool bStarted = Api->Send(Request,
-		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, StoredRequestId, InStagePlayId, InStageId, AccountId](const FWarriorApiResult& Result)
+		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, StoredRequestId, InStagePlayId, InStageId, AccountId, SentSessionSerial](const FWarriorApiResult& Result)
 		{
 			if (Result.bOk || (Result.HttpStatus != 401 && !UWarriorApiSubsystem::IsRetryable(Result.Error)))
 			{
@@ -309,6 +311,12 @@ void UWarriorStagePlaySubsystem::ResendStoredThenRestart(int32 InStartSerial, co
 
 			if (Result.bOk)
 			{
+				//보관 결과가 받아들여졌다. 새 판을 시작하기 전에 응답의 계정 값(지금 값)을 사본에 맞춘다(동기화 시점 T5b)
+				FWarriorStageResultSubmitResponseDto ResponseDto;
+				if (FJsonObjectConverter::JsonObjectStringToUStruct(Result.Body, &ResponseDto))
+				{
+					WeakThis->ApplyResultAccount(InStagePlayId, SentSessionSerial, AccountId, ResponseDto.Data.Account);
+				}
 				WeakThis->SendStart(InStageId, false);
 				return;
 			}
@@ -397,12 +405,18 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 	Request.StoreExpiresAt = CurrentStagePlayExpiresAt;
 	Request.bAskOnFail = true;
 
+	//응답이 오는 사이 로그아웃·다시 로그인이 있었는지 보려고 보낼 때의 세션·계정을 기억한다(재전송 길과 같은 조건)
+	const UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	const int32 SentSessionSerial = Auth ? Auth->GetSessionSerial() : 0;
+	const FString SentAccountId = Auth ? Auth->GetAccount().AccountId : FString();
+
 	const FString StagePlayId = CurrentStagePlayId;
-	const bool bStarted = Api->Send(Request, [WeakThis = TWeakObjectPtr<ThisClass>(this), StagePlayId](const FWarriorApiResult& Result)
+	const bool bStarted = Api->Send(Request,
+		[WeakThis = TWeakObjectPtr<ThisClass>(this), StagePlayId, SentSessionSerial, SentAccountId](const FWarriorApiResult& Result)
 	{
 		if (WeakThis.IsValid())
 		{
-			WeakThis->HandleResultResult(StagePlayId, Result);
+			WeakThis->HandleResultResult(StagePlayId, SentSessionSerial, SentAccountId, Result);
 		}
 	});
 
@@ -417,7 +431,8 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 		InResult.PlayTimeSeconds, *RequestDto.RequestId);
 }
 
-void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId, const FWarriorApiResult& InResult)
+void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId,
+	const FWarriorApiResult& InResult)
 {
 	//── 200: SAVED 또는 ALREADY_SAVED. 둘 다 서버에 저장된 것
 	if (InResult.bOk)
@@ -434,6 +449,9 @@ void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId
 		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Result saveStatus %s. stagePlayId=%s cleared=%s exp +%d level %d->%d statPoints +%d attempts=%d serverRequestId=%s"),
 			*ResponseDto.Data.SaveStatus, *InStagePlayId, ResponseDto.Data.Result.Cleared ? TEXT("true") : TEXT("false"),
 			Reward.ExpGained, Reward.LevelBefore, Reward.LevelAfter, Reward.StatPointsGained, InResult.Attempts, *ResponseDto.Meta.RequestId);
+
+		//결과 응답의 계정 값(지금 값)으로 메인메뉴를 맞춘다(동기화 시점 T2). 게임이 먼저 계산한 보상 값을 서버 값이 덮는다
+		ApplyResultAccount(InStagePlayId, InSentSessionSerial, InSentAccountId, ResponseDto.Data.Account);
 		return;
 	}
 
@@ -454,4 +472,21 @@ void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId
 			Api->PresentError(InResult);
 		}
 	}
+}
+
+bool UWarriorStagePlaySubsystem::ApplyResultAccount(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId,
+	const FWarriorAccountSnapshotDto& InAccount)
+{
+	//보낸 뒤 로그아웃·다시 로그인했거나 다른 계정 값이면(응답에 account가 없으면 빈 ID) 적용하지 않는다. version 비교는 ApplyAccountSnapshot이 한다
+	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	if (!Auth || !WarriorAccountSync::IsSameSession(Auth->IsLoggedIn(), Auth->GetSessionSerial(), InSentSessionSerial,
+		InSentAccountId, InAccount.AccountId))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result account not applied (logged out, logged in again or no account). stagePlayId=%s"),
+			*InStagePlayId);
+		return false;
+	}
+
+	Auth->ApplyAccountSnapshot(InAccount);
+	return true;
 }
