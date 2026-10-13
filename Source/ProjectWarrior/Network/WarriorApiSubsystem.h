@@ -72,6 +72,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Api")
 	FOnWarriorErrorNoticeRequested OnNoticeRequested;
 
+	//로그인 뒤 보관 요청 재전송이 끝났을 때. 보낼 것이 없을 때도 (0, 0)으로 온다. 재전송 도중 로그인 상태가 끝나면 오지 않는다
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Api")
 	FOnWarriorPendingResendFinished OnPendingResendFinished;
 

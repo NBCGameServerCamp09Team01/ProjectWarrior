@@ -5,11 +5,13 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "ProjectWarrior/Auth/WarriorAuthTypes.h"
+#include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
 #include "WarriorStagePlaySubsystem.generated.h"
 
 struct FWarriorApiResult;
 struct FWarriorPendingRequest;
 struct FWarriorStageResult;
+struct FWarriorStageResumeInfo;
 
 /**
  * 스테이지 플레이 서브시스템. 스테이지에 들어갈 때 서버에 플레이를 시작하고, 받은 stagePlayId를 보관한다.
@@ -23,6 +25,8 @@ struct FWarriorStageResult;
  *   없으면 포기한 뒤 한 번 다시 시작한다(stage-play-api.md P1).
  * - 시작·포기·현황 요청은 지금처럼 UWarriorAuthSubsystem::SendAuthorized로 보낸다(한 번 보내고 끝, 토큰·401 처리는 Auth가 맡는다).
  * - 로그인 상태가 끝나면 플레이 ID를 비운다(다른 계정이 이어받지 않게).
+ * - 이어하기(stage-play-api.md "이어하기(1차)"): 로그인 뒤 UWarriorPlayCheckpointSubsystem이 P2·P4를 부르고,
+ *   이어하면 BeginRun이 이어하기 정보를 넘겨 P1 없이 같은 stagePlayId로 시작한다.
  */
 UCLASS()
 class PROJECTWARRIOR_API UWarriorStagePlaySubsystem : public UGameInstanceSubsystem
@@ -37,9 +41,25 @@ public:
 	virtual void Deinitialize() override;
 	//~ End USubsystem Interface
 
+	//진행 중 플레이 결과. InPlay는 InProgress일 때만 채워진다
+	using FCurrentStagePlayCallback = TFunction<void(EWarriorCurrentStagePlay InResult, const FWarriorStagePlayDto& InPlay)>;
+
+	//포기 결과. InStatus는 HTTP 상태(연결 실패는 0), InErrorCode는 오류 본문의 code
+	using FAbandonCallback = TFunction<void(int32 InStatus, const FString& InErrorCode)>;
+
 	//POST /accounts/me/stage-plays. 이전 플레이 ID는 지우고, 201이면 새 ID를 보관한다.
 	//InStageId는 소문자로 바꿔 보낸다(예: stage.01.01)
-	void StartStagePlay(FName InStageId);
+	//InResume이 있으면(이어하기) 시작 요청을 보내지 않고 그 플레이 ID와 마감을 그대로 쓴다
+	void StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume = nullptr);
+
+	//GET /accounts/me/stage-plays/current. 보내지 못했으면(로그인 안 함) false이고 콜백은 오지 않는다
+	bool RequestCurrentStagePlay(FCurrentStagePlayCallback InCallback);
+
+	//POST /accounts/me/stage-plays/{id}/abandon. 보내지 못했으면 false이고 콜백은 오지 않는다
+	bool AbandonStagePlay(const FString& InStagePlayId, FAbandonCallback InCallback);
+
+	//지금 플레이를 포기하고 ID를 비운다. 판 도중 스스로 나가는 메뉴(일시정지 → 나가기)용. 앱 종료·세션 종료에는 부르지 않는다(다음 로그인 때 이어하기를 묻는다)
+	void AbandonCurrentStagePlay();
 
 	//서버가 발급한 지금 플레이 ID(소문자 하이픈 GUID). 시작 응답 전이나 시작 실패면 비어 있다
 	const FString& GetCurrentStagePlayId() const { return CurrentStagePlayId; }
@@ -54,7 +74,8 @@ private:
 
 	void HandleStartResponse(int32 InStartSerial, const FString& InStageId, bool bInRecoverInProgress, int32 Status, const FString& Body);
 
-	//GET /accounts/me/stage-plays/current → (보관 결과가 있으면) 결과 재전송 / (없으면) 포기 → 다시 시작
+	//GET /accounts/me/stage-plays/current → (보관 결과가 있으면) 결과 재전송 / (없으면) 포기 → 다시 시작.
+	//로그인 때 이어하기를 물었으므로 이 길은 그 확인이 실패했거나 그 사이 다른 기기에서 새 판을 시작한 경우에만 탄다
 	void RecoverInProgress(int32 InStartSerial, const FString& InStageId);
 
 	//진행 중 플레이의 보관 결과를 먼저 보낸다. 받아들여지면 다시 시작, 거절되면 보관본을 지우고 포기 → 다시 시작

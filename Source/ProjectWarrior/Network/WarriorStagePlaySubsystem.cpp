@@ -10,6 +10,7 @@
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
 #include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
+#include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 
 namespace WarriorStagePlayApi
@@ -52,14 +53,97 @@ void UWarriorStagePlaySubsystem::HandleSessionEnded(EWarriorSessionEndReason InR
 	CurrentStagePlayExpiresAt = FDateTime();
 }
 
-void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId)
+void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume)
 {
 	//이전 플레이 ID로 결과를 내지 않도록 먼저 비운다
 	++StartSerial;
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
 
+	//── 이어하기: 서버의 진행 중 플레이를 그대로 쓴다. 결과 검사의 경과 시간·마감은 원래 시작 기준이다(stage-play-api.md "이어하기(1차)")
+	if (InResume && InResume->IsSet())
+	{
+		CurrentStagePlayId = InResume->StagePlayId.ToLower();
+		if (!FDateTime::ParseIso8601(*InResume->ExpiresAt, CurrentStagePlayExpiresAt))
+		{
+			CurrentStagePlayExpiresAt = FDateTime();
+		}
+		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Resumed. stagePlayId=%s stage=%s fromWave=%d expiresAt=%s (no start request)"),
+			*CurrentStagePlayId, *InStageId.ToString(), InResume->ResumeFromWave, *InResume->ExpiresAt);
+		return;
+	}
+
 	SendStart(InStageId.ToString().ToLower(), true);
+}
+
+bool UWarriorStagePlaySubsystem::RequestCurrentStagePlay(FCurrentStagePlayCallback InCallback)
+{
+	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	if (!Auth)
+	{
+		return false;
+	}
+
+	return Auth->SendAuthorized(TEXT("GET"), FString(WarriorStagePlayApi::StagePlaysPath) + TEXT("/current"), FString(),
+		[Callback = MoveTemp(InCallback)](int32 Status, const FString& Body)
+		{
+			FWarriorStagePlayResponseDto ResponseDto;
+			if (Status == 204)
+			{
+				Callback(EWarriorCurrentStagePlay::None, ResponseDto.Data);
+				return;
+			}
+
+			if (Status == 200 && FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto) && !ResponseDto.Data.StagePlayId.IsEmpty())
+			{
+				Callback(EWarriorCurrentStagePlay::InProgress, ResponseDto.Data);
+				return;
+			}
+
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play could not be read. status=%d code=%s"),
+				Status, *UWarriorApiSubsystem::ParseError(Status, Body).Code);
+			Callback(EWarriorCurrentStagePlay::Failed, FWarriorStagePlayDto());
+		});
+}
+
+bool UWarriorStagePlaySubsystem::AbandonStagePlay(const FString& InStagePlayId, FAbandonCallback InCallback)
+{
+	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	if (!Auth || InStagePlayId.IsEmpty())
+	{
+		return false;
+	}
+
+	const FString Path = FString::Printf(TEXT("%s/%s/abandon"), WarriorStagePlayApi::StagePlaysPath, *InStagePlayId);
+	return Auth->SendAuthorized(TEXT("POST"), Path, FString(),
+		[Callback = MoveTemp(InCallback)](int32 Status, const FString& Body)
+		{
+			Callback(Status, Status == 200 ? FString() : UWarriorApiSubsystem::ParseError(Status, Body).Code);
+		});
+}
+
+void UWarriorStagePlaySubsystem::AbandonCurrentStagePlay()
+{
+	if (CurrentStagePlayId.IsEmpty())
+	{
+		return;
+	}
+
+	//결과를 내지 않게 먼저 비운다. 늦게 온 시작 응답도 버린다
+	const FString StagePlayId = CurrentStagePlayId;
+	++StartSerial;
+	CurrentStagePlayId.Reset();
+	CurrentStagePlayExpiresAt = FDateTime();
+
+	const bool bStarted = AbandonStagePlay(StagePlayId, [StagePlayId](int32 Status, const FString& ErrorCode)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Abandon by leaving. stagePlayId=%s status=%d code=%s"), *StagePlayId, Status, *ErrorCode);
+	});
+
+	if (!bStarted)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Abandon by leaving not sent. stagePlayId=%s"), *StagePlayId);
+	}
 }
 
 void UWarriorStagePlaySubsystem::SendStart(const FString& InStageId, bool bInRecoverInProgress)
@@ -148,14 +232,8 @@ void UWarriorStagePlaySubsystem::HandleStartResponse(int32 InStartSerial, const 
 
 void UWarriorStagePlaySubsystem::RecoverInProgress(int32 InStartSerial, const FString& InStageId)
 {
-	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
-	if (!Auth)
-	{
-		return;
-	}
-
-	const bool bStarted = Auth->SendAuthorized(TEXT("GET"), FString(WarriorStagePlayApi::StagePlaysPath) + TEXT("/current"), FString(),
-		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, InStageId](int32 Status, const FString& Body)
+	const bool bStarted = RequestCurrentStagePlay(
+		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, InStageId](EWarriorCurrentStagePlay Result, const FWarriorStagePlayDto& Play)
 		{
 			if (!WeakThis.IsValid() || !WeakThis->IsCurrentStart(InStartSerial))
 			{
@@ -163,31 +241,29 @@ void UWarriorStagePlaySubsystem::RecoverInProgress(int32 InStartSerial, const FS
 			}
 
 			//── 204: 그사이 마감·포기로 끝났다. 바로 다시 시작
-			if (Status == 204)
+			if (Result == EWarriorCurrentStagePlay::None)
 			{
 				WeakThis->SendStart(InStageId, false);
 				return;
 			}
 
-			FWarriorStagePlayResponseDto ResponseDto;
-			if (Status == 200 && FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto) && !ResponseDto.Data.StagePlayId.IsEmpty())
+			if (Result == EWarriorCurrentStagePlay::InProgress)
 			{
 				//명세 P1: 그 플레이의 보관 결과가 있으면 포기하지 말고 결과부터 보낸다
 				const UWarriorAuthSubsystem* AuthNow = UWarriorAuthSubsystem::Get(WeakThis.Get());
 				FWarriorPendingRequest Stored;
 				if (AuthNow && FWarriorPendingRequestStore::FindByKey(AuthNow->GetAccount().AccountId, EWarriorPendingKind::StageResult,
-					ResponseDto.Data.StagePlayId, Stored))
+					Play.StagePlayId, Stored))
 				{
-					WeakThis->ResendStoredThenRestart(InStartSerial, Stored, ResponseDto.Data.StagePlayId, InStageId);
+					WeakThis->ResendStoredThenRestart(InStartSerial, Stored, Play.StagePlayId, InStageId);
 					return;
 				}
 
-				WeakThis->AbandonAndRestart(InStartSerial, ResponseDto.Data.StagePlayId, InStageId);
+				WeakThis->AbandonAndRestart(InStartSerial, Play.StagePlayId, InStageId);
 				return;
 			}
 
-			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play could not be read. status=%d code=%s. This run will not be saved."),
-				Status, *UWarriorApiSubsystem::ParseError(Status, Body).Code);
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play could not be read. This run will not be saved."));
 		});
 
 	if (!bStarted)
@@ -249,15 +325,8 @@ void UWarriorStagePlaySubsystem::ResendStoredThenRestart(int32 InStartSerial, co
 
 void UWarriorStagePlaySubsystem::AbandonAndRestart(int32 InStartSerial, const FString& InStagePlayId, const FString& InStageId)
 {
-	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
-	if (!Auth)
-	{
-		return;
-	}
-
-	const FString Path = FString::Printf(TEXT("%s/%s/abandon"), WarriorStagePlayApi::StagePlaysPath, *InStagePlayId);
-	const bool bStarted = Auth->SendAuthorized(TEXT("POST"), Path, FString(),
-		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, InStagePlayId, InStageId](int32 Status, const FString& Body)
+	const bool bStarted = AbandonStagePlay(InStagePlayId,
+		[WeakThis = TWeakObjectPtr<ThisClass>(this), InStartSerial, InStagePlayId, InStageId](int32 Status, const FString& ErrorCode)
 		{
 			if (!WeakThis.IsValid() || !WeakThis->IsCurrentStart(InStartSerial))
 			{
@@ -265,8 +334,7 @@ void UWarriorStagePlaySubsystem::AbandonAndRestart(int32 InStartSerial, const FS
 			}
 
 			//── 200 포기됨, 409 STAGE_PLAY_NOT_IN_PROGRESS 그사이 이미 끝남: 둘 다 이제 시작할 수 있다
-			const FWarriorApiError Error = UWarriorApiSubsystem::ParseError(Status, Body);
-			if (Status == 200 || (Status == 409 && Error.Code == TEXT("STAGE_PLAY_NOT_IN_PROGRESS")))
+			if (Status == 200 || (Status == 409 && ErrorCode == TEXT("STAGE_PLAY_NOT_IN_PROGRESS")))
 			{
 				UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Previous play %s ended. Starting again."), *InStagePlayId);
 				WeakThis->SendStart(InStageId, false);
@@ -274,7 +342,7 @@ void UWarriorStagePlaySubsystem::AbandonAndRestart(int32 InStartSerial, const FS
 			}
 
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Abandon failed. stagePlayId=%s status=%d code=%s. This run will not be saved."),
-				*InStagePlayId, Status, *Error.Code);
+				*InStagePlayId, Status, *ErrorCode);
 		});
 
 	if (!bStarted)
