@@ -154,6 +154,33 @@ bool UPlayerInventoryComponent::SpendGold(int32 InAmount)
 	return true;
 }
 
+void UPlayerInventoryComponent::RestoreState(int32 InGold, const TArray<FWarriorInventorySlot>& InSlots)
+{
+	Slots.Reset();
+	for (const FWarriorInventorySlot& InSlot : InSlots)
+	{
+		if (InSlot.IsEmpty() || Slots.Num() >= MaxSlotCount)
+		{
+			continue;
+		}
+
+		if (FWarriorInventorySlot* Existing = FindSlot(InSlot.ItemData))
+		{
+			Existing->Quantity = FMath::Min(Existing->Quantity + InSlot.Quantity, InSlot.ItemData->MaxStack);
+			continue;
+		}
+
+		FWarriorInventorySlot& NewSlot = Slots.AddDefaulted_GetRef();
+		NewSlot.ItemData = InSlot.ItemData;
+		NewSlot.Quantity = FMath::Min(InSlot.Quantity, InSlot.ItemData->MaxStack);
+	}
+
+	Gold = FMath::Max(0, InGold);
+
+	OnInventoryChanged.Broadcast();
+	OnGoldChanged.Broadcast(Gold);
+}
+
 FWarriorInventorySlot* UPlayerInventoryComponent::FindSlot(const UDataAsset_Item* InItem)
 {
 	return Slots.FindByPredicate(
@@ -164,4 +191,4 @@ APawn* UPlayerInventoryComponent::GetOwningPlayerPawn() const
 {
 	const APlayerState* OwningPlayerState = GetOwner<APlayerState>();
 	return OwningPlayerState ? OwningPlayerState->GetPawn() : nullptr;
-}
+}
