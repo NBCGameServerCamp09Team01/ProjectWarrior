@@ -13,6 +13,8 @@
 #include "AIController.h"
 #include "BrainComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "ProjectWarrior/WarriorFunctionLibrary.h"
 
 AWarriorAICharacter::AWarriorAICharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -85,6 +87,21 @@ void AWarriorAICharacter::BeginPlay()
     {
         HealthWidget->InitAICreatedWidget(this);
     }
+
+    if (WarriorAbilitySystemComponent)
+    {
+        WarriorAbilitySystemComponent->GenericGameplayEventCallbacks.FindOrAdd(WarriorGameplayTags::AI_Event_Death_PoseReached).AddUObject(this, &ThisClass::OnDeathPoseReached);
+    }
+}
+
+void AWarriorAICharacter::OnDeathPoseReached(const FGameplayEventData* Payload)
+{
+    UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(this, WarriorGameplayTags::AI_Status_DeathPoseReached);
+}
+
+bool AWarriorAICharacter::HasReachedDeathPose() const
+{
+    return WarriorAbilitySystemComponent && WarriorAbilitySystemComponent->HasMatchingGameplayTag(WarriorGameplayTags::AI_Status_DeathPoseReached);
 }
 
 void AWarriorAICharacter::PossessedBy(AController* NewController)

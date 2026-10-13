@@ -10,6 +10,7 @@
 class UAICombatComponent;
 class UAIUIComponent;
 class UWidgetComponent;
+struct FGameplayEventData;
 
 /**
  * 
@@ -34,8 +35,14 @@ public:
 	// 사망 처리 시작(OnDeathAbilityStart)에서 호출됨. 사망 알림 후 AI 회전·이동을 멈춤
 	virtual void OnCharacterDiedEvent_Implementation() override;
 
+	// 사망 몽타주가 쓰러진 자세에 도달했는지(AI.Event.Death.PoseReached를 받았는지)
+	bool HasReachedDeathPose() const;
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 사망 GA의 몽타주가 쓰러진 자세에 닿을 때 오는 이벤트. 태그를 붙여 이후 공격 판정에서 제외되게 함
+	void OnDeathPoseReached(const FGameplayEventData* Payload);
 
 	//~ Begin APawn Interface.
 	virtual void PossessedBy(AController* NewController) override;
