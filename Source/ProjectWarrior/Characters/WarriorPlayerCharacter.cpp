@@ -4,6 +4,7 @@
 #include "WarriorPlayerCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "ProjectWarrior/Components/Camera/CameraClipHideComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -41,6 +42,9 @@ AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& Objec
     FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
     FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
     FollowCamera->bUsePawnControlRotation = false;
+
+    // 카메라가 캐릭터 몸 안에 들어가면 그 캐릭터를 숨겨 클리핑 방지
+    CameraClipHideComponent = CreateDefaultSubobject<UCameraClipHideComponent>(TEXT("CameraClipHideComponent"));
 
     PlayerCombatComponent = CreateDefaultSubobject<UPlayerCombatComponent>(TEXT("PlayerCombatComponent"));
 
