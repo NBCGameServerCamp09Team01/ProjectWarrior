@@ -74,6 +74,19 @@ struct PROJECTWARRIOR_API FWarriorStagePlayResponseDto
 
 //~ End 시작
 
+//~ Begin 내 진행 중 플레이 (GET /accounts/me/stage-plays/current)
+
+//진행 중 플레이를 물은 결과
+UENUM()
+enum class EWarriorCurrentStagePlay : uint8
+{
+	None,		// 204: 진행 중 플레이 없음(마감이 지난 것은 서버가 EXPIRED로 바꾸고 204)
+	InProgress,	// 200: 진행 중 플레이 있음
+	Failed		// 연결 실패·응답을 읽지 못함·그 밖의 상태
+};
+
+//~ End 내 진행 중 플레이
+
 //~ Begin 결과 제출 (POST /accounts/me/stage-plays/{stagePlayId}/result, result-api.md)
 
 //결과 요청 본문. FWarriorStageResult를 그대로 변환하면 bCleared가 "bCleared"로 나가 400이므로 칸을 따로 둔다

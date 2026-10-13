@@ -34,6 +34,30 @@ struct PROJECTWARRIOR_API FWarriorStageLaunchInfo
 	bool IsSet() const { return !StageId.IsNone(); }
 };
 
+/**
+ * 진행 중인 서버 플레이를 이어 갈 때의 정보(stage-play-api.md "이어하기(1차)").
+ * 1차는 늘 처음(1웨이브)부터 다시 한다. 웨이브 중간부터 이어 가는 단계에서 체크포인트 값(골드·인벤토리·판 강화 등)을 여기에 더한다.
+ */
+USTRUCT(BlueprintType)
+struct PROJECTWARRIOR_API FWarriorStageResumeInfo
+{
+	GENERATED_BODY()
+
+	//이어 갈 서버 플레이 ID. 비어 있으면 이어하기가 아니다
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	FString StagePlayId;
+
+	//그 플레이의 마감(UTC ISO-8601). 결과를 보관할 때 유효 기간으로 쓴다
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	FString ExpiresAt;
+
+	//이어서 시작할 웨이브(1부터). 1차는 늘 1
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 ResumeFromWave = 1;
+
+	bool IsSet() const { return !StagePlayId.IsEmpty(); }
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorStageLaunchInfoChanged, const FWarriorStageLaunchInfo&, LaunchInfo);
 
 /**
@@ -56,6 +80,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Stage")
 	void ClearSelection();
 
+	//진행 중인 서버 플레이를 이어 가도록 스테이지를 고른다. 다음 스테이지 레벨의 BeginRun이 ConsumeResumeInfo로 한 번만 가져간다
+	void SelectStageForResume(FName InStageId, const FWarriorStageResumeInfo& InResume);
+
+	//InStageId의 이어하기 정보가 있으면 꺼내고 지운다(결과 화면의 "다시 하기"가 끝난 플레이 ID를 다시 쓰지 않게). 없거나 스테이지가 다르면 false
+	bool ConsumeResumeInfo(FName InStageId, FWarriorStageResumeInfo& OutResume);
+
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
 	bool HasLaunchInfo() const { return LaunchInfo.IsSet(); }
 
@@ -73,4 +103,7 @@ public:
 
 private:
 	FWarriorStageLaunchInfo LaunchInfo;
+
+	//SelectStageForResume으로 정한 이어하기 정보. 다른 스테이지를 고르거나 선택을 지우면 함께 지운다
+	FWarriorStageResumeInfo PendingResume;
 };

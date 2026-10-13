@@ -6,6 +6,7 @@
 #include "WarriorPlayerController.h"
 #include "ProjectWarrior/Auth/WarriorAuthTypes.h"
 #include "ProjectWarrior/Network/WarriorRealtimeSubsystem.h"
+#include "ProjectWarrior/Network/WarriorPlayCheckpointSubsystem.h"
 #include "WarriorFrontPlayerController.generated.h"
 
 class UUserWidget;
@@ -131,7 +132,35 @@ private:
 	UFUNCTION()
 	void HandleRankingClosed();
 
-	//가장 위에 떠 있는 위젯(안내 팝업 → 스테이지 선택 팝업 → 랭킹 팝업 → 지금 화면)으로 입력 포커스를 준다
+	//~ Begin 이어하기(M22, stage-play-api.md "이어하기(1차)")
+	//로그인 뒤 진행 중 플레이 확인 상태가 바뀌었을 때
+	UFUNCTION()
+	void HandlePlayCheckpointChanged(EWarriorPlayCheckpointState InState);
+
+	//스테이지 목록을 받았을 때. 이어하기 팝업이 떠 있으면 스테이지 이름을 고친다
+	UFUNCTION()
+	void HandleStageListUpdated();
+
+	//이어하기 팝업의 버튼. bConfirmed: 이어하기(카탈로그에 없는 스테이지면 포기), false: 포기
+	UFUNCTION()
+	void HandleResumeChoice(bool bConfirmed);
+
+	//메인메뉴일 때 확인 상태에 맞춰 입력을 막거나 풀고, 이어할 플레이가 있으면 팝업을 띄운다
+	void ApplyPlayCheckpointState();
+
+	void SetMainMenuInputBlocked(bool bBlocked);
+	void ShowResumePopup();
+	void CloseResumePopup();
+	FText BuildResumeMessage() const;
+
+	//이어하기: 같은 stagePlayId로 그 스테이지를 처음부터 시작한다
+	void ResumeStage();
+
+	//포기: P4 → 메인메뉴(실패하면 안내)
+	void AbandonResumablePlay();
+	//~ End 이어하기
+
+	//가장 위에 떠 있는 위젯(안내 팝업 → 이어하기 팝업 → 스테이지 선택 팝업 → 랭킹 팝업 → 지금 화면)으로 입력 포커스를 준다
 	void FocusTopWidget();
 
 	//화면이 바뀐 뒤 음악 상황을 알리고 전환 소리를 낸다(어떤 소리인지는 사운드 표가 정함)
@@ -153,6 +182,12 @@ private:
 	//한 번 만든 랭킹 팝업을 재사용
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorRankingPopupWidget> RankingPopup;
+	//이어하기 팝업(NoticePopupClass로 따로 만든다. 안내 팝업과 같이 쓰면 다른 안내가 문구·버튼을 덮는다)
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorNoticePopupWidget> ResumePopup;
+
+	//이어하기 팝업이 [포기] 하나만 보이는가(이 빌드에 없는 스테이지)
+	bool bResumePopupAbandonOnly = false;
 
 	EWarriorFrontScreen CurrentScreen = EWarriorFrontScreen::None;
 };

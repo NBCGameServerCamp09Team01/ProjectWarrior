@@ -511,6 +511,8 @@ void UWarriorApiSubsystem::ResendPending()
 	ResendQueue = FWarriorPendingRequestStore::LoadAll(ResendAccountId, CorruptedCount);
 	if (ResendQueue.IsEmpty() && CorruptedCount == 0)
 	{
+		//보낼 것이 없어도 끝났다고 알린다. 로그인 뒤 재전송을 기다렸다가 진행 중 플레이를 확인하는 쪽(M22 이어하기)이 받는다
+		OnPendingResendFinished.Broadcast(0, 0);
 		return;
 	}
 
