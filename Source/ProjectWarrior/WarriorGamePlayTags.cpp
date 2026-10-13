@@ -132,6 +132,11 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Shockwave, "AI.Ability.Boss.Shockwave");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RageCombo, "AI.Ability.Boss.RageCombo");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_PhaseTransition, "AI.Ability.Boss.PhaseTransition");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RockThrow, "AI.Ability.Boss.RockThrow");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RockBarrage, "AI.Ability.Boss.RockBarrage");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_LeapSlamDouble, "AI.Ability.Boss.LeapSlamDouble");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_EnergyBurst, "AI.Ability.Boss.EnergyBurst");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Rolling, "AI.Ability.Boss.Rolling");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_Telegraph, "AI.Event.Boss.Telegraph");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_AreaImpact, "AI.Event.Boss.AreaImpact");
@@ -141,6 +146,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Blocking, "AI.Status.Boss.Blocking");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_SuperArmor, "AI.Status.Boss.SuperArmor");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Airborne, "AI.Status.Boss.Airborne");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Stunned, "AI.Status.Boss.Stunned");
 
 	/** Nonhumanoid monster tags (Megaspikan / Larvae / Larvae Stalker) **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_ClawLeft, "AI.Ability.Megaspikan.ClawLeft");

@@ -46,8 +46,9 @@ protected:
 	bool StartDash(const FGameplayEffectSpecHandle& InDamageSpecHandle, float DashDuration = 0.5f);
 
 	// 돌진이 끝났을 때 (EndAbility로 중간에 끝나면 호출되지 않음)
-	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Ability|ChargeAttack")
+	UFUNCTION(BlueprintNativeEvent, Category = "Warrior|Ability|ChargeAttack")
 	void OnChargeDashFinished();
+	virtual void OnChargeDashFinished_Implementation() {}
 
 	UFUNCTION(BlueprintPure, Category = "Warrior|Ability|ChargeAttack")
 	bool IsDashing() const { return ChargePhase == EBossChargePhase::Dashing; }

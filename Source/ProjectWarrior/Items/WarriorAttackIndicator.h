@@ -18,6 +18,7 @@ class UMaterialInstanceDynamic;
  *  - ProgressParameterName  : 0 -> 1 로 FillDuration 동안 채워짐 (공격 도달까지 남은 시간 표현)
  *  - ShapeParameterName     : 0 = Circle, 1 = Box, 2 = Cone
  *  - ConeAngleParameterName : Cone 전체 각도(도)
+ *  - InnerRadiusRatioParameterName : Circle/Cone 안쪽 빈 원의 비율 (0 ~ 1)
  * Circle/Cone은 데칼 UV 중심이 원점, Box는 UV 한쪽 끝이 원점(정면으로 뻗음)이다.
  */
 UCLASS()
@@ -64,6 +65,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "AttackIndicator|Material")
 	FName ConeAngleParameterName = TEXT("ConeAngle");
+
+	// 도넛 모양의 안쪽 빈 원 비율 (InnerRadius / Radius, 0 = 꽉 찬 원)
+	UPROPERTY(EditDefaultsOnly, Category = "AttackIndicator|Material")
+	FName InnerRadiusRatioParameterName = TEXT("InnerRadiusRatio");
 
 private:
 	void SetFillProgress(float InProgress);

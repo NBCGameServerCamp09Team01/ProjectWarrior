@@ -11,6 +11,8 @@
 class UBoxComponent;
 class UStaticMeshComponent;
 class UProjectileMovementComponent;
+class UFXSystemAsset;
+class UFXSystemComponent;
 
 UCLASS()
 class PROJECTWARRIOR_API AWarriorProjectileBase : public AActor
@@ -25,9 +27,9 @@ public:
 	FGameplayEffectSpecHandle ProjectileDamageEffectSpecHandle;
 
 	// 스폰 직후에는 충돌/이동이 꺼진 대기 상태. 호출 시 부착을 풀고 LaunchDirection으로 발사
-	// InDamageSpecHandle이 유효하면 기존 Spec을 덮어씀
+	// InDamageSpecHandle이 유효하면 기존 Spec을 덮어씀. LaunchSpeed가 0보다 크면 InitialSpeed 대신 사용 (포물선 계산 결과 등)
 	UFUNCTION(BlueprintCallable, Category = "Projectile")
-	void LaunchProjectile(const FVector& LaunchDirection, const FGameplayEffectSpecHandle& InDamageSpecHandle);
+	void LaunchProjectile(const FVector& LaunchDirection, const FGameplayEffectSpecHandle& InDamageSpecHandle, float LaunchSpeed = -1.f);
 
 	UFUNCTION(BlueprintPure, Category = "Projectile")
 	bool IsLaunched() const { return bLaunched; }
@@ -43,9 +45,13 @@ public:
 protected:
 	virtual void Tick(float DeltaSeconds) override;
 
-	// 발사 후 수명. 대기 중에는 사라지지 않음
+	// 발사 후 수명. 대기 중에는 HeldSafetyLifeSpan이 0이면 사라지지 않음
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile")
 	float LifeSpanAfterLaunch = 5.f;
+
+	// 발사되지 않은 채(손에 든 채) 이 시간이 지나면 스스로 사라짐. 던지기가 끊겨 몸에 남는 것 방지 (0 = 사용 안 함)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile", meta = (ClampMin = "0.0", Units = "s"))
+	float HeldSafetyLifeSpan = 0.f;
 
 	// 루트. +X가 발사 방향이며 ProjectileMovement가 이 컴포넌트를 움직임
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile")
@@ -78,6 +84,28 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Projectile|Reflect")
 	bool bCanBeReflected = true;
 
+	// 발사 전(손에 들고 있는 동안) 메시에 붙여 재생할 이펙트 (Niagara/Cascade, 선택)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|FX")
+	TObjectPtr<UFXSystemAsset> HeldEffect;
+
+	// 날아가는 동안 메시에 붙여 재생할 이펙트 (선택)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|FX")
+	TObjectPtr<UFXSystemAsset> FlightEffect;
+
+	// 지형 등 폰이 아닌 것에 맞았을 때 (선택)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|FX")
+	TObjectPtr<UFXSystemAsset> ImpactWorldEffect;
+
+	// 폰에 맞았을 때 (선택, 비어 있으면 ImpactWorldEffect)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|FX")
+	TObjectPtr<UFXSystemAsset> ImpactCharacterEffect;
+
+	// 위 이펙트 크기 배율 (투사체 액터 스케일도 함께 곱함)
+	UPROPERTY(EditDefaultsOnly, Category = "Projectile|FX")
+	FVector EffectScale = FVector::OneVector;
+
+	virtual void BeginPlay() override;
+
 	UFUNCTION()
 	virtual void OnProjectileBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
@@ -98,6 +126,12 @@ private:
 
 	// 트레이스에 걸린 액터가 폰에 붙은 무기 등이면 그 폰을 반환
 	static APawn* ResolveHitPawn(AActor* HitActor);
+
+	// 명중 이펙트 재생 + BP_OnProjectileImpact 호출 (파괴 직전)
+	void NotifyProjectileImpact(AActor* HitActor, const FVector& ImpactLocation, EWarriorHitResultType HitResult);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UFXSystemComponent> HeldEffectComponent;
 
 	bool bReflected = false;
 

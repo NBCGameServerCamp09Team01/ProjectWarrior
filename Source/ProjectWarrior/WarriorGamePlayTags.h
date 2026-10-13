@@ -148,6 +148,15 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_RageCombo);
 	// 페이즈 전환 연출. 패턴 목록에는 넣지 않고 AI.Event.Boss.PhaseChanged로 발동
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_PhaseTransition);
+	// 바위를 뜯어 던짐 (1페이즈 1개 / 2페이즈 연속 투척)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_RockThrow);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_RockBarrage);
+	// 도약 내리찍기 2회 연속 (2페이즈)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_LeapSlamDouble);
+	// 차징 후 안쪽 원 -> 바깥 고리 순으로 터지는 충격파 (2페이즈)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_EnergyBurst);
+	// 몸을 말아 구르며 벽에 튕겨 다니다 기절 (2페이즈)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Boss_Rolling);
 
 	// 몽타주 노티파이 -> 범위 공격 어빌리티: 위험 범위 표시 시작 / 판정 시점
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Boss_Telegraph);
@@ -160,6 +169,8 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_SuperArmor);
 	// 도약 공중 구간 (이륙~착지). 이 동안에는 페이즈 전환 연출을 미룸
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_Airborne);
+	// 구르기 공격 뒤 기절 중
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_Boss_Stunned);
 
 	/** Nonhumanoid monster tags (Megaspikan / Larvae / Larvae Stalker) **/
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Ability_Megaspikan_ClawLeft);

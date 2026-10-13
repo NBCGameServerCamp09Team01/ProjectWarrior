@@ -9,6 +9,7 @@
 #include "AbilitySystemComponent.h"
 #include "ProjectWarrior/WarriorFunctionLibrary.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "Particles/ParticleSystemComponent.h"
 
 AWarriorProjectileBase::AWarriorProjectileBase()
 {
@@ -45,7 +46,7 @@ AWarriorProjectileBase::AWarriorProjectileBase()
 	ProjectileMovement->bAutoActivate = false;
 }
 
-void AWarriorProjectileBase::LaunchProjectile(const FVector& LaunchDirection, const FGameplayEffectSpecHandle& InDamageSpecHandle)
+void AWarriorProjectileBase::LaunchProjectile(const FVector& LaunchDirection, const FGameplayEffectSpecHandle& InDamageSpecHandle, float LaunchSpeed)
 {
 	if (bLaunched)
 	{
@@ -61,6 +62,15 @@ void AWarriorProjectileBase::LaunchProjectile(const FVector& LaunchDirection, co
 
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
+	// 들고 있을 때의 이펙트는 끄고 비행 이펙트로 교체
+	if (HeldEffectComponent)
+	{
+		HeldEffectComponent->Deactivate();
+		HeldEffectComponent = nullptr;
+	}
+
+	UWarriorFunctionLibrary::SpawnFXAttached(FlightEffect, ProjectileMesh, NAME_None, EffectScale);
+
 	const FVector Direction = LaunchDirection.IsNearlyZero() ? GetActorForwardVector() : LaunchDirection.GetSafeNormal();
 	SetActorRotation(Direction.Rotation());
 
@@ -69,7 +79,9 @@ void AWarriorProjectileBase::LaunchProjectile(const FVector& LaunchDirection, co
 	ProjectileCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
 	ProjectileMovement->SetUpdatedComponent(ProjectileRoot);
-	ProjectileMovement->Velocity = Direction * ProjectileMovement->InitialSpeed;
+	const float Speed = LaunchSpeed > 0.f ? LaunchSpeed : ProjectileMovement->InitialSpeed;
+	ProjectileMovement->MaxSpeed = FMath::Max(ProjectileMovement->MaxSpeed, Speed);
+	ProjectileMovement->Velocity = Direction * Speed;
 	ProjectileMovement->Activate(true);
 
 	SetActorTickEnabled(true);
@@ -108,7 +120,7 @@ void AWarriorProjectileBase::Tick(float DeltaSeconds)
 			}
 			else
 			{
-				BP_OnProjectileImpact(HitActor, Hit.ImpactPoint, EWarriorHitResultType::Invalid);
+				NotifyProjectileImpact(HitActor, Hit.ImpactPoint, EWarriorHitResultType::Invalid);
 				Destroy();
 				return;
 			}
@@ -169,7 +181,7 @@ void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& Impact
 
 	if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitPawn))
 	{
-		BP_OnProjectileImpact(HitPawn, ImpactLocation, EWarriorHitResultType::Invalid);
+		NotifyProjectileImpact(HitPawn, ImpactLocation, EWarriorHitResultType::Invalid);
 		Destroy();
 		return;
 	}
@@ -212,7 +224,7 @@ void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& Impact
 		return;
 	}
 
-	BP_OnProjectileImpact(HitPawn, ImpactLocation, HitResult);
+	NotifyProjectileImpact(HitPawn, ImpactLocation, HitResult);
 	Destroy();
 }
 
@@ -309,4 +321,30 @@ void AWarriorProjectileBase::ApplyDamageToTarget(AActor* TargetActor)
 	{
 		TargetASC->ApplyGameplayEffectSpecToSelf(*ProjectileDamageEffectSpecHandle.Data);
 	}
+}
+
+void AWarriorProjectileBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 스폰 직후(발사 전) 대기 상태의 이펙트
+	if (!bLaunched && HeldEffect)
+	{
+		HeldEffectComponent = UWarriorFunctionLibrary::SpawnFXAttached(HeldEffect, ProjectileMesh, NAME_None, EffectScale);
+	}
+
+	// 발사되면 LaunchProjectile이 LifeSpanAfterLaunch로 덮어씀
+	if (!bLaunched && HeldSafetyLifeSpan > 0.f)
+	{
+		SetLifeSpan(HeldSafetyLifeSpan);
+	}
+}
+
+void AWarriorProjectileBase::NotifyProjectileImpact(AActor* HitActor, const FVector& ImpactLocation, EWarriorHitResultType HitResult)
+{
+	UFXSystemAsset* ImpactEffect = (Cast<APawn>(HitActor) && ImpactCharacterEffect) ? ImpactCharacterEffect.Get() : ImpactWorldEffect.Get();
+
+	UWarriorFunctionLibrary::SpawnFXAtLocation(this, ImpactEffect, ImpactLocation, GetActorRotation(), EffectScale * GetActorScale3D());
+
+	BP_OnProjectileImpact(HitActor, ImpactLocation, HitResult);
 }

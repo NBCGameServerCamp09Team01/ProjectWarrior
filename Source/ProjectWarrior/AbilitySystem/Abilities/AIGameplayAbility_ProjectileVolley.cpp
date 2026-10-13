@@ -12,6 +12,8 @@
 #include "Animation/AnimMontage.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Components/CapsuleComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 UAIGameplayAbility_ProjectileVolley::UAIGameplayAbility_ProjectileVolley()
 {
@@ -43,10 +45,18 @@ void UAIGameplayAbility_ProjectileVolley::ActivateAbility(const FGameplayAbility
 	}
 
 	FireCount = 0;
+	HeldProjectiles.Reset();
 
 	if (bFaceTargetOnStart)
 	{
 		FaceTarget();
+	}
+
+	if (HoldEventTag.IsValid())
+	{
+		UAbilityTask_WaitGameplayEvent* HoldTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, HoldEventTag, nullptr, false, true);
+		HoldTask->EventReceived.AddDynamic(this, &ThisClass::HandleHoldEvent);
+		HoldTask->ReadyForActivation();
 	}
 
 	UAbilityTask_WaitGameplayEvent* FireTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, FireEventTag, nullptr, false, true);
@@ -76,7 +86,7 @@ void UAIGameplayAbility_ProjectileVolley::HandleFireEvent(FGameplayEventData Pay
 	}
 
 	FName SpawnBoneName = NAME_None;
-	const FVector SpawnLocation = GetSpawnLocation(SpawnBoneName);
+	FVector SpawnLocation = GetSpawnLocation(SpawnBoneName);
 	++FireCount;
 
 	AActor* TargetActor = FindAITargetActor(CurrentActorInfo);
@@ -85,10 +95,32 @@ void UAIGameplayAbility_ProjectileVolley::HandleFireEvent(FGameplayEventData Pay
 		? MakeAIDamageEffectSpecHandle(DamageEffectClass, DamageScalableFloat)
 		: FGameplayEffectSpecHandle();
 
-	const float ProjectileSpeed = ProjectileClass->GetDefaultObject<AWarriorProjectileBase>()->GetProjectileMovement()->InitialSpeed;
-	const FVector CenterDirection = ComputeProjectileLaunchDirection(SpawnLocation, TargetActor, ProjectileSpeed, bPredictTargetMovement);
+	// 들고 있는 투사체가 있으면 그것을 지금 위치에서 발사
+	AWarriorProjectileBase* HeldProjectile = nullptr;
 
-	const int32 Count = FMath::Max(1, ProjectilesPerFire);
+	while (!HeldProjectiles.IsEmpty() && !HeldProjectile)
+	{
+		HeldProjectile = HeldProjectiles[0].Get();
+		HeldProjectiles.RemoveAt(0);
+	}
+
+	if (HeldProjectile)
+	{
+		SpawnLocation = HeldProjectile->GetActorLocation();
+
+		FVector HeldDirection;
+		float HeldSpeed = 0.f;
+		ComputeLaunch(SpawnLocation, TargetActor, HeldDirection, HeldSpeed);
+		HeldProjectile->LaunchProjectile(HeldDirection, DamageSpecHandle, HeldSpeed);
+
+		UWarriorFunctionLibrary::SpawnFXAtLocation(this, ThrowEffect, SpawnLocation, HeldProjectile->GetActorRotation(), HeldProjectile->GetActorScale3D());
+	}
+
+	FVector CenterDirection;
+	float LaunchSpeed = 0.f;
+	ComputeLaunch(SpawnLocation, TargetActor, CenterDirection, LaunchSpeed);
+
+	const int32 Count = HeldProjectile ? 0 : FMath::Max(1, ProjectilesPerFire);
 
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
@@ -99,7 +131,7 @@ void UAIGameplayAbility_ProjectileVolley::HandleFireEvent(FGameplayEventData Pay
 
 		if (AWarriorProjectileBase* Projectile = SpawnUnlaunchedProjectile(ProjectileClass, FTransform(LaunchDirection.Rotation(), SpawnLocation)))
 		{
-			Projectile->LaunchProjectile(LaunchDirection, DamageSpecHandle);
+			Projectile->LaunchProjectile(LaunchDirection, DamageSpecHandle, LaunchSpeed);
 		}
 	}
 
@@ -117,6 +149,141 @@ void UAIGameplayAbility_ProjectileVolley::HandleFireEvent(FGameplayEventData Pay
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, MuzzleEffect, SpawnLocation, CenterDirection.Rotation(), MuzzleEffectScale);
 		}
 	}
+}
+
+void UAIGameplayAbility_ProjectileVolley::ComputeLaunch(const FVector& LaunchLocation, AActor* TargetActor, FVector& OutDirection, float& OutSpeed)
+{
+	const UProjectileMovementComponent* MovementCDO = ProjectileClass->GetDefaultObject<AWarriorProjectileBase>()->GetProjectileMovement();
+	const float ProjectileSpeed = MovementCDO->InitialSpeed;
+
+	OutSpeed = ProjectileSpeed;
+	OutDirection = ComputeProjectileLaunchDirection(LaunchLocation, TargetActor, ProjectileSpeed, bPredictTargetMovement);
+
+	const UWorld* World = GetWorld();
+	const float GravityZ = World ? World->GetGravityZ() * MovementCDO->ProjectileGravityScale : 0.f;
+
+	if (!bUseArcTrajectory || !World || FMath::IsNearlyZero(GravityZ))
+	{
+		return;
+	}
+
+	AActor* ResolvedTarget = FindAITargetActor(CurrentActorInfo);
+
+	if (TargetActor)
+	{
+		ResolvedTarget = TargetActor;
+	}
+
+	if (!ResolvedTarget)
+	{
+		return;
+	}
+
+	// 떨어질 위치 = 대상 위치 (+ 날아가는 동안의 이동 예측, 수평 거리 / 속도로 근사)
+	FVector AimLocation = ResolvedTarget->GetActorLocation();
+
+	if (bPredictTargetMovement && ProjectileSpeed > 0.f)
+	{
+		const float TravelTime = FVector::Dist2D(LaunchLocation, AimLocation) / ProjectileSpeed;
+		AimLocation += ResolvedTarget->GetVelocity() * TravelTime;
+	}
+
+	FVector LaunchVelocity;
+
+	const bool bSolved = UGameplayStatics::SuggestProjectileVelocity(this, LaunchVelocity, LaunchLocation, AimLocation, ProjectileSpeed,
+		bFavorHighArc, 0.f, GravityZ, ESuggestProjVelocityTraceOption::DoNotTrace);
+
+	// 너무 멀어 이 속도로 닿지 않으면 정해진 높이의 포물선으로 속도를 맞춤
+	if (!bSolved && !UGameplayStatics::SuggestProjectileVelocity_CustomArc(this, LaunchVelocity, LaunchLocation, AimLocation, GravityZ, ArcFallbackCurve))
+	{
+		return;
+	}
+
+	OutSpeed = LaunchVelocity.Size();
+	OutDirection = LaunchVelocity.GetSafeNormal();
+}
+
+void UAIGameplayAbility_ProjectileVolley::HandleHoldEvent(FGameplayEventData Payload)
+{
+	AWarriorAICharacter* AICharacter = GetAICharacterFromActorInfo();
+
+	if (!AICharacter || !IsActive())
+	{
+		return;
+	}
+
+	// 다음 발사에 쓸 뼈/소켓에 붙임 (발사할 때 FireCount가 같은 뼈를 가리킴)
+	FName HoldBoneName = NAME_None;
+	const FVector HoldLocation = GetSpawnLocation(HoldBoneName);
+
+	AWarriorProjectileBase* Projectile = SpawnUnlaunchedProjectile(ProjectileClass, FTransform(AICharacter->GetActorRotation(), HoldLocation));
+
+	if (!Projectile)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = AICharacter->GetMesh();
+
+	if (Mesh && HoldBoneName != NAME_None)
+	{
+		Projectile->AttachToComponent(Mesh, bHoldInheritsOwnerScale ? FAttachmentTransformRules::SnapToTargetIncludingScale : FAttachmentTransformRules::SnapToTargetNotIncludingScale, HoldBoneName);
+		Projectile->SetActorRelativeLocation(HoldOffset);
+	}
+	else
+	{
+		Projectile->AttachToActor(AICharacter, FAttachmentTransformRules::KeepWorldTransform);
+	}
+
+	HeldProjectiles.Add(Projectile);
+
+	if (HoldGroundEffect)
+	{
+		// 소켓 위치의 발밑 높이에서 재생
+		FVector GroundLocation = (Mesh && HoldGroundEffectSocket != NAME_None && Mesh->DoesSocketExist(HoldGroundEffectSocket))
+			? Mesh->GetSocketLocation(HoldGroundEffectSocket)
+			: HoldLocation;
+		GroundLocation.Z = AICharacter->GetActorLocation().Z - AICharacter->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+		UWarriorFunctionLibrary::SpawnFXAtLocation(this, HoldGroundEffect, GroundLocation, AICharacter->GetActorRotation(),
+			Mesh ? Mesh->GetComponentScale() : FVector::OneVector);
+	}
+}
+
+void UAIGameplayAbility_ProjectileVolley::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	// 던지기 전에 끊기면 들고 있던 투사체 제거
+	for (const TWeakObjectPtr<AWarriorProjectileBase>& HeldProjectile : HeldProjectiles)
+	{
+		if (AWarriorProjectileBase* Projectile = HeldProjectile.Get())
+		{
+			Projectile->Destroy();
+		}
+	}
+
+	HeldProjectiles.Reset();
+
+	// 목록에서 빠진 경우까지 대비해 몸에 붙어 있는 미발사 투사체도 정리
+	if (HoldEventTag.IsValid())
+	{
+		if (AActor* AvatarActor = GetAvatarActorFromActorInfo())
+		{
+			TArray<AActor*> AttachedActors;
+			AvatarActor->GetAttachedActors(AttachedActors, true, true);
+
+			for (AActor* AttachedActor : AttachedActors)
+			{
+				AWarriorProjectileBase* Projectile = Cast<AWarriorProjectileBase>(AttachedActor);
+
+				if (Projectile && !Projectile->IsLaunched() && ProjectileClass && Projectile->IsA(ProjectileClass))
+				{
+					Projectile->Destroy();
+				}
+			}
+		}
+	}
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 void UAIGameplayAbility_ProjectileVolley::HandleMontageEnded()

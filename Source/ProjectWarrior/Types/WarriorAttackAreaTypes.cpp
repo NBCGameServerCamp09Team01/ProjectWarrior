@@ -24,6 +24,12 @@ bool FWarriorAttackAreaData::IsInside(const FTransform& AreaTransform, const FVe
 
     const float PlanarDistance = FVector2D(LocalLocation.X, LocalLocation.Y).Size();
 
+    // 도넛 모양: 캡슐이 안쪽 빈 원 안에 완전히 들어 있으면 맞지 않음
+    if (Shape != EWarriorAttackAreaShape::Box && InnerRadius > 0.f && PlanarDistance + InRadius < InnerRadius)
+    {
+        return false;
+    }
+
     switch (Shape)
     {
     case EWarriorAttackAreaShape::Circle:
@@ -76,6 +82,11 @@ void FWarriorAttackAreaData::DrawDebug(const UWorld* World, const FTransform& Ar
     {
     case EWarriorAttackAreaShape::Circle:
         DrawDebugCircle(World, Origin, Radius, 32, Color, false, Duration, 0, 3.f, Forward, Right, false);
+
+        if (InnerRadius > 0.f)
+        {
+            DrawDebugCircle(World, Origin, InnerRadius, 32, Color, false, Duration, 0, 3.f, Forward, Right, false);
+        }
         break;
 
     case EWarriorAttackAreaShape::Box:
