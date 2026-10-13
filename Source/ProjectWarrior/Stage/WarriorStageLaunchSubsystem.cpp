@@ -27,6 +27,9 @@ UWarriorStageLaunchSubsystem* UWarriorStageLaunchSubsystem::Get(const UObject* W
 
 void UWarriorStageLaunchSubsystem::SelectStage(FName InStageId)
 {
+	//보통 선택은 새 플레이로 시작한다
+	PendingResume = FWarriorStageResumeInfo();
+
 	if (InStageId.IsNone())
 	{
 		ClearSelection();
@@ -53,8 +56,35 @@ void UWarriorStageLaunchSubsystem::SelectStage(FName InStageId)
 	OnLaunchInfoChanged.Broadcast(LaunchInfo);
 }
 
+void UWarriorStageLaunchSubsystem::SelectStageForResume(FName InStageId, const FWarriorStageResumeInfo& InResume)
+{
+	SelectStage(InStageId);
+	if (InStageId.IsNone())
+	{
+		return;
+	}
+
+	PendingResume = InResume;
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Stage %s will resume play %s from wave %d"),
+		*InStageId.ToString(), *PendingResume.StagePlayId, PendingResume.ResumeFromWave);
+}
+
+bool UWarriorStageLaunchSubsystem::ConsumeResumeInfo(FName InStageId, FWarriorStageResumeInfo& OutResume)
+{
+	if (!PendingResume.IsSet() || LaunchInfo.StageId != InStageId)
+	{
+		return false;
+	}
+
+	OutResume = PendingResume;
+	PendingResume = FWarriorStageResumeInfo();
+	return true;
+}
+
 void UWarriorStageLaunchSubsystem::ClearSelection()
 {
+	PendingResume = FWarriorStageResumeInfo();
+
 	if (!LaunchInfo.IsSet())
 	{
 		return;

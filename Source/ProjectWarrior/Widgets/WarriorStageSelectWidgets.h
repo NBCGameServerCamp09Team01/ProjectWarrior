@@ -12,6 +12,7 @@ class UHorizontalBox;
 class UPanelWidget;
 class UTextBlock;
 class UWidget;
+class UWarriorStageRankingCardWidget;
 
 /**
  * 스테이지 선택 팝업의 위젯 넷(팝업·지역 칸·스테이지 막대·웨이브 줄).
@@ -76,6 +77,9 @@ public:
 	//입장 버튼. 인자는 StageId
 	FOnWarriorStageSelectIdClicked OnEnterClicked;
 
+	//순위 버튼(입장 왼쪽, 랭킹 M7). 인자는 StageId
+	FOnWarriorStageSelectIdClicked OnRankingClicked;
+
 	//입장 요청을 보내는 동안 버튼을 막는다
 	void SetInteractionLocked(bool bInLocked);
 
@@ -94,6 +98,9 @@ protected:
 	UFUNCTION()
 	void HandleEnterClicked();
 
+	UFUNCTION()
+	void HandleRankingClicked();
+
 	void SetWavesExpanded(bool bInExpanded);
 	void ApplyStatusLook();
 
@@ -102,6 +109,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Enter;
+
+	//순위(입장 왼쪽). 잠긴 스테이지는 숨김
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Ranking;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_StageLabel;
@@ -251,6 +262,10 @@ protected:
 
 	void HandleRegionClicked(FName InRegionId);
 	void HandleStageEnterClicked(FName InStageId);
+	void HandleStageRankingClicked(FName InStageId);
+
+	UFUNCTION()
+	void HandleStageRankingCardClosed();
 
 	void SetViewState(EWarriorStageSelectViewState InState);
 
@@ -283,7 +298,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
 	TSubclassOf<UWarriorStageEntryWidget> StageEntryClass;
 
+	//스테이지 순위 카드(WBP_StageRankingCard). 이 팝업 위에 한 겹 뜬다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage|Ranking")
+	TSubclassOf<UWarriorStageRankingCardWidget> StageRankingCardClass;
+
+	//카드의 화면 순서. 스테이지 선택 팝업(20)보다 크고 안내 팝업(50)보다 작게
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage|Ranking")
+	int32 StageRankingCardZOrder = 30;
+
 private:
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorStageRankingCardWidget> StageRankingCard;
+
 	//마지막으로 고른 지역. 목록을 다시 받아도 유지한다. 없으면 첫 지역
 	FName SelectedRegionId;
 

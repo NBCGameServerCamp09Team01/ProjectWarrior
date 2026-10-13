@@ -6,14 +6,20 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "TimerManager.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Network/WarriorApiSubsystem.h"
+#include "ProjectWarrior/Network/WarriorErrorPresenterSubsystem.h"
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
+#include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 #include "ProjectWarrior/Widgets/WarriorStageSelectWidgets.h"
+
+#define LOCTEXT_NAMESPACE "WarriorFront"
 
 namespace
 {
@@ -24,6 +30,8 @@ namespace
 	const int32 ReconnectIndicatorZOrder = 40;
 	//화면 위젯(0)보다 위, 안내 팝업보다 아래
 	const int32 StageSelectPopupZOrder = 20;
+	//메인메뉴 랭킹 팝업(스테이지 선택 팝업과 같은 층, 둘이 함께 뜨지 않음)
+	const int32 RankingPopupZOrder = 20;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -48,11 +56,27 @@ void AWarriorFrontPlayerController::BeginPlay()
 		Auth->OnSessionEnded.AddUniqueDynamic(this, &ThisClass::HandleSessionEnded);
 	}
 
+	//오류 팝업이 닫히면 아래 화면으로 포커스를 돌려준다
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.AddUniqueDynamic(this, &ThisClass::HandleNoticeClosed);
+	}
+
 	//스테이지에서 다시 연결하던 중에 이 레벨로 왔을 수도 있으므로 지금 상태를 한 번 맞춘다
 	if (UWarriorRealtimeSubsystem* Realtime = UWarriorRealtimeSubsystem::Get(this))
 	{
 		Realtime->OnStateChanged.AddUniqueDynamic(this, &ThisClass::HandleRealtimeStateChanged);
 		HandleRealtimeStateChanged(Realtime->GetState());
+	}
+
+	//로그인 뒤 진행 중 플레이 확인(이어하기). 메인메뉴를 보일 때 지금 상태도 한 번 맞춘다(ShowScreen)
+	if (UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this))
+	{
+		PlayCheckpoint->OnStateChanged.AddUniqueDynamic(this, &ThisClass::HandlePlayCheckpointChanged);
+	}
+	if (UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this))
+	{
+		StageList->OnStageListUpdated.AddUniqueDynamic(this, &ThisClass::HandleStageListUpdated);
 	}
 
 	//스테이지에서 로그인 상태가 끝나 이 레벨로 돌아왔다면, 그 이유에 맞는 화면과 안내를 보인다
@@ -65,7 +89,17 @@ void AWarriorFrontPlayerController::BeginPlay()
 	}
 
 	//스테이지에서 메인메뉴로 돌아왔으면(로그인 상태가 남아 있음) 타이틀을 건너뛰고 메인메뉴. 게임을 처음 켜면 로그인 전이라 타이틀
-	ShowScreen(Auth && Auth->IsLoggedIn() ? EWarriorFrontScreen::MainMenu : EWarriorFrontScreen::Title);
+	const bool bLoggedIn = Auth && Auth->IsLoggedIn();
+	ShowScreen(bLoggedIn ? EWarriorFrontScreen::MainMenu : EWarriorFrontScreen::Title);
+
+	//타이틀에서 서버 상태를 한 번 확인한다. 연결할 수 없으면 안내 후 종료(E6, 대계획 Q2)
+	if (!bLoggedIn)
+	{
+		if (UWarriorApiSubsystem* Api = UWarriorApiSubsystem::Get(this))
+		{
+			Api->CheckServerOnTitle();
+		}
+	}
 }
 
 void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -83,6 +117,21 @@ void AWarriorFrontPlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	if (UWarriorRealtimeSubsystem* Realtime = UWarriorRealtimeSubsystem::Get(this))
 	{
 		Realtime->OnStateChanged.RemoveDynamic(this, &ThisClass::HandleRealtimeStateChanged);
+	}
+
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.RemoveDynamic(this, &ThisClass::HandleNoticeClosed);
+	}
+
+	if (UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this))
+	{
+		PlayCheckpoint->OnStateChanged.RemoveDynamic(this, &ThisClass::HandlePlayCheckpointChanged);
+	}
+
+	if (UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this))
+	{
+		StageList->OnStageListUpdated.RemoveDynamic(this, &ThisClass::HandleStageListUpdated);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -150,6 +199,13 @@ void AWarriorFrontPlayerController::ShowScreen(EWarriorFrontScreen InScreen)
 		StageSelectPopup->RemoveFromParent();
 	}
 
+	//이어하기 팝업과 입력 막기도 메인메뉴에서만. 다른 화면으로 가면 풀고 닫는다(메인메뉴로 돌아오면 ApplyPlayCheckpointState가 다시 맞춘다)
+	if (InScreen != EWarriorFrontScreen::MainMenu)
+	{
+		CloseResumePopup();
+		SetMainMenuInputBlocked(false);
+	}
+
 	//다음 위젯부터 확보한다. 실패하면 현재 화면을 그대로 둔다(빈 화면 방지).
 	UUserWidget* NextWidget = ScreenWidgets.FindRef(InScreen);
 	const bool bCreatedNow = !NextWidget;
@@ -193,6 +249,11 @@ void AWarriorFrontPlayerController::ShowScreen(EWarriorFrontScreen InScreen)
 	}
 
 	PlayScreenSound(PreviousScreen, InScreen);
+
+	if (InScreen == EWarriorFrontScreen::MainMenu)
+	{
+		ApplyPlayCheckpointState();
+	}
 }
 
 void AWarriorFrontPlayerController::PlayScreenSound(EWarriorFrontScreen InPreviousScreen, EWarriorFrontScreen InNextScreen)
@@ -289,6 +350,45 @@ void AWarriorFrontPlayerController::OpenStageSelect()
 	}
 
 	StageSelectPopup->Refresh();
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::OpenRanking()
+{
+	if (!RankingPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] RankingPopupClass is not set. Ranking is not opened."));
+		return;
+	}
+
+	if (!RankingPopup)
+	{
+		RankingPopup = CreateWidget<UWarriorRankingPopupWidget>(this, RankingPopupClass);
+		if (!RankingPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create ranking popup."));
+			return;
+		}
+
+		RankingPopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleRankingClosed);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(RankingPopup);
+		}
+	}
+
+	if (!RankingPopup->IsInViewport())
+	{
+		RankingPopup->AddToViewport(RankingPopupZOrder);
+	}
+
+	RankingPopup->Open();
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::HandleRankingClosed()
+{
 	FocusTopWidget();
 }
 
@@ -420,14 +520,29 @@ void AWarriorFrontPlayerController::HandleStageSelectClosed()
 
 void AWarriorFrontPlayerController::FocusTopWidget()
 {
+	//오류 팝업(가장 위)이 떠 있으면 포커스는 그 팝업에 둔다. 닫히면 OnPopupClosed로 다시 불린다
+	const UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this);
+	if (Presenter && Presenter->IsShowing())
+	{
+		return;
+	}
+
 	UUserWidget* FocusWidget = nullptr;
 	if (NoticePopup && NoticePopup->IsInViewport())
 	{
 		FocusWidget = NoticePopup;
 	}
+	else if (ResumePopup && ResumePopup->IsInViewport())
+	{
+		FocusWidget = ResumePopup;
+	}
 	else if (StageSelectPopup && StageSelectPopup->IsInViewport())
 	{
 		FocusWidget = StageSelectPopup;
+	}
+	else if (RankingPopup && RankingPopup->IsInViewport())
+	{
+		FocusWidget = RankingPopup;
 	}
 	else
 	{
@@ -439,3 +554,207 @@ void AWarriorFrontPlayerController::FocusTopWidget()
 		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, FocusWidget);
 	}
 }
+
+//~ Begin 이어하기
+
+void AWarriorFrontPlayerController::HandlePlayCheckpointChanged(EWarriorPlayCheckpointState InState)
+{
+	ApplyPlayCheckpointState();
+}
+
+void AWarriorFrontPlayerController::HandleStageListUpdated()
+{
+	if (ResumePopup && ResumePopup->IsInViewport())
+	{
+		ResumePopup->SetMessage(BuildResumeMessage());
+	}
+}
+
+void AWarriorFrontPlayerController::ApplyPlayCheckpointState()
+{
+	if (CurrentScreen != EWarriorFrontScreen::MainMenu)
+	{
+		return;
+	}
+
+	const UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this);
+	const EWarriorPlayCheckpointState State = PlayCheckpoint ? PlayCheckpoint->GetState() : EWarriorPlayCheckpointState::None;
+	const bool bResumable = State == EWarriorPlayCheckpointState::Resumable;
+
+	//확인 중·팝업·포기 요청 중에는 메인메뉴를 누르지 못하게 한다(그 사이 다른 스테이지를 시작하면 409로 판이 포기된다)
+	SetMainMenuInputBlocked(PlayCheckpoint && (PlayCheckpoint->IsChecking() || bResumable || State == EWarriorPlayCheckpointState::Abandoning));
+
+	if (bResumable)
+	{
+		ShowResumePopup();
+	}
+	else
+	{
+		CloseResumePopup();
+	}
+
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::SetMainMenuInputBlocked(bool bBlocked)
+{
+	if (UUserWidget* MainMenu = ScreenWidgets.FindRef(EWarriorFrontScreen::MainMenu))
+	{
+		MainMenu->SetIsEnabled(!bBlocked);
+	}
+}
+
+void AWarriorFrontPlayerController::ShowResumePopup()
+{
+	if (!NoticePopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] NoticePopupClass is not set. Resume popup not shown."));
+		return;
+	}
+
+	if (!ResumePopup)
+	{
+		ResumePopup = CreateWidget<UWarriorNoticePopupWidget>(this, NoticePopupClass);
+		if (!ResumePopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create resume popup."));
+			return;
+		}
+
+		ResumePopup->OnChoice.AddUniqueDynamic(this, &ThisClass::HandleResumeChoice);
+		ResumePopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleNoticeClosed);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(ResumePopup);
+		}
+
+		if (!ResumePopup->HasSecondaryButton())
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] The notice popup has no second button. The resume popup shows only one button."));
+		}
+	}
+
+	//이 빌드의 스테이지 목록에 없으면 이어할 수 없으므로 [포기]만 보인다
+	const UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this);
+	bResumePopupAbandonOnly = !PlayCheckpoint || !PlayCheckpoint->CanResumeInThisBuild();
+	if (bResumePopupAbandonOnly)
+	{
+		ResumePopup->SetButtons(LOCTEXT("ResumeAbandonOnly", "포기"), FText::GetEmpty());
+	}
+	else
+	{
+		ResumePopup->SetButtons(LOCTEXT("ResumeConfirm", "이어하기"), LOCTEXT("ResumeAbandon", "포기"));
+	}
+	ResumePopup->SetMessage(BuildResumeMessage());
+
+	if (!ResumePopup->IsInViewport())
+	{
+		ResumePopup->AddToViewport(NoticePopupZOrder);
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Front] Resume popup shown (abandon only=%s)."), bResumePopupAbandonOnly ? TEXT("true") : TEXT("false"));
+	}
+}
+
+void AWarriorFrontPlayerController::CloseResumePopup()
+{
+	//선택 없이 닫는다(OnChoice를 보내지 않는다). 포커스는 부른 쪽이 맞춘다
+	if (ResumePopup && ResumePopup->IsInViewport())
+	{
+		ResumePopup->RemoveFromParent();
+	}
+}
+
+FText AWarriorFrontPlayerController::BuildResumeMessage() const
+{
+	const UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this);
+	if (!PlayCheckpoint)
+	{
+		return FText::GetEmpty();
+	}
+
+	const FWarriorStagePlayDto& Play = PlayCheckpoint->GetResumablePlay();
+
+	//이름은 서버 스테이지 목록(받았으면). 없으면 스테이지 키
+	FText StageName = FText::FromString(Play.StageId);
+	if (const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this))
+	{
+		const FWarriorStageListEntry* Entry = StageList->FindStage(FName(*Play.StageId));
+		if (Entry && !Entry->DisplayName.IsEmpty())
+		{
+			StageName = Entry->DisplayName;
+		}
+	}
+
+	if (bResumePopupAbandonOnly)
+	{
+		return FText::Format(LOCTEXT("ResumeUnavailable", "진행 중인 스테이지가 있지만\n이 버전에서 열 수 없는 스테이지입니다.\n\n{0}"), StageName);
+	}
+
+	//남은 시간 = 마감 - 지금(UTC)
+	FText Remaining;
+	FDateTime ExpiresAt;
+	if (FDateTime::ParseIso8601(*Play.ExpiresAt, ExpiresAt))
+	{
+		FTimespan Left = ExpiresAt - FDateTime::UtcNow();
+		if (Left < FTimespan::Zero())
+		{
+			Left = FTimespan::Zero();
+		}
+		Remaining = FText::Format(LOCTEXT("ResumeRemaining", " · 남은 시간 {0}시간 {1}분"),
+			FText::AsNumber(static_cast<int32>(Left.GetTotalHours())), FText::AsNumber(Left.GetMinutes()));
+	}
+
+	const int32 FromWave = PlayCheckpoint->GetResumeFromWave();
+	const FText FromText = FromWave <= 1
+		? LOCTEXT("ResumeFromStart", "처음(1웨이브)부터 다시 시작합니다.")
+		: FText::Format(LOCTEXT("ResumeFromWave", "{0}웨이브부터 이어서 합니다."), FText::AsNumber(FromWave));
+
+	return FText::Format(LOCTEXT("ResumeMessage", "진행 중인 스테이지가 있습니다.\n이어하시겠습니까?\n\n{0}{1}\n{2}"), StageName, Remaining, FromText);
+}
+
+void AWarriorFrontPlayerController::HandleResumeChoice(bool bConfirmed)
+{
+	if (bConfirmed && !bResumePopupAbandonOnly)
+	{
+		ResumeStage();
+		return;
+	}
+
+	AbandonResumablePlay();
+}
+
+void AWarriorFrontPlayerController::ResumeStage()
+{
+	UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this);
+	if (!PlayCheckpoint || !PlayCheckpoint->Resume())
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] Resume failed."));
+		ApplyPlayCheckpointState();
+		ShowNotice(LOCTEXT("ResumeFailed", "진행 중인 스테이지를 열지 못했습니다."));
+		return;
+	}
+
+	//팝업이 닫히며(OnClosed → FocusTopWidget) UI 입력으로 되돌리는 것보다 뒤에 레벨을 연다. StartStage가 게임 입력으로 바꾸고 옮긴다
+	GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ThisClass::StartStage));
+}
+
+void AWarriorFrontPlayerController::AbandonResumablePlay()
+{
+	UWarriorPlayCheckpointSubsystem* PlayCheckpoint = UWarriorPlayCheckpointSubsystem::Get(this);
+	if (!PlayCheckpoint)
+	{
+		return;
+	}
+
+	PlayCheckpoint->Abandon([WeakThis = TWeakObjectPtr<ThisClass>(this)](bool bEnded)
+	{
+		if (!bEnded && WeakThis.IsValid())
+		{
+			WeakThis->ShowNotice(LOCTEXT("AbandonFailed", "진행 중인 스테이지를 포기하지 못했습니다.\n다음 로그인 때 다시 묻습니다."));
+		}
+	});
+}
+
+//~ End 이어하기
+
+#undef LOCTEXT_NAMESPACE

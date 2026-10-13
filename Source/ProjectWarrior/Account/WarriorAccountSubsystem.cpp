@@ -76,12 +76,6 @@ float UWarriorAccountSubsystem::GetStatBonus(FGameplayTag StatTag) const
 	return Definition ? GetInvestedPoints(StatTag) * Definition->BonusPerPoint : 0.f;
 }
 
-int32 UWarriorAccountSubsystem::GetSkillCost(FGameplayTag SkillTag) const
-{
-	const int32* Cost = SkillCosts.Find(SkillTag);
-	return Cost ? *Cost : -1;
-}
-
 TArray<FGameplayTag> UWarriorAccountSubsystem::GetInvestableStats() const
 {
 	TArray<FGameplayTag> Tags;
@@ -122,103 +116,6 @@ bool UWarriorAccountSubsystem::GetLastStageReward(FWarriorStageReward& OutReward
 	return true;
 }
 
-bool UWarriorAccountSubsystem::InvestStatPoint(FGameplayTag StatTag, int32 Points)
-{
-	const FStatDefinition* Definition = FindStatDefinition(StatTag);
-	if (!Definition)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Invest ignored. %s is not an investable stat."), *StatTag.ToString());
-		return false;
-	}
-
-	if (Points <= 0 || Data.StatPoints < Points)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Invest rejected. Need %d points, have %d."), Points, Data.StatPoints);
-		return false;
-	}
-
-	const int32 Invested = GetInvestedPoints(StatTag);
-	if (Invested + Points > Definition->MaxPoints)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Invest rejected. %s is limited to %d points (now %d)."), *StatTag.ToString(), Definition->MaxPoints, Invested);
-		return false;
-	}
-
-	//TODO(server): 서버 연동 뒤에는 여기서 직접 바꾸지 않고 "투자 요청(스탯, 포인트, 요청 번호)"을 서버에 보낸다.
-	//서버가 판정해 돌려준 계정 데이터를 ApplyServerSnapshot으로 적용하면 된다. 아래 변경 내역의 EntryId가 요청 번호다.
-	Data.StatPoints -= Points;
-	Data.InvestedStats.Add(StatTag, Invested + Points);
-	AddLedgerEntry(EWarriorAccountLedgerType::StatInvest, StatPointName, -Points, StatTag);
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Invested %d in %s. Now %d (bonus %.1f), %d points left."),
-		Points, *StatTag.ToString(), Invested + Points, GetStatBonus(StatTag), Data.StatPoints);
-
-	BroadcastAccountChanged();
-	return true;
-}
-
-bool UWarriorAccountSubsystem::UnlockSkill(FGameplayTag SkillTag)
-{
-	const int32 Cost = GetSkillCost(SkillTag);
-	if (Cost < 0)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Unlock ignored. %s is not an unlockable skill."), *SkillTag.ToString());
-		return false;
-	}
-
-	if (IsSkillUnlocked(SkillTag))
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock ignored. %s is already unlocked."), *SkillTag.ToString());
-		return false;
-	}
-
-	if (Data.StatPoints < Cost)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock rejected. Need %d points, have %d."), Cost, Data.StatPoints);
-		return false;
-	}
-
-	//TODO(server): InvestStatPoint와 같이, 서버 연동 뒤에는 서버에 요청하고 응답 스냅샷을 적용한다.
-	Data.StatPoints -= Cost;
-	Data.UnlockedSkills.AddTag(SkillTag);
-	AddLedgerEntry(EWarriorAccountLedgerType::SkillUnlock, StatPointName, -Cost, SkillTag);
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlocked %s for %d points. %d points left."), *SkillTag.ToString(), Cost, Data.StatPoints);
-
-	BroadcastAccountChanged();
-	return true;
-}
-
-bool UWarriorAccountSubsystem::UnlockSkillWithCost(FGameplayTag SkillTag, int32 Cost)
-{
-	if (!SkillTag.IsValid() || Cost < 0)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Account] Unlock ignored. Invalid skill %s or cost %d."), *SkillTag.ToString(), Cost);
-		return false;
-	}
-
-	if (IsSkillUnlocked(SkillTag))
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock ignored. %s is already unlocked."), *SkillTag.ToString());
-		return false;
-	}
-
-	if (Data.StatPoints < Cost)
-	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlock rejected. Need %d points, have %d."), Cost, Data.StatPoints);
-		return false;
-	}
-
-	//TODO(server): UnlockSkill과 같이, 서버 연동 뒤에는 서버에 요청하고 응답 스냅샷을 적용한다.
-	Data.StatPoints -= Cost;
-	Data.UnlockedSkills.AddTag(SkillTag);
-	AddLedgerEntry(EWarriorAccountLedgerType::SkillUnlock, StatPointName, -Cost, SkillTag);
-
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Account] Unlocked %s for %d points. %d points left."), *SkillTag.ToString(), Cost, Data.StatPoints);
-
-	BroadcastAccountChanged();
-	return true;
-}
 
 void UWarriorAccountSubsystem::ApplyServerSnapshot(const FWarriorAccountData& InServerData)
 {
@@ -362,9 +259,6 @@ void UWarriorAccountSubsystem::BuildDefinitions()
 	AddStat(WarriorAccountTags::Account_Stat_MaxStamina.GetTag(), UWarriorAttributeSet::GetMaxStaminaAttribute(), 5.f, 10);
 	AddStat(WarriorAccountTags::Account_Stat_AttackPower.GetTag(), UWarriorAttributeSet::GetAttackPowerAttribute(), 0.5f, 10);
 	AddStat(WarriorAccountTags::Account_Stat_DefensePower.GetTag(), UWarriorAttributeSet::GetDefensePowerAttribute(), 1.f, 10);
-
-	SkillCosts.Reset();
-	SkillCosts.Add(WarriorAccountTags::Account_Skill_Combo4.GetTag(), 2);
 }
 
 const UWarriorAccountSubsystem::FStatDefinition* UWarriorAccountSubsystem::FindStatDefinition(const FGameplayTag& InStatTag) const

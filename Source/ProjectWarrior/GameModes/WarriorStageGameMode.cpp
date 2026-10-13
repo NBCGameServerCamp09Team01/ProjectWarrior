@@ -327,8 +327,15 @@ void AWarriorStageGameMode::BeginRun()
 		*GetResolvedStageId().ToString(),
 		Difficulty);
 
-	//서버에 스테이지 플레이 시작(응답을 기다리지 않는다). 받은 stagePlayId로 FinishRun에서 결과를 낸다
-	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this)) { StagePlay->StartStagePlay(GetResolvedStageId()); }
+	//서버에 스테이지 플레이 시작(응답을 기다리지 않는다). 받은 stagePlayId로 FinishRun에서 결과를 낸다.
+	//로그인 때 이어하기를 골랐으면 시작 요청 없이 그 플레이 ID를 그대로 쓴다(1차: 웨이브는 늘 처음부터)
+	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this))
+	{
+		FWarriorStageResumeInfo ResumeInfo;
+		UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+		const bool bResume = LaunchSubsystem && LaunchSubsystem->ConsumeResumeInfo(GetResolvedStageId(), ResumeInfo);
+		StagePlay->StartStagePlay(GetResolvedStageId(), bResume ? &ResumeInfo : nullptr);
+	}
 }
 
 void AWarriorStageGameMode::FinishRun(bool bInCleared)

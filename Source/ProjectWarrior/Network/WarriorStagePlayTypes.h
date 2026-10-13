@@ -52,6 +52,10 @@ struct PROJECTWARRIOR_API FWarriorStagePlayDto
 	UPROPERTY()
 	FString Status;
 
+	//결과를 낼 수 있는 마지막 시각(UTC ISO-8601, 시작 + 24시간). 결과를 보관할 때 보관 유효 기간으로 쓴다(S5)
+	UPROPERTY()
+	FString ExpiresAt;
+
 	//endReason·endedAt은 진행 중이면 null로 온다. 게임이 쓰지 않으므로 칸을 두지 않는다(null을 FString으로 읽다 실패하지 않게)
 };
 
@@ -69,6 +73,19 @@ struct PROJECTWARRIOR_API FWarriorStagePlayResponseDto
 };
 
 //~ End 시작
+
+//~ Begin 내 진행 중 플레이 (GET /accounts/me/stage-plays/current)
+
+//진행 중 플레이를 물은 결과
+UENUM()
+enum class EWarriorCurrentStagePlay : uint8
+{
+	None,		// 204: 진행 중 플레이 없음(마감이 지난 것은 서버가 EXPIRED로 바꾸고 204)
+	InProgress,	// 200: 진행 중 플레이 있음
+	Failed		// 연결 실패·응답을 읽지 못함·그 밖의 상태
+};
+
+//~ End 내 진행 중 플레이
 
 //~ Begin 결과 제출 (POST /accounts/me/stage-plays/{stagePlayId}/result, result-api.md)
 

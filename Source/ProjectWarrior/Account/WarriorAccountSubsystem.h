@@ -30,7 +30,7 @@ struct FWarriorAccountStatBonus
  * - 스테이지가 끝나면 통계 서브시스템이 기록을 확정하고 OnStageRecorded를 방송한다.
  *   이 서브시스템이 그것을 받아 경험치를 주고, 경험치가 차면 레벨을 올리며 오른 레벨마다 스탯 포인트를 준다.
  *   스탯 포인트는 레벨 업으로만 생긴다(클리어·실패가 직접 주지 않는다).
- * - 메인메뉴의 성장 화면이 InvestStatPoint·UnlockSkill을 호출한다.
+ * - 스탯 투자(S3)·스킬 해금(S4)은 서버가 한다(UWarriorStatInvestSubsystem·UWarriorSkillUnlockSubsystem). 이 서브시스템은 응답 계정 값을 받아 둔다.
  * - 스테이지 시작 때 캐릭터가 BuildStatBonuses로 투자 내역을 읽어 GAS에 적용한다(적용은 성장 담당).
  *
  * 서버 연동 전략(2주차)
@@ -107,10 +107,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Warrior|Account")
 	float GetStatBonus(FGameplayTag StatTag) const;
 
-	//스킬 해금에 필요한 스탯 포인트. 알 수 없는 스킬이면 -1
-	UFUNCTION(BlueprintPure, Category = "Warrior|Account")
-	int32 GetSkillCost(FGameplayTag SkillTag) const;
-
 	//투자할 수 있는 스탯의 태그 목록(성장 화면이 버튼을 만들 때 사용)
 	UFUNCTION(BlueprintPure, Category = "Warrior|Account")
 	TArray<FGameplayTag> GetInvestableStats() const;
@@ -123,18 +119,11 @@ public:
 	bool GetLastStageReward(FWarriorStageReward& OutReward) const;
 
 	//~ 변경 (성장 화면)
-	//스탯 포인트를 투자한다. 포인트가 모자라거나 최대치를 넘으면 false
-	UFUNCTION(BlueprintCallable, Category = "Warrior|Account")
-	bool InvestStatPoint(FGameplayTag StatTag, int32 Points = 1);
+	//스탯 투자는 여기서 하지 않는다. UWarriorStatInvestSubsystem이 서버에 보내고, 응답 계정 값이 ApplyServerSnapshot으로 들어온다(S3).
+	//로컬 투자 길은 없다(d 10/12: 서버가 최종 기준, 시험할 때도 서버를 켠다)
 
-	//스킬을 해금한다. 이미 해금했거나 포인트가 모자라면 false
-	UFUNCTION(BlueprintCallable, Category = "Warrior|Account")
-	bool UnlockSkill(FGameplayTag SkillTag);
-
-	//비용을 호출하는 쪽에서 정하는 스킬 해금 (조건 해금 스킬, 비용은 DA_SkillTree 기준).
-	//SkillCosts에 없는 스킬도 해금한다. 해금 조건 검사는 호출하는 쪽(UWarriorSkillLibrary)이 한다.
-	//이미 해금했거나 포인트가 모자라면 false
-	bool UnlockSkillWithCost(FGameplayTag SkillTag, int32 Cost);
+	//스킬 해금도 여기서 하지 않는다. UWarriorSkillUnlockSubsystem이 서버에 보내고, 응답 계정 값이 ApplyServerSnapshot으로 들어온다(S4).
+	//비용·조건은 서버 master/skills.json(UE DA_SkillTree와 손으로 맞춤)이 기준이다
 
 	//~ 서버 연동 준비 (지금은 임시 구현)
 	//서버가 내려 준 계정 데이터로 통째로 덮어쓴다. 서버가 최종 기준이므로 로컬 값보다 항상 우선한다.
@@ -152,7 +141,6 @@ public:
 	int64 GetExternalCurrency(FName InCurrency) const;
 
 	//서버가 알려 준 외부 재화 잔액을 반영한다. 변경 내역에도 남긴다.
-	//TODO(server): 스탯 투자에 외부 재화를 쓰는 기획이 확정되면, InvestStatPoint를 "서버에 투자 요청 → 응답 스냅샷 적용"으로 바꾼다.
 	void SetExternalCurrencyFromServer(FName InCurrency, int64 InBalance);
 
 	//~ 알림
@@ -199,9 +187,6 @@ private:
 	FRules Rules;
 
 	TArray<FStatDefinition> StatDefinitions;
-
-	//스킬 해금 비용(스탯 포인트)
-	TMap<FGameplayTag, int32> SkillCosts;
 
 	TWeakObjectPtr<UWarriorProfileStatsSubsystem> BoundStats;
 };

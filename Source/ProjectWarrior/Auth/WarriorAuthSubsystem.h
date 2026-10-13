@@ -63,12 +63,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestLogout();
 
-	//인증이 필요한 요청을 다른 서브시스템이 보낼 때 쓴다(예: 스테이지 플레이·결과). InVerb는 GET·POST.
+	//메인화면 값을 계정 데이터로 옮겨 적용한다. 스냅샷에 없는 칸(보상 기록·재화·누적 경험치)은 지금 값을 유지한다.
+	//version이 마지막으로 적용한 값보다 작으면 무시한다. 로그인 응답과, 계정 값을 바꾸는 요청의 응답 account(스탯 투자 등)가 같이 쓴다
+	void ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot);
+
+	//인증이 필요한 요청을 다른 서브시스템이 보낼 때 쓴다(예: 스테이지 목록·플레이 시작, 스탯 투자). InVerb는 GET·POST.
+	//한 번 보내고 끝이다(자동 재시도·보관 없음). 자동 재시도·보관이 필요하면 UWarriorApiSubsystem::Send를 쓴다.
 	//BaseUrl·토큰·제한 시간은 이 서브시스템 값을 그대로 쓰고, 토큰은 밖으로 내보내지 않는다.
 	//로그인하지 않았거나 요청을 시작하지 못하면 보내지 않고 false(OnDone은 부르지 않는다).
-	//401이면 보낼 때와 같은 세션일 때만 먼저 로그인 상태를 끝내고(HandleAuthFailure → OnSessionEnded), 그다음 OnDone을 부른다.
+	//401이면 보낼 때와 같은 세션일 때만 먼저 로그인 상태를 끝내고(OnSessionEnded), 그다음 OnDone을 부른다.
 	//OnDone(Status, Body)의 Status 0은 연결 실패. OnDone이 부른 쪽 객체를 잡으면 약한 참조로 잡는다(응답 전에 사라질 수 있다)
 	bool SendAuthorized(const FString& InVerb, const FString& InPath, const FString& InJsonBody, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
+
+	//~ Begin UWarriorApiSubsystem이 쓰는 함수. 토큰은 밖으로 내보내지 않는다
+	//HTTP 요청 한 번. InVerb {BaseUrl}{InPath}. 응답(또는 연결 실패)이 오면 OnDone(Status, Body). Status 0은 연결 실패.
+	//bWithAuth이면 Authorization 헤더를 붙인다(토큰이 없으면 보내지 않고 false). InTimeoutSeconds가 0 이하면 RequestTimeoutSeconds.
+	//재시도·401 처리는 하지 않는다(부른 쪽이 한다)
+	bool SendHttp(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone, float InTimeoutSeconds = 0.f);
+
+	//인증 요청이 401을 받았다. 보낼 때의 세션(InSentSessionSerial)이 아직 이어질 때만 코드로 이유를 골라 로그인 상태를 끝낸다
+	void NotifyUnauthorized(const FWarriorApiError& InError, int32 InSentSessionSerial);
+	//~ End UWarriorApiSubsystem이 쓰는 함수
 
 	UFUNCTION(BlueprintPure, Category = "Warrior|Auth")
 	bool IsLoggedIn() const { return bLoggedIn; }
@@ -163,28 +178,20 @@ private:
 	//요청을 시작하지 못하면 false. 본문(비밀번호)과 토큰은 로그에 남기지 않는다
 	bool SendPost(const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
 
-	//SendPost·SendAuthorized가 같이 쓰는 보내기. InVerb {BaseUrl}{InPath}. 나머지 규칙은 SendPost와 같다
-	bool SendRequest(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
-
-	//실패 응답 본문을 읽는다. 연결 실패(Status 0)는 NETWORK_ERROR, 본문을 못 읽으면 HTTP_<상태>로 채운다
+	//실패 응답 본문을 읽는다. UWarriorApiSubsystem::ParseError와 같다
 	static FWarriorApiError ParseApiError(int32 InStatus, const FString& InBody);
-
-	//회원가입·로그인이 같이 쓰는 문구(서버 장애, 연결 실패). 해당하지 않으면 빈 FText
-	static FText CommonErrorToText(const FString& InCode, int32 InStatus);
 
 	//회원가입 응답 처리. 201이면 성공
 	void HandleSignupResponse(int32 Status, const FString& Body);
 
-	//오류 코드로 회원가입 화면 문구를 고른다. VALIDATION_FAILED는 칸별 오류(errors[].message)를 보여 준다
+	//오류 코드로 회원가입 화면 문구를 고른다(문구 표 FWarriorErrorText). VALIDATION_FAILED는 칸별 오류(errors[].message)를 보여 준다
 	static FText SignupErrorToText(const FWarriorApiError& InError, int32 InStatus);
 
 	//로그인 응답 처리. Status 0은 연결 실패(응답 없음)
 	void HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body);
 
-	//메인화면 값을 계정 데이터로 옮겨 적용한다. 스냅샷에 없는 칸(보상 기록·재화·누적 경험치)은 지금 값을 유지한다
-	void ApplyAccountSnapshot(const FWarriorAccountSnapshotDto& InSnapshot);
 
-	//오류 코드(없으면 HTTP 상태)로 화면에 보여 줄 문장을 고른다. 서버 message는 개발 확인용이라 쓰지 않는다
+	//오류 코드(없으면 HTTP 상태)로 화면에 보여 줄 문장을 고른다(문구 표 FWarriorErrorText). 서버 message는 개발 확인용이라 쓰지 않는다
 	//InRetryAfterSeconds는 429 잠김의 남은 초(없으면 0)
 	static FText LoginErrorToText(const FString& InCode, int32 InStatus, int32 InRetryAfterSeconds = 0);
 
@@ -199,7 +206,7 @@ private:
 	//이미 로그인하지 않은 상태면 아무것도 하지 않는다(401이 겹쳐 와도 한 번만 처리)
 	void EndSession(EWarriorSessionEndReason InReason);
 
-	//종료 이유로 안내 팝업 문구를 고른다. LoggedOut이면 빈 FText
+	//종료 이유로 안내 팝업 문구를 고른다(문구 표 FWarriorErrorText). LoggedOut이면 빈 FText
 	static FText SessionEndToText(EWarriorSessionEndReason InReason);
 
 	//~ Begin 접속 점검
