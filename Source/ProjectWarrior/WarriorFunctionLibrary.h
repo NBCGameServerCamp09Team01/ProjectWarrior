@@ -9,6 +9,8 @@
 
 class UWarriorAbilitySystemComponent;
 class UPawnCombatComponent;
+class UFXSystemAsset;
+class UFXSystemComponent;
 /**
  * 
  */
@@ -70,5 +72,12 @@ public:
     // 폰 회전 설정. ALS는 TargetRotation으로 되돌리려 하고, LookingDirection 모드는 컨트롤 회전과 어긋나면
     // 제자리 회전으로 되돌리므로 둘 다 함께 갱신
     static void SetPawnFacingRotation(APawn* InPawn, const FRotator& NewRotation);
+
+    // 이펙트 에셋 재생 (Niagara 시스템, Cascade 파티클 모두 지원). 에셋이 없거나 다른 타입이면 nullptr
+    static UFXSystemComponent* SpawnFXAttached(UFXSystemAsset* InEffect, USceneComponent* InParent, FName InSocketName = NAME_None,
+        const FVector& InScale = FVector::OneVector, bool bAutoDestroy = true);
+
+    static UFXSystemComponent* SpawnFXAtLocation(const UObject* WorldContextObject, UFXSystemAsset* InEffect, const FVector& InLocation,
+        const FRotator& InRotation = FRotator::ZeroRotator, const FVector& InScale = FVector::OneVector);
 
 };

@@ -9,6 +9,11 @@
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "GenericTeamAgentInterface.h"
 #include "Character/ALSBaseCharacter.h"
+#include "Kismet/GameplayStatics.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
 
 UWarriorAbilitySystemComponent* UWarriorFunctionLibrary::NativeGetWarriorASCFromActor(AActor* InActor)
 {
@@ -250,4 +255,46 @@ void UWarriorFunctionLibrary::SetPawnFacingRotation(APawn* InPawn, const FRotato
     {
         Controller->SetControlRotation(NewRotation);
     }
+}
+
+UFXSystemComponent* UWarriorFunctionLibrary::SpawnFXAttached(UFXSystemAsset* InEffect, USceneComponent* InParent, FName InSocketName, const FVector& InScale, bool bAutoDestroy)
+{
+    if (!InEffect || !InParent)
+    {
+        return nullptr;
+    }
+
+    if (UNiagaraSystem* NiagaraSystem = Cast<UNiagaraSystem>(InEffect))
+    {
+        return UNiagaraFunctionLibrary::SpawnSystemAttached(NiagaraSystem, InParent, InSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
+            InScale, EAttachLocation::SnapToTarget, bAutoDestroy, ENCPoolMethod::None);
+    }
+
+    if (UParticleSystem* ParticleSystem = Cast<UParticleSystem>(InEffect))
+    {
+        return UGameplayStatics::SpawnEmitterAttached(ParticleSystem, InParent, InSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
+            InScale, EAttachLocation::SnapToTarget, bAutoDestroy);
+    }
+
+    return nullptr;
+}
+
+UFXSystemComponent* UWarriorFunctionLibrary::SpawnFXAtLocation(const UObject* WorldContextObject, UFXSystemAsset* InEffect, const FVector& InLocation, const FRotator& InRotation, const FVector& InScale)
+{
+    if (!InEffect || !WorldContextObject)
+    {
+        return nullptr;
+    }
+
+    if (UNiagaraSystem* NiagaraSystem = Cast<UNiagaraSystem>(InEffect))
+    {
+        return UNiagaraFunctionLibrary::SpawnSystemAtLocation(WorldContextObject, NiagaraSystem, InLocation, InRotation, InScale);
+    }
+
+    if (UParticleSystem* ParticleSystem = Cast<UParticleSystem>(InEffect))
+    {
+        return UGameplayStatics::SpawnEmitterAtLocation(WorldContextObject, ParticleSystem, InLocation, InRotation, InScale);
+    }
+
+    return nullptr;
 }

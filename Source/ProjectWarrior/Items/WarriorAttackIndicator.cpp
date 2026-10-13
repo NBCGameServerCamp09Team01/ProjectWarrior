@@ -49,6 +49,11 @@ void AWarriorAttackIndicator::InitializeIndicator(const FWarriorAttackAreaData& 
 	{
 		IndicatorMID->SetScalarParameterValue(ShapeParameterName, static_cast<float>(InAreaData.Shape));
 		IndicatorMID->SetScalarParameterValue(ConeAngleParameterName, InAreaData.ConeAngle);
+
+		const float InnerRatio = (InAreaData.Shape != EWarriorAttackAreaShape::Box && InAreaData.Radius > 0.f)
+			? FMath::Clamp(InAreaData.InnerRadius / InAreaData.Radius, 0.f, 1.f)
+			: 0.f;
+		IndicatorMID->SetScalarParameterValue(InnerRadiusRatioParameterName, InnerRatio);
 	}
 
 	FillDuration = FMath::Max(InFillDuration, 0.f);

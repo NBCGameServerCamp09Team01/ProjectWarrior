@@ -44,6 +44,10 @@ struct PROJECTWARRIOR_API FWarriorAttackAreaData
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackArea", meta = (ClampMin = "0.0", EditCondition = "Shape != EWarriorAttackAreaShape::Box", EditConditionHides))
     float Radius = 300.f;
 
+    // Circle, Cone의 안쪽 빈 반지름. 0보다 크면 도넛(고리) 모양이 되어 안쪽은 맞지 않음
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackArea", meta = (ClampMin = "0.0", EditCondition = "Shape != EWarriorAttackAreaShape::Box", EditConditionHides))
+    float InnerRadius = 0.f;
+
     // Box의 정면 방향 길이
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackArea", meta = (ClampMin = "0.0", EditCondition = "Shape == EWarriorAttackAreaShape::Box", EditConditionHides))
     float Length = 600.f;

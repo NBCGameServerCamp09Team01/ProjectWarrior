@@ -2,6 +2,7 @@
 
 
 #include "WarriorAICharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "ProjectWarrior/Components/Combat/AICombatComponent.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAbilitySystemComponent.h"
 #include "ProjectWarrior/Components/UI/AIUIComponent.h"
@@ -74,6 +75,11 @@ void AWarriorAICharacter::OnCharacterDiedEvent_Implementation()
 void AWarriorAICharacter::BeginPlay()
 {
     Super::BeginPlay();
+
+    // 적이 플레이어와 카메라 사이에 들어와도 카메라붐이 당겨지지 않도록 카메라 채널 무시
+    // (BP에 저장된 콜리전 프로필이 생성자 설정을 덮어쓰므로 시작 시 적용. 몸 안에 들어간 카메라는 플레이어의 CameraClipHideComponent가 처리)
+    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+    GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
     if (UWarriorWidgetBase* HealthWidget = Cast<UWarriorWidgetBase>(AIHealthWidgetComponent->GetUserWidgetObject()))
     {
