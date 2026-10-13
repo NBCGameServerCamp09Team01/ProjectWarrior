@@ -8,12 +8,21 @@
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 UCameraClipHideComponent::UCameraClipHideComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	// 카메라 위치가 확정된 뒤 검사
 	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> GhostMaterialFinder(TEXT("/Game/MyGameContents/VFX/Camera/MI_CameraGhost.MI_CameraGhost"));
+
+	if (GhostMaterialFinder.Succeeded())
+	{
+		GhostMaterial = GhostMaterialFinder.Object;
+	}
 }
 
 void UCameraClipHideComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -130,37 +139,73 @@ void UCameraClipHideComponent::HideCharacter(ACharacter* Character)
 		return;
 	}
 
-	// 메시와 메시에 붙은 것(무기 등) 중 지금 보이는 것만 숨기고 기억
+	// 메시와 메시에 붙은 것(무기 등) 중 지금 보이는 것만 처리하고 원래 상태를 기억
 	TArray<USceneComponent*> Components;
 	Mesh->GetChildrenComponents(true, Components);
 	Components.Add(Mesh);
 
-	TArray<TWeakObjectPtr<UPrimitiveComponent>>& HiddenComponents = HiddenCharacters.Add(Character);
+	FCameraClipCharacterState& State = HiddenCharacters.Add(Character);
+	const bool bUseGhost = Handling == ECameraClipHandling::Ghost && GhostMaterial;
 
 	for (USceneComponent* Component : Components)
 	{
 		UPrimitiveComponent* Primitive = Cast<UPrimitiveComponent>(Component);
 
-		if (Primitive && Primitive->IsVisible())
+		if (!Primitive || !Primitive->IsVisible())
+		{
+			continue;
+		}
+
+		FCameraClipComponentState& ComponentState = State.Components.AddDefaulted_GetRef();
+		ComponentState.Component = Primitive;
+
+		// 유령 처리는 메시(스켈레탈·스태틱)만. 체력바 위젯 등은 그대로 둠
+		UMeshComponent* MeshComponent = Cast<UMeshComponent>(Primitive);
+
+		if (bUseGhost && MeshComponent)
+		{
+			const int32 NumMaterials = MeshComponent->GetNumMaterials();
+
+			for (int32 Index = 0; Index < NumMaterials; ++Index)
+			{
+				ComponentState.OriginalMaterials.Add(MeshComponent->GetMaterial(Index));
+				MeshComponent->SetMaterial(Index, GhostMaterial);
+			}
+		}
+		else if (!bUseGhost)
 		{
 			Primitive->SetVisibility(false, false);
-			HiddenComponents.Add(Primitive);
+			ComponentState.bHidden = true;
 		}
 	}
 }
 
 void UCameraClipHideComponent::ShowCharacter(ACharacter* Character)
 {
-	TArray<TWeakObjectPtr<UPrimitiveComponent>> HiddenComponents;
+	FCameraClipCharacterState State;
 
-	if (!HiddenCharacters.RemoveAndCopyValue(Character, HiddenComponents))
+	if (!HiddenCharacters.RemoveAndCopyValue(Character, State))
 	{
 		return;
 	}
 
-	for (const TWeakObjectPtr<UPrimitiveComponent>& Primitive : HiddenComponents)
+	for (const FCameraClipComponentState& ComponentState : State.Components)
 	{
-		if (Primitive.IsValid())
+		UPrimitiveComponent* Primitive = ComponentState.Component.Get();
+
+		if (!Primitive)
+		{
+			continue;
+		}
+
+		if (UMeshComponent* MeshComponent = Cast<UMeshComponent>(Primitive); MeshComponent && !ComponentState.OriginalMaterials.IsEmpty())
+		{
+			for (int32 Index = 0; Index < ComponentState.OriginalMaterials.Num(); ++Index)
+			{
+				MeshComponent->SetMaterial(Index, ComponentState.OriginalMaterials[Index]);
+			}
+		}
+		else if (ComponentState.bHidden)
 		{
 			Primitive->SetVisibility(true, false);
 		}

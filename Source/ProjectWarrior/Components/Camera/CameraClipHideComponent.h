@@ -7,12 +7,48 @@
 #include "CameraClipHideComponent.generated.h"
 
 class ACharacter;
+class UMaterialInterface;
 class UPrimitiveComponent;
 
+UENUM(BlueprintType)
+enum class ECameraClipHandling : uint8
+{
+	// 반투명 유령 머티리얼로 교체 (뒤 배경이 비쳐 보임)
+	Ghost,
+	// 메시를 숨김
+	Hide
+};
+
+// 처리 중인 컴포넌트 하나의 원래 상태 (머티리얼은 GC되지 않도록 UPROPERTY로 보관)
+USTRUCT()
+struct FCameraClipComponentState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TWeakObjectPtr<UPrimitiveComponent> Component;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInterface>> OriginalMaterials;
+
+	// 머티리얼 교체 대신 숨겼는지
+	UPROPERTY()
+	bool bHidden = false;
+};
+
+USTRUCT()
+struct FCameraClipCharacterState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FCameraClipComponentState> Components;
+};
+
 /**
- * 카메라가 캐릭터 몸 안(또는 아주 가까이)에 들어가면 그 캐릭터의 메시를 숨겨 클리핑(잘린 폴리곤)이 보이지 않게 한다.
+ * 카메라가 캐릭터 몸 안(또는 아주 가까이)에 들어가면 그 캐릭터를 반투명 유령 머티리얼로 바꾸거나 숨겨 클리핑(잘린 폴리곤)이 보이지 않게 한다.
  * 플레이어에 붙여 사용. 매 프레임 화면 카메라 위치와 각 캐릭터 메시의 충돌체(피직스 에셋) 거리를 검사하고,
- * 빠져나오면 숨겼던 컴포넌트만 다시 보이게 한다.
+ * 빠져나오면 바꾼 컴포넌트만 원래대로 되돌린다.
  */
 UCLASS(ClassGroup = (Camera), meta = (BlueprintSpawnableComponent))
 class PROJECTWARRIOR_API UCameraClipHideComponent : public UActorComponent
@@ -27,11 +63,18 @@ public:
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// 카메라와 메시 충돌체 사이가 이 거리보다 가까우면 숨김 (카메라 근평면 여유)
+	UPROPERTY(EditDefaultsOnly, Category = "CameraClip")
+	ECameraClipHandling Handling = ECameraClipHandling::Ghost;
+
+	// Ghost 방식에서 메시 전체에 씌울 반투명 머티리얼 (스켈레탈 메시 사용 허용 필요)
+	UPROPERTY(EditDefaultsOnly, Category = "CameraClip", meta = (EditCondition = "Handling == ECameraClipHandling::Ghost"))
+	TObjectPtr<UMaterialInterface> GhostMaterial;
+
+	// 카메라와 메시 충돌체 사이가 이 거리보다 가까우면 처리 (카메라 근평면 여유)
 	UPROPERTY(EditDefaultsOnly, Category = "CameraClip", meta = (ClampMin = "0.0", Units = "cm"))
 	float HideDistance = 25.f;
 
-	// 숨긴 뒤 다시 보이게 할 거리 (깜빡임 방지용으로 HideDistance보다 조금 크게)
+	// 처리한 뒤 원래대로 되돌릴 거리 (깜빡임 방지용으로 HideDistance보다 조금 크게)
 	UPROPERTY(EditDefaultsOnly, Category = "CameraClip", meta = (ClampMin = "0.0", Units = "cm"))
 	float ShowDistance = 40.f;
 
@@ -51,6 +94,7 @@ private:
 
 	void ShowCharacter(ACharacter* Character);
 
-	// 숨긴 캐릭터와, 그때 보이던 상태라서 숨긴 컴포넌트들 (다시 보이게 할 대상)
-	TMap<TWeakObjectPtr<ACharacter>, TArray<TWeakObjectPtr<UPrimitiveComponent>>> HiddenCharacters;
+	// 처리 중인 캐릭터와, 바꾼 컴포넌트들의 원래 상태
+	UPROPERTY(Transient)
+	TMap<TWeakObjectPtr<ACharacter>, FCameraClipCharacterState> HiddenCharacters;
 };
