@@ -43,6 +43,12 @@ public:
 	//현재 웨이브 인덱스(0부터). 첫 웨이브 시작 전에는 INDEX_NONE
 	int32 GetCurrentWaveIndex() const { return CurrentWaveIndex; }
 
+	//이번 판이 체크포인트에서 이어 가는 판인가(M22). true면 준비 시간 대신 다음 웨이브의 쉬는 시간부터 시작한다
+	bool IsResumingFromCheckpoint() const { return bResumingFromCheckpoint; }
+
+	//InitGame에서 정한 스테이지 키. 판 끝까지 바뀌지 않는다. 결과·판 시작·체크포인트에 실린다
+	FName GetResolvedStageId() const { return ResolvedLaunchInfo.StageId; }
+
 	//~ Begin 상태 객체 전용
 	//웨이브 인덱스를 1 올리고 GameState에 기록한 뒤 FlowManager에 시작을 요청한다. 시작하지 못하면 그 웨이브를 건너뛴다.
 	void StartNextWave();
@@ -121,9 +127,6 @@ private:
 	//목록에 웨이브가 있으면 FlowManager의 웨이브를 바꾼다. 첫 웨이브 전에 불러야 한다.
 	void ApplyStageWaveData(AWarriorStageFlowManager* InFlowManager) const;
 
-	//InitGame에서 정한 스테이지 키. 판 끝까지 바뀌지 않는다.
-	FName GetResolvedStageId() const { return ResolvedLaunchInfo.StageId; }
-
 	FWarriorStageLaunchInfo ResolvedLaunchInfo;
 
 	TWeakObjectPtr<AWarriorStageFlowManager> StageFlowManager;
@@ -149,4 +152,11 @@ private:
 	double RunStartRealTime = 0.0;
 
 	bool bRunFinished = false;
+
+	//체크포인트에서 이어 가는 판(BeginRun에서 정함)
+	bool bResumingFromCheckpoint = false;
+
+private:
+	//체크포인트 값을 넣고 웨이브 위치를 클리어한 웨이브로 맞춘다. 넣을 수 없으면 false(처음부터 시작)
+	bool ApplyResumeCheckpoint(const FWarriorPlayCheckpoint& InCheckpoint);
 };

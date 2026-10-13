@@ -18,6 +18,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
+#include "ProjectWarrior/Stage/WarriorPlayCheckpoint.h"
 #include "TimerManager.h"
 
 
@@ -327,15 +328,52 @@ void AWarriorStageGameMode::BeginRun()
 		*GetResolvedStageId().ToString(),
 		Difficulty);
 
+	//로그인 때 이어하기를 골랐으면 그 정보를 꺼낸다(한 번만). 체크포인트가 있으면 판 안 값을 넣고 다음 웨이브의 쉬는 시간부터 시작한다
+	FWarriorStageResumeInfo ResumeInfo;
+	UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+	const bool bResume = LaunchSubsystem && LaunchSubsystem->ConsumeResumeInfo(GetResolvedStageId(), ResumeInfo);
+
+	bResumingFromCheckpoint = bResume && ResumeInfo.Checkpoint.IsSet() && ApplyResumeCheckpoint(ResumeInfo.Checkpoint);
+
 	//서버에 스테이지 플레이 시작(응답을 기다리지 않는다). 받은 stagePlayId로 FinishRun에서 결과를 낸다.
-	//로그인 때 이어하기를 골랐으면 시작 요청 없이 그 플레이 ID를 그대로 쓴다(1차: 웨이브는 늘 처음부터)
+	//이어하기면 시작 요청 없이 그 플레이 ID를 그대로 쓴다
 	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this))
 	{
-		FWarriorStageResumeInfo ResumeInfo;
-		UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
-		const bool bResume = LaunchSubsystem && LaunchSubsystem->ConsumeResumeInfo(GetResolvedStageId(), ResumeInfo);
 		StagePlay->StartStagePlay(GetResolvedStageId(), bResume ? &ResumeInfo : nullptr);
 	}
+}
+
+bool AWarriorStageGameMode::ApplyResumeCheckpoint(const FWarriorPlayCheckpoint& InCheckpoint)
+{
+	const AWarriorStageFlowManager* FlowManager = GetStageFlowManager();
+	const int32 TotalWaveCount = FlowManager ? FlowManager->GetTotalWaveCount() : 0;
+
+	//마지막 웨이브를 클리어한 체크포인트는 없다(그때는 결과를 낸다). 범위를 벗어나면 처음부터
+	if (InCheckpoint.ClearedWave <= 0 || InCheckpoint.ClearedWave >= TotalWaveCount)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Checkpoint ignored. clearedWave %d is out of range (total %d). Starting from wave 1."),
+			InCheckpoint.ClearedWave, TotalWaveCount);
+		return false;
+	}
+
+	FString Error;
+	if (!WarriorPlayCheckpoint::Restore(this, InCheckpoint, Error))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Checkpoint not restored (%s). Starting from wave 1."), *Error);
+		return false;
+	}
+
+	//클리어한 웨이브에 머문 것처럼 맞춘다. 쉬는 시간이 끝나면 StartNextWave가 그다음 웨이브를 시작한다.
+	//판 통계는 위 Restore에서 같은 웨이브를 가리키게 되었으므로 아래 웨이브 알림으로 새 웨이브를 열지 않는다
+	CurrentWaveIndex = InCheckpoint.ClearedWave - 1;
+	if (AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>())
+	{
+		StageGameState->SetWaveInfo(InCheckpoint.ClearedWave, TotalWaveCount, FlowManager->IsBossWave(CurrentWaveIndex));
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Resuming from checkpoint. Cleared wave %d/%d, next wave %d starts after rest."),
+		InCheckpoint.ClearedWave, TotalWaveCount, InCheckpoint.ClearedWave + 1);
+	return true;
 }
 
 void AWarriorStageGameMode::FinishRun(bool bInCleared)
