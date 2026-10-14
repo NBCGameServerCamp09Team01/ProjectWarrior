@@ -20,6 +20,25 @@ class UCameraComponent;
 class UWarriorAnimInstance;
 struct FInputActionValue;
 
+// 약점 선을 그리고 있는 적 하나. 보이는 메시마다 원래 오버레이를 기억했다가 되돌림
+USTRUCT()
+struct FBladeWeakLineTarget
+{
+	GENERATED_BODY()
+
+	TWeakObjectPtr<APawn> Pawn;
+
+	TArray<TWeakObjectPtr<UMeshComponent>> Meshes;
+
+	// Meshes와 같은 순서
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInterface>> SavedOverlayMaterials;
+
+	// 적마다 평면이 달라서 머티리얼도 따로 씀
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> Material;
+};
+
 /**
  * 블레이드 모드(메탈기어 라이징). 버튼을 누르고 있는 동안 세상이 느려지고, 마우스로 베는 각도를 정해 클릭하면 그 평면으로 벤다.
  * 칼을 겨눈 자세는 애님 그래프의 상체 레이어(BS_BladeAim)가 각도에 맞춰 섞는다.
@@ -72,20 +91,25 @@ private:
 	bool GetSlashView(FRotator& OutViewRotation);
 
 #pragma region WeakLineLogic
-	// 화면 중앙에 가장 가까운, 맞을 수 있는 적. 지금 대상이 아직 유효하면 그대로 유지
-	APawn* FindWeakLineTarget();
+	// 범위 안에서 약점 선을 보여도 되는 적 전부
+	void FindWeakLineTargets(TArray<APawn*>& OutTargets);
 
 	// 약점 선을 보여도 되는지(= 베면 반드시 피해가 들어가는 상태인지)
 	bool CanShowWeakLine(APawn* InPawn);
 
-	void SetWeakLineTarget(APawn* InPawn);
+	// 오버레이를 InPawns에만 걸리게 맞춤(빠진 적은 되돌리고 새 적은 검)
+	void SyncWeakLineTargets(const TArray<APawn*>& InPawns);
+	void ClearWeakLineTargets();
 	void UpdateWeakLine();
+
+	// 적의 약점 평면 회전(X = 캐릭터 → 적 중심, Y = 약점 선, Z = 평면 법선)
+	bool GetWeakLineRotation(const APawn* InPawn, float InAngle, FQuat& OutRotation);
 
 	// 대상의 약점 각도(-90~90, 선이라 180도 주기). 처음 보는 적이면 무작위로 정함
 	float GetWeakLineAngle(const AActor* InActor);
 	void RerollWeakLineAngle(const AActor* InActor);
 
-	bool IsAimAlignedWithWeakLine();
+	bool IsAimAlignedWithWeakLine(const APawn* InPawn);
 #pragma endregion
 
 	void CreateIndicator();
@@ -95,8 +119,9 @@ private:
 	void StartSlashTrail();
 	void StopSlashTrail();
 
-	// InRotation은 판정 상자 회전(X = 카메라 앞, Y = 베는 선, Z = 평면 법선). 약점을 베었으면 빛줄기 색을 바꿈
-	void SpawnSlashMark(const FQuat& InRotation, bool bWeakPointHit);
+	// InRotation은 판정 상자 회전(X = 카메라 앞, Y = 베는 선, Z = 평면 법선). 약점을 베었으면 빛줄기 색을 바꿈.
+	// InOrigin이 있으면 그 위치에 그림(베는 평면 밖에 있는 적의 약점 베기)
+	void SpawnSlashMark(const FQuat& InRotation, bool bWeakPointHit, const FVector* InOrigin = nullptr);
 
 	void QueueSlashSparks(const FQuat& InRotation);
 
@@ -376,15 +401,12 @@ private:
 	FLinearColor WeakLineAlignedColor = FLinearColor(1.0f, 0.65f, 0.1f, 1.0f);
 #pragma endregion
 
+	// 약점 선을 그리고 있는 적 전부
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> WeakLineMaterialInstance;
+	TArray<FBladeWeakLineTarget> WeakLineTargets;
 
-	// 대상의 보이는 스켈레탈 메시들과 원래 걸려 있던 오버레이(같은 순서, 대상이 바뀌면 되돌림)
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInterface>> SavedTargetOverlayMaterials;
-
+	// 베는 평면 축의 기준이 되는 적(WeakLineTargets 중 화면 중앙에 가장 가까운 적, 유효한 동안 유지)
 	TWeakObjectPtr<APawn> WeakLineTarget;
-	TArray<TWeakObjectPtr<UMeshComponent>> WeakLineTargetMeshes;
 
 	// 적마다 약점 각도. 블레이드 모드를 나갔다 들어와도 유지(어빌리티가 액터마다 하나라 계속 남음)
 	TMap<TWeakObjectPtr<const AActor>, float> WeakLineAngles;

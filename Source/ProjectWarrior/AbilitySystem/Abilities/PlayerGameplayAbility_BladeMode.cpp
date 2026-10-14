@@ -231,7 +231,7 @@ void UPlayerGameplayAbility_BladeMode::RestoreBladeMode()
 
 	StopSlashTrail();
 	DestroyIndicator();
-	SetWeakLineTarget(nullptr);
+	ClearWeakLineTargets();
 
 	AWarriorPlayerCharacter* PlayerCharacter = GetPlayerCharacterFromActorInfo();
 	AWarriorPlayerController* PlayerController = GetPlayerControllerFromActorInfo();
@@ -506,7 +506,7 @@ void UPlayerGameplayAbility_BladeMode::SpawnPendingSparks(bool bSpawnAll)
 	}
 }
 
-void UPlayerGameplayAbility_BladeMode::SpawnSlashMark(const FQuat& InRotation, bool bWeakPointHit)
+void UPlayerGameplayAbility_BladeMode::SpawnSlashMark(const FQuat& InRotation, bool bWeakPointHit, const FVector* InOrigin)
 {
 	AWarriorPlayerCharacter* PlayerCharacter = GetPlayerCharacterFromActorInfo();
 	UWorld* World = GetWorld();
@@ -536,6 +536,7 @@ void UPlayerGameplayAbility_BladeMode::SpawnSlashMark(const FQuat& InRotation, b
 	{
 		MarkMaterial->SetVectorParameterValue(TEXT("Color"), WeakLineAlignedColor);
 	}
+
 	Mark->SetMaterial(0, MarkMaterial);
 	Mark->RegisterComponent();
 
@@ -543,7 +544,7 @@ void UPlayerGameplayAbility_BladeMode::SpawnSlashMark(const FQuat& InRotation, b
 	const float SizeX = MeshSize.X > KINDA_SMALL_NUMBER ? MeshSize.X : 100.f;
 	const float SizeY = MeshSize.Y > KINDA_SMALL_NUMBER ? MeshSize.Y : 100.f;
 	const FQuat StripRotation = FRotationMatrix::MakeFromXY(InRotation.GetAxisY(), InRotation.GetAxisZ()).ToQuat();
-	Mark->SetWorldLocationAndRotation(GetSlashLineOrigin(InRotation), StripRotation);
+	Mark->SetWorldLocationAndRotation(InOrigin ? *InOrigin : GetSlashLineOrigin(InRotation), StripRotation);
 	Mark->SetWorldScale3D(FVector(SlashHalfWidth * 2.f / SizeX, SlashLineWidth / SizeY, 1.f));
 
 	SlashMarks.Add(Mark);
@@ -797,112 +798,131 @@ bool UPlayerGameplayAbility_BladeMode::CanShowWeakLine(APawn* InPawn)
 	return !GetWorld()->LineTraceTestByChannel(ViewLocation, TargetCenter, ECC_Visibility, TraceParams);
 }
 
-APawn* UPlayerGameplayAbility_BladeMode::FindWeakLineTarget()
+void UPlayerGameplayAbility_BladeMode::FindWeakLineTargets(TArray<APawn*>& OutTargets)
 {
-	// 대상이 매 틱 바뀌어 선이 깜빡이지 않도록, 지금 대상이 유효하면 유지
-	if (APawn* CurrentTarget = WeakLineTarget.Get(); CurrentTarget && CanShowWeakLine(CurrentTarget))
-	{
-		return CurrentTarget;
-	}
-
 	const AWarriorPlayerCharacter* PlayerCharacter = GetPlayerCharacterFromActorInfo();
-	const AWarriorPlayerController* PlayerController = GetPlayerControllerFromActorInfo();
 	UWorld* World = GetWorld();
 
-	if (!PlayerCharacter || !PlayerController || !World)
+	if (!PlayerCharacter || !World)
 	{
-		return nullptr;
+		return;
 	}
-
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	PlayerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
-	const FVector ViewForward = ViewRotation.Vector();
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(BladeModeWeakLineTarget), false, PlayerCharacter);
 	TArray<FOverlapResult> Overlaps;
 	World->OverlapMultiByObjectType(Overlaps, PlayerCharacter->GetActorLocation(), FQuat::Identity, FCollisionObjectQueryParams(ECC_Pawn),
 		FCollisionShape::MakeSphere(SlashRange), QueryParams);
 
-	// 화면 중앙에 가장 가까운 적
-	APawn* BestTarget = nullptr;
-	float BestDot = -1.0f;
-
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
 		APawn* Candidate = Cast<APawn>(Overlap.GetActor());
 
-		if (!Candidate || !CanShowWeakLine(Candidate))
+		if (Candidate && !OutTargets.Contains(Candidate) && CanShowWeakLine(Candidate))
+		{
+			OutTargets.Add(Candidate);
+		}
+	}
+}
+
+void UPlayerGameplayAbility_BladeMode::SyncWeakLineTargets(const TArray<APawn*>& InPawns)
+{
+	// 빠진 적은 원래 오버레이로 되돌림
+	for (int32 Index = WeakLineTargets.Num() - 1; Index >= 0; --Index)
+	{
+		FBladeWeakLineTarget& Entry = WeakLineTargets[Index];
+
+		if (Entry.Pawn.IsValid() && InPawns.Contains(Entry.Pawn.Get()))
 		{
 			continue;
 		}
 
-		const float Dot = FVector::DotProduct((Candidate->GetActorLocation() - ViewLocation).GetSafeNormal(), ViewForward);
-
-		if (Dot > BestDot)
+		for (int32 MeshIndex = 0; MeshIndex < Entry.Meshes.Num(); ++MeshIndex)
 		{
-			BestDot = Dot;
-			BestTarget = Candidate;
+			if (UMeshComponent* Mesh = Entry.Meshes[MeshIndex].Get())
+			{
+				Mesh->SetOverlayMaterial(Entry.SavedOverlayMaterials[MeshIndex]);
+			}
 		}
+
+		WeakLineTargets.RemoveAt(Index);
 	}
 
-	return BestTarget;
-}
+	UMaterialInterface* BaseMaterial = nullptr;
 
-void UPlayerGameplayAbility_BladeMode::SetWeakLineTarget(APawn* InPawn)
-{
-	if (WeakLineTarget.Get() == InPawn && (InPawn == nullptr || !WeakLineTargetMeshes.IsEmpty()))
+	for (APawn* Pawn : InPawns)
 	{
-		return;
-	}
-
-	for (int32 Index = 0; Index < WeakLineTargetMeshes.Num(); ++Index)
-	{
-		if (UMeshComponent* OldMesh = WeakLineTargetMeshes[Index].Get())
+		if (WeakLineTargets.ContainsByPredicate([Pawn](const FBladeWeakLineTarget& Entry) { return Entry.Pawn.Get() == Pawn; }))
 		{
-			OldMesh->SetOverlayMaterial(SavedTargetOverlayMaterials[Index]);
+			continue;
 		}
-	}
 
-	WeakLineTarget = InPawn;
-	WeakLineTargetMeshes.Reset();
-	SavedTargetOverlayMaterials.Reset();
+		// ALS 기반 적은 GetMesh()가 숨겨진 애니메이션용이고 보이는 메시가 따로 붙어 있음 → 보이는 스켈레탈 메시 전부에 검
+		TArray<USkeletalMeshComponent*> PawnMeshes;
+		Pawn->GetComponents<USkeletalMeshComponent>(PawnMeshes);
+		PawnMeshes.RemoveAll([](const USkeletalMeshComponent* Mesh) { return !Mesh->IsVisible() || !Mesh->GetSkeletalMeshAsset(); });
 
-	if (!InPawn)
-	{
-		return;
-	}
-
-	// ALS 기반 적은 GetMesh()가 숨겨진 애니메이션용이고 보이는 메시가 따로 붙어 있음 → 보이는 스켈레탈 메시 전부에 검
-	TArray<USkeletalMeshComponent*> TargetMeshes;
-	InPawn->GetComponents<USkeletalMeshComponent>(TargetMeshes);
-	TargetMeshes.RemoveAll([](const USkeletalMeshComponent* Mesh) { return !Mesh->IsVisible() || !Mesh->GetSkeletalMeshAsset(); });
-
-	if (TargetMeshes.IsEmpty())
-	{
-		return;
-	}
-
-	if (!WeakLineMaterialInstance)
-	{
-		UMaterialInterface* BaseMaterial = WeakLineMaterial ? WeakLineMaterial.Get()
-			: LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/MyGameContents/Character/BladeMode/M_BladeWeakLine.M_BladeWeakLine"));
+		if (PawnMeshes.IsEmpty())
+		{
+			continue;
+		}
 
 		if (!BaseMaterial)
 		{
-			return;
+			BaseMaterial = WeakLineMaterial ? WeakLineMaterial.Get()
+				: LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/MyGameContents/Character/BladeMode/M_BladeWeakLine.M_BladeWeakLine"));
+
+			if (!BaseMaterial)
+			{
+				return;
+			}
 		}
 
-		WeakLineMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
-		WeakLineMaterialInstance->SetScalarParameterValue(TEXT("Width"), WeakLineWidth);
+		FBladeWeakLineTarget& Entry = WeakLineTargets.AddDefaulted_GetRef();
+		Entry.Pawn = Pawn;
+		Entry.Material = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+		Entry.Material->SetScalarParameterValue(TEXT("Width"), WeakLineWidth);
+
+		for (USkeletalMeshComponent* Mesh : PawnMeshes)
+		{
+			Entry.SavedOverlayMaterials.Add(Mesh->GetOverlayMaterial());
+			Mesh->SetOverlayMaterial(Entry.Material);
+			Entry.Meshes.Add(Mesh);
+		}
+	}
+}
+
+void UPlayerGameplayAbility_BladeMode::ClearWeakLineTargets()
+{
+	SyncWeakLineTargets(TArray<APawn*>());
+	WeakLineTarget = nullptr;
+}
+
+bool UPlayerGameplayAbility_BladeMode::GetWeakLineRotation(const APawn* InPawn, float InAngle, FQuat& OutRotation)
+{
+	const AWarriorPlayerCharacter* PlayerCharacter = GetPlayerCharacterFromActorInfo();
+	const AWarriorPlayerController* PlayerController = GetPlayerControllerFromActorInfo();
+
+	if (!InPawn || !PlayerCharacter || !PlayerController)
+	{
+		return false;
 	}
 
-	for (USkeletalMeshComponent* TargetMesh : TargetMeshes)
+	const FVector ToPawn = (InPawn->GetActorLocation() - PlayerCharacter->GetActorLocation()).GetSafeNormal();
+
+	if (ToPawn.IsNearlyZero())
 	{
-		SavedTargetOverlayMaterials.Add(TargetMesh->GetOverlayMaterial());
-		TargetMesh->SetOverlayMaterial(WeakLineMaterialInstance);
-		WeakLineTargetMeshes.Add(TargetMesh);
+		return false;
 	}
+
+	// 베는 평면(GetSlashView)과 같은 방식: 카메라 위쪽은 유지하고 앞쪽만 캐릭터 → 적 중심
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	PlayerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
+
+	const FRotator PawnView = FRotationMatrix::MakeFromXZ(ToPawn, FRotationMatrix(ViewRotation).GetUnitAxis(EAxis::Z)).Rotator();
+	OutRotation = FRotationMatrix::MakeFromXY(ToPawn, GetSlashLineDirection(PawnView, InAngle)).ToQuat();
+
+	return true;
 }
 
 float UPlayerGameplayAbility_BladeMode::GetWeakLineAngle(const AActor* InActor)
@@ -935,45 +955,79 @@ static float GetLineAngleDelta(float InA, float InB)
 	return FMath::Min(Delta, 180.0f - Delta);
 }
 
-bool UPlayerGameplayAbility_BladeMode::IsAimAlignedWithWeakLine()
+bool UPlayerGameplayAbility_BladeMode::IsAimAlignedWithWeakLine(const APawn* InPawn)
 {
-	const APawn* Target = WeakLineTarget.Get();
-
-	return Target && GetLineAngleDelta(CurrentAimAngle, GetWeakLineAngle(Target)) <= WeakLineTolerance;
+	return InPawn && GetLineAngleDelta(CurrentAimAngle, GetWeakLineAngle(InPawn)) <= WeakLineTolerance;
 }
 
 void UPlayerGameplayAbility_BladeMode::UpdateWeakLine()
 {
-	APawn* Target = bUseWeakLine ? FindWeakLineTarget() : nullptr;
-	SetWeakLineTarget(Target);
+	TArray<APawn*> Targets;
 
-	bool bAligned = false;
-
-	FRotator ViewRotation;
-
-	if (Target && WeakLineMaterialInstance && GetSlashView(ViewRotation))
+	if (bUseWeakLine)
 	{
-		const float WeakAngle = GetWeakLineAngle(Target);
-		const float AngleDelta = GetLineAngleDelta(CurrentAimAngle, WeakAngle);
-		bAligned = AngleDelta <= WeakLineTolerance;
+		FindWeakLineTargets(Targets);
+	}
 
-		// 베는 평면과 같은 방식으로 만든 평면(캐릭터 → 대상 중심을 품음). 각도가 같으면 베는 평면과 정확히 겹침
-		const FVector WeakLineDirection = GetSlashLineDirection(ViewRotation, WeakAngle);
-		const FVector PlaneNormal = FVector::CrossProduct(ViewRotation.Vector(), WeakLineDirection).GetSafeNormal();
+	SyncWeakLineTargets(Targets);
+
+	// 베는 평면 축의 기준: 유효한 동안 유지(축이 매 틱 바뀌어 인디케이터가 튀지 않게), 아니면 화면 중앙에 가장 가까운 적
+	if (!WeakLineTarget.IsValid() || !Targets.Contains(WeakLineTarget.Get()))
+	{
+		WeakLineTarget = nullptr;
+
+		if (const AWarriorPlayerController* PlayerController = GetPlayerControllerFromActorInfo())
+		{
+			FVector ViewLocation;
+			FRotator ViewRotation;
+			PlayerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
+
+			float BestDot = -1.0f;
+
+			for (APawn* Candidate : Targets)
+			{
+				const float Dot = FVector::DotProduct((Candidate->GetActorLocation() - ViewLocation).GetSafeNormal(), ViewRotation.Vector());
+
+				if (Dot > BestDot)
+				{
+					BestDot = Dot;
+					WeakLineTarget = Candidate;
+				}
+			}
+		}
+	}
+
+	bool bAnyAligned = false;
+
+	for (const FBladeWeakLineTarget& Entry : WeakLineTargets)
+	{
+		const APawn* Pawn = Entry.Pawn.Get();
+		const float WeakAngle = GetWeakLineAngle(Pawn);
+		FQuat WeakRotation;
+
+		if (!Pawn || !Entry.Material || !GetWeakLineRotation(Pawn, WeakAngle, WeakRotation))
+		{
+			continue;
+		}
+
+		const float AngleDelta = GetLineAngleDelta(CurrentAimAngle, WeakAngle);
+		const bool bAligned = AngleDelta <= WeakLineTolerance;
+		bAnyAligned |= bAligned;
 
 		// 허용 범위 밖에서는 멀수록 흐리게, 안에 들어오면 확 밝게
 		const float Closeness = 1.0f - FMath::Clamp((AngleDelta - WeakLineTolerance) / WeakLineFadeRange, 0.0f, 1.0f);
 		const float Intensity = bAligned ? WeakLineAlignedIntensity : FMath::Lerp(WeakLineFaintIntensity, WeakLineAlignedIntensity * 0.3f, Closeness);
 
-		WeakLineMaterialInstance->SetVectorParameterValue(TEXT("WeakPlanePoint"), FLinearColor(Target->GetActorLocation()));
-		WeakLineMaterialInstance->SetVectorParameterValue(TEXT("WeakPlaneNormal"), FLinearColor(PlaneNormal));
-		WeakLineMaterialInstance->SetScalarParameterValue(TEXT("Intensity"), Intensity);
-		WeakLineMaterialInstance->SetVectorParameterValue(TEXT("Color"), bAligned ? WeakLineAlignedColor : IndicatorBaseColor);
+		// 캐릭터 → 적 중심을 품는 평면. 기준 적은 각도가 같으면 베는 평면과 정확히 겹침
+		Entry.Material->SetVectorParameterValue(TEXT("WeakPlanePoint"), FLinearColor(Pawn->GetActorLocation()));
+		Entry.Material->SetVectorParameterValue(TEXT("WeakPlaneNormal"), FLinearColor(WeakRotation.GetAxisZ()));
+		Entry.Material->SetScalarParameterValue(TEXT("Intensity"), Intensity);
+		Entry.Material->SetVectorParameterValue(TEXT("Color"), bAligned ? WeakLineAlignedColor : IndicatorBaseColor);
 	}
 
 	if (IndicatorMaterialInstance)
 	{
-		IndicatorMaterialInstance->SetVectorParameterValue(TEXT("Color"), bAligned ? WeakLineAlignedColor : IndicatorBaseColor);
+		IndicatorMaterialInstance->SetVectorParameterValue(TEXT("Color"), bAnyAligned ? WeakLineAlignedColor : IndicatorBaseColor);
 	}
 }
 
@@ -1118,12 +1172,16 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 		}
 	}
 
-	// 약점 선에 맞췄으면 판정 상자가 아슬아슬하게 빗나가도 맞힘(선이 보이면 반드시 맞는다)
-	APawn* WeakPointTarget = IsAimAlignedWithWeakLine() ? WeakLineTarget.Get() : nullptr;
+	// 약점 선이 보이는 적 중 각도가 맞은 적은 판정 상자 밖이어도 전부 맞힘(선이 보이고 각도가 맞으면 반드시 맞는다)
+	TArray<APawn*> WeakPointTargets;
 
-	if (WeakPointTarget)
+	for (const FBladeWeakLineTarget& Entry : WeakLineTargets)
 	{
-		HitPawns.AddUnique(WeakPointTarget);
+		if (APawn* Pawn = Entry.Pawn.Get(); Pawn && IsAimAlignedWithWeakLine(Pawn))
+		{
+			WeakPointTargets.Add(Pawn);
+			HitPawns.AddUnique(Pawn);
+		}
 	}
 
 	const float SlashDamage = SlashBaseDamage * GetSlashDamageMultiplier(CurrentAimAngle);
@@ -1134,7 +1192,7 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 	{
 		DamageSpecHandle = MakePlayerDamageEffectSpecHandle(DamageEffectClass, SlashDamage, WarriorGameplayTags::Player_SetByCaller_AttackType_Light, 1, FGameplayTag());
 
-		if (WeakPointTarget)
+		if (!WeakPointTargets.IsEmpty())
 		{
 			WeakPointDamageSpecHandle = MakePlayerDamageEffectSpecHandle(DamageEffectClass, SlashDamage * WeakPointDamageMultiplier,
 				WarriorGameplayTags::Player_SetByCaller_AttackType_Light, 1, FGameplayTag());
@@ -1176,7 +1234,7 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 			continue;
 		}
 
-		const bool bIsWeakPointTarget = HitPawn == WeakPointTarget;
+		const bool bIsWeakPointTarget = WeakPointTargets.Contains(HitPawn);
 		const FGameplayEffectSpecHandle& SpecToApply = bIsWeakPointTarget ? WeakPointDamageSpecHandle : DamageSpecHandle;
 
 		if (SpecToApply.IsValid() && UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitPawn))
@@ -1189,11 +1247,21 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, HitReactEventTag, EventData);
 		}
 
-		// 약점을 베면 다른 각도의 새 약점이 드러남
 		if (bIsWeakPointTarget)
 		{
-			RerollWeakLineAngle(HitPawn);
 			bWeakPointHit = true;
+
+			// 베는 평면 밖에 있는 적은 그 적의 약점 선 자리에 금색 빛줄기를 따로 그림
+			FQuat WeakRotation;
+
+			if (HitPawn != WeakLineTarget.Get() && GetWeakLineRotation(HitPawn, GetWeakLineAngle(HitPawn), WeakRotation))
+			{
+				const FVector MarkOrigin = HitPawn->GetActorLocation();
+				SpawnSlashMark(WeakRotation, true, &MarkOrigin);
+			}
+
+			// 약점을 베면 다른 각도의 새 약점이 드러남
+			RerollWeakLineAngle(HitPawn);
 		}
 	}
 
