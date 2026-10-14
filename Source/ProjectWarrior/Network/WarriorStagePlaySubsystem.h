@@ -15,6 +15,9 @@ struct FWarriorStageResult;
 struct FWarriorStageResumeInfo;
 struct FWarriorPlayCheckpoint;
 
+//결과 제출이 끝났다(Submitting에서 다른 상태로). 결과 화면이 받아 보일지 정한다
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnWarriorResultSubmitFinished, EWarriorResultSubmitState);
+
 //판의 웨이브 구성 상태(M24, stage-play-api.md v1.3 "웨이브 구성")
 UENUM()
 enum class EWarriorWavePlanState : uint8
@@ -36,6 +39,8 @@ DECLARE_MULTICAST_DELEGATE(FOnWarriorWavePlanChanged);
  * - GameMode의 FinishRun이 SubmitResult를 부른다. 서버가 검사·보상·저장을 하고 플레이를 CLEARED·FAILED로 끝낸다.
  *   결과 제출은 UWarriorApiSubsystem(S5)으로 보낸다: 자동 재시도 → "다시 시도 / 종료" → 계속 실패하면 디스크에 보관,
  *   다음 로그인 때 같은 requestId로 재전송한다. 서버가 거절하면(retryable false) 문구 표의 안내 팝업을 띄운다.
+ * - 결과 제출의 상태(GetResultSubmitState)와 끝 알림(OnResultSubmitFinished)을 낸다. 결과 화면은 답이 올 때까지 숨어 있다가
+ *   저장·거절이면 보이고, 연결되지 않아 보관 후 종료로 가면 보이지 않는다(AWarriorStagePlayerController).
  * - 결과가 저장되면(결과 응답, 판 시작 전 보관 결과 재전송) 응답의 계정 값을 ApplyAccountSnapshot으로 적용한다.
  *   보낼 때와 같은 세션·계정일 때만(M25, account-api.md 동기화 시점 T2·T5b, WarriorAccountSync.h).
  * - 진행 중인 플레이가 남아 있으면(409 STAGE_PLAY_IN_PROGRESS) 그 플레이의 보관 결과가 있으면 먼저 보내고,
@@ -121,9 +126,25 @@ public:
 
 	//POST /accounts/me/stage-plays/{CurrentStagePlayId}/result. 플레이 ID가 없으면(시작 응답 전·시작 실패) 경고 로그만 남기고 보내지 않는다.
 	//실패 처리(재시도·보관·안내)는 UWarriorApiSubsystem이 한다(서버는 같은 플레이의 결과를 한 번만 반영한다)
+	//보내면 상태가 Submitting이 되고, 보내지 못하면 바로 NotSent로 끝난다(OnResultSubmitFinished)
 	void SubmitResult(const FWarriorStageResult& InResult);
 
+	//이번 판 결과 제출의 상태. StartStagePlay가 None으로 되돌린다
+	EWarriorResultSubmitState GetResultSubmitState() const { return ResultSubmitState; }
+
+	//결과 제출의 답을 기다리는 중인가
+	bool IsSubmittingResult() const { return ResultSubmitState == EWarriorResultSubmitState::Submitting; }
+
+	//결과 제출 응답(재시도·묻기를 거친 최종 결과)을 끝 상태로 바꾼다. Submitting·None·NotSent는 나오지 않는다
+	static EWarriorResultSubmitState ClassifyResultResponse(const FWarriorApiResult& InResult);
+
+	//결과 제출이 끝났을 때 한 번 온다(NotSent는 SubmitResult 안에서 바로 온다)
+	FOnWarriorResultSubmitFinished OnResultSubmitFinished;
+
 private:
+	//결과 제출 상태를 끝 상태로 바꾸고 알린다
+	void FinishResultSubmit(EWarriorResultSubmitState InState);
+
 	//시작 요청을 보낸다. bInRecoverInProgress이면 409 STAGE_PLAY_IN_PROGRESS 때 포기 뒤 한 번 다시 시작한다(무한 반복 방지)
 	void SendStart(const FString& InStageId, bool bInRecoverInProgress);
 
@@ -139,8 +160,10 @@ private:
 	//POST /accounts/me/stage-plays/{id}/abandon → 다시 시작
 	void AbandonAndRestart(int32 InStartSerial, const FString& InStagePlayId, const FString& InStageId);
 
-	//결과 응답. 성공이면 보낼 때와 같은 세션·계정일 때만 응답 account를 ApplyAccountSnapshot으로 적용한다(M25, 동기화 시점 T2)
-	void HandleResultResult(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId, const FWarriorApiResult& InResult);
+	//결과 응답. 성공이면 보낼 때와 같은 세션·계정일 때만 응답 account를 ApplyAccountSnapshot으로 적용한다(M25, 동기화 시점 T2).
+	//끝나면 결과 제출 상태를 바꿔 알린다(보낸 판이 지금 판일 때만)
+	void HandleResultResult(const FString& InStagePlayId, int32 InSentStartSerial, int32 InSentSessionSerial, const FString& InSentAccountId,
+		const FWarriorApiResult& InResult);
 
 	//결과 응답 본문의 account를 사본에 적용한다. 보낼 때와 같은 세션·계정이 아니거나 account를 읽지 못하면 적용하지 않고 false
 	bool ApplyResultAccount(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId,
@@ -175,6 +198,8 @@ private:
 
 	//지금 플레이의 마감(시작 + 24시간). 결과 보관 유효 기간. 못 읽었으면 비어 있다(설정 기본값을 쓴다)
 	FDateTime CurrentStagePlayExpiresAt;
+
+	EWarriorResultSubmitState ResultSubmitState = EWarriorResultSubmitState::None;
 
 	int32 StartSerial = 0;
 };

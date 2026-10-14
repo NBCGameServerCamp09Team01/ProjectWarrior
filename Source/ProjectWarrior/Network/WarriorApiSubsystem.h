@@ -21,7 +21,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorPendingResendFinished, in
  *
  * - Send(요청, 결과 콜백): 요청 하나 → 결과 하나. 토큰·BaseUrl·제한 시간은 UWarriorAuthSubsystem이 맡는다.
  * - 응답 없음·5xx·retryable true → UWarriorApiSettings의 간격으로 자동 재시도.
- *   다 실패하면 bAskOnFail인 요청은 "다시 시도 / 종료"를 한 번 묻고, 종료(또는 다시 실패)면 보관한 뒤 "게임을 종료합니다" 안내 후 종료한다.
+ *   다 실패하면 bAskOnFail인 요청은 "다시 시도 / 종료"(보관했으면 "보관 후 종료")를 한 번 묻고, 종료(또는 다시 실패)면 보관한 뒤 "게임을 종료합니다" 안내 후 종료한다.
  * - 401 → 보관 대상이면 먼저 보관하고 인증 서브시스템이 로그인 상태를 끝낸다(보낼 때와 같은 세션일 때만).
  * - retryable false → 다시 보내지 않는다. 화면에 보일지는 호출한 쪽이 정한다(PresentError).
  * - 로그인에 성공하면 그 계정의 보관 요청을 같은 requestId·같은 본문으로 다시 보낸다(UWarriorPendingRequestStore).

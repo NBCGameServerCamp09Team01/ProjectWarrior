@@ -5,6 +5,7 @@
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "JsonObjectConverter.h"
+#include "Misc/ScopeExit.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 #include "ProjectWarrior/Network/WarriorAccountSync.h"
@@ -64,6 +65,7 @@ void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorS
 	++StartSerial;
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
+	ResultSubmitState = EWarriorResultSubmitState::None;
 	//M24: 이전 판(다시 하기·409 복구) 구성이 남지 않게 비운다. 이번 판 구성은 아래에서 넣는다
 	ClearWavePlan();
 
@@ -476,6 +478,7 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent. No stagePlayId (start failed or no response yet). Stage %s"),
 			*InResult.StageId.ToString());
+		FinishResultSubmit(EWarriorResultSubmitState::NotSent);
 		return;
 	}
 
@@ -483,6 +486,7 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 	if (!Api)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent. No api subsystem. stagePlayId=%s"), *CurrentStagePlayId);
+		FinishResultSubmit(EWarriorResultSubmitState::NotSent);
 		return;
 	}
 
@@ -502,6 +506,7 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 	if (!FJsonObjectConverter::UStructToJsonObjectString(RequestDto, RequestBody, 0, 0, 0, nullptr, false))
 	{
 		UE_LOG(LogProjectWarrior, Error, TEXT("[StagePlay] Result request body could not be built. stagePlayId=%s"), *CurrentStagePlayId);
+		FinishResultSubmit(EWarriorResultSubmitState::NotSent);
 		return;
 	}
 
@@ -521,19 +526,24 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 	const int32 SentSessionSerial = Auth ? Auth->GetSessionSerial() : 0;
 	const FString SentAccountId = Auth ? Auth->GetAccount().AccountId : FString();
 
+	//Send 안에서 답이 바로 올 수 있으므로(재시도 전 세션 종료 등) 보내기 전에 기다림 상태로 둔다
+	ResultSubmitState = EWarriorResultSubmitState::Submitting;
+
 	const FString StagePlayId = CurrentStagePlayId;
+	const int32 SentStartSerial = StartSerial;
 	const bool bStarted = Api->Send(Request,
-		[WeakThis = TWeakObjectPtr<ThisClass>(this), StagePlayId, SentSessionSerial, SentAccountId](const FWarriorApiResult& Result)
+		[WeakThis = TWeakObjectPtr<ThisClass>(this), StagePlayId, SentStartSerial, SentSessionSerial, SentAccountId](const FWarriorApiResult& Result)
 	{
 		if (WeakThis.IsValid())
 		{
-			WeakThis->HandleResultResult(StagePlayId, SentSessionSerial, SentAccountId, Result);
+			WeakThis->HandleResultResult(StagePlayId, SentStartSerial, SentSessionSerial, SentAccountId, Result);
 		}
 	});
 
 	if (!bStarted)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Result not sent (not logged in or request failed to start). stagePlayId=%s"), *StagePlayId);
+		FinishResultSubmit(EWarriorResultSubmitState::NotSent);
 		return;
 	}
 
@@ -542,9 +552,18 @@ void UWarriorStagePlaySubsystem::SubmitResult(const FWarriorStageResult& InResul
 		InResult.PlayTimeSeconds, *RequestDto.RequestId);
 }
 
-void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId,
-	const FWarriorApiResult& InResult)
+void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId, int32 InSentStartSerial, int32 InSentSessionSerial,
+	const FString& InSentAccountId, const FWarriorApiResult& InResult)
 {
+	//답을 다 처리한 뒤(계정 적용·거절 안내) 결과 화면에 알린다. 그사이 새 판이 시작됐으면 그 판의 상태를 건드리지 않는다
+	ON_SCOPE_EXIT
+	{
+		if (IsCurrentStart(InSentStartSerial))
+		{
+			FinishResultSubmit(ClassifyResultResponse(InResult));
+		}
+	};
+
 	//── 200: SAVED 또는 ALREADY_SAVED. 둘 다 서버에 저장된 것
 	if (InResult.bOk)
 	{
@@ -583,6 +602,34 @@ void UWarriorStagePlaySubsystem::HandleResultResult(const FString& InStagePlayId
 			Api->PresentError(InResult);
 		}
 	}
+}
+
+EWarriorResultSubmitState UWarriorStagePlaySubsystem::ClassifyResultResponse(const FWarriorApiResult& InResult)
+{
+	if (InResult.bOk)
+	{
+		return EWarriorResultSubmitState::Saved;
+	}
+
+	if (InResult.HttpStatus == 401)
+	{
+		return EWarriorResultSubmitState::SessionEnded;
+	}
+
+	//다시 보내면 될 실패로 끝났다 = 재시도·"다시 시도"까지 연결되지 않았다(보관했으면 다음 로그인 때 재전송)
+	if (InResult.bStored || UWarriorApiSubsystem::IsRetryable(InResult.Error))
+	{
+		return EWarriorResultSubmitState::Offline;
+	}
+
+	return EWarriorResultSubmitState::Rejected;
+}
+
+void UWarriorStagePlaySubsystem::FinishResultSubmit(EWarriorResultSubmitState InState)
+{
+	ResultSubmitState = InState;
+	UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Result submit finished: %s"), *UEnum::GetValueAsString(InState));
+	OnResultSubmitFinished.Broadcast(InState);
 }
 
 bool UWarriorStagePlaySubsystem::ApplyResultAccount(const FString& InStagePlayId, int32 InSentSessionSerial, const FString& InSentAccountId,

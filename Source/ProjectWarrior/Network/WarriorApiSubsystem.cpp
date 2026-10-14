@@ -302,17 +302,22 @@ void UWarriorApiSubsystem::HandleRetriesExhausted(int32 InCallId, const FWarrior
 	Call->bStored = Call->bStored || StoreCall(*Call);
 	PromptCallId = InCallId;
 
-	//버튼이 "다시 시도 / 게임 종료"이므로 "잠시 뒤 다시 시도해 주세요" 같은 문장은 넣지 않고, 무슨 일인지와 결과가 어떻게 됐는지만 쓴다
+	//버튼이 "다시 시도 / 보관 후 종료(보관 못 했으면 게임 종료)"이므로 "잠시 뒤 다시 시도해 주세요" 같은 문장은 넣지 않고,
+	//무슨 일인지와 고르면 어떻게 되는지만 쓴다. 보관은 위에서 이미 했다(답을 기다리는 사이 꺼져도 남도록). 결과 화면은 이 답 뒤에 뜬다
 	FWarriorErrorNotice Notice;
 	Notice.Code = InResult.Error.Code;
 	const FText Headline = InResult.HttpStatus == 0
 		? LOCTEXT("AskHeadlineNetwork", "서버에 연결할 수 없습니다.")
 		: LOCTEXT("AskHeadlineServer", "서버가 잠시 응답하지 않습니다.");
 	Notice.Message = Call->bStored
-		? FText::Format(LOCTEXT("AskRetryStored", "{0}\n\n결과는 이 PC에 보관했습니다.\n다시 시도하거나 게임을 종료해 주세요."), Headline)
+		? FText::Format(LOCTEXT("AskRetryStored", "{0}\n\n결과를 이 PC에 보관하고 게임을 종료할까요?\n보관한 결과는 다음에 로그인하면\n자동으로 저장됩니다."), Headline)
 		: FText::Format(LOCTEXT("AskRetry", "{0}\n\n다시 시도하거나 게임을 종료해 주세요."), Headline);
 	Notice.Action = EWarriorErrorAction::Retry;
 	Notice.bAskRetry = true;
+	if (Call->bStored)
+	{
+		Notice.QuitButtonText = LOCTEXT("StoreAndQuit", "보관 후 종료");
+	}
 	RequestNotice(Notice);
 }
 
