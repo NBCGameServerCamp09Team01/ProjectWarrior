@@ -13,7 +13,12 @@ EWarriorStageState UWarriorStageState_Initializing::HandleEvent(EWarriorStageEve
 {
 	switch (InEvent)
 	{
-	case EWarriorStageEvent::StageReady:	return EWarriorStageState::Preparing;
+	case EWarriorStageEvent::StageReady:
+	{
+		//체크포인트에서 이어 가면 준비 시간 대신 다음 웨이브의 쉬는 시간부터(M22)
+		const AWarriorStageGameMode* StageGameMode = GetStageGameMode();
+		return StageGameMode && StageGameMode->IsResumingFromCheckpoint() ? EWarriorStageState::Resting : EWarriorStageState::Preparing;
+	}
 	default:								return EWarriorStageState::None;
 	}
 }

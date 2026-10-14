@@ -7,6 +7,7 @@
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorErrorText.h"
 #include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
+#include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorErrorTextTest, "ProjectWarrior.Network.S5.ErrorText",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -127,6 +128,52 @@ bool FWarriorPendingStoreTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Unsafe requestId rejected"), FWarriorPendingRequestStore::Save(AccountId, Entry));
 
 	IFileManager::Get().DeleteDirectory(*Dir, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorResultSubmitStateTest, "ProjectWarrior.Network.S5.ResultSubmitState",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWarriorResultSubmitStateTest::RunTest(const FString& Parameters)
+{
+	// 결과 화면은 Saved·Rejected면 보이고, Offline·SessionEnded면 보이지 않는다(AWarriorStagePlayerController).
+	FWarriorApiResult Saved;
+	Saved.bOk = true;
+	Saved.HttpStatus = 200;
+	TestEqual(TEXT("200 is saved"), UWarriorStagePlaySubsystem::ClassifyResultResponse(Saved), EWarriorResultSubmitState::Saved);
+
+	// 연결 실패로 끝남("보관 후 종료" 또는 다시 시도도 실패): 보관했다.
+	FWarriorApiResult Offline;
+	Offline.HttpStatus = 0;
+	Offline.Error = UWarriorApiSubsystem::ParseError(0, FString());
+	Offline.bStored = true;
+	TestEqual(TEXT("Network error is offline"), UWarriorStagePlaySubsystem::ClassifyResultResponse(Offline), EWarriorResultSubmitState::Offline);
+
+	// 보관에 실패했어도 연결이 안 된 것은 같다.
+	Offline.bStored = false;
+	TestEqual(TEXT("Network error without store is offline"), UWarriorStagePlaySubsystem::ClassifyResultResponse(Offline), EWarriorResultSubmitState::Offline);
+
+	// 본문 없는 5xx도 다시 보낼 실패라 연결 안 됨으로 본다.
+	FWarriorApiResult Bodyless;
+	Bodyless.HttpStatus = 502;
+	Bodyless.Error = UWarriorApiSubsystem::ParseError(502, TEXT("<html>"));
+	TestEqual(TEXT("Bodyless 502 is offline"), UWarriorStagePlaySubsystem::ClassifyResultResponse(Bodyless), EWarriorResultSubmitState::Offline);
+
+	// 서버가 받지 않음: 연결은 됐다.
+	FWarriorApiResult Rejected;
+	Rejected.HttpStatus = 409;
+	Rejected.Error = UWarriorApiSubsystem::ParseError(409,
+		TEXT("{\"code\":\"STAGE_PLAY_EXPIRED\",\"message\":\"m\",\"path\":\"/p\",\"retryable\":false}"));
+	TestEqual(TEXT("Expired is rejected"), UWarriorStagePlaySubsystem::ClassifyResultResponse(Rejected), EWarriorResultSubmitState::Rejected);
+
+	// 401: 보관했어도 세션 종료가 먼저다(메인메뉴로 간다).
+	FWarriorApiResult Unauthorized;
+	Unauthorized.HttpStatus = 401;
+	Unauthorized.Error = UWarriorApiSubsystem::ParseError(401,
+		TEXT("{\"code\":\"AUTH_SESSION_NOT_FOUND\",\"message\":\"m\",\"path\":\"/p\",\"retryable\":false}"));
+	Unauthorized.bStored = true;
+	TestEqual(TEXT("401 is session ended"), UWarriorStagePlaySubsystem::ClassifyResultResponse(Unauthorized), EWarriorResultSubmitState::SessionEnded);
+
 	return true;
 }
 

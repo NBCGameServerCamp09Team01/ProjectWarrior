@@ -3,7 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ProjectWarrior/Auth/WarriorAuthTypes.h"
 #include "ProjectWarrior/Network/WarriorApiTypes.h"
+#include "ProjectWarrior/Stage/WarriorPlayCheckpointTypes.h"
+#include "ProjectWarrior/Stage/WarriorWavePlan.h"
 #include "WarriorStagePlayTypes.generated.h"
 
 /**
@@ -57,6 +60,11 @@ struct PROJECTWARRIOR_API FWarriorStagePlayDto
 	FString ExpiresAt;
 
 	//endReason·endedAt은 진행 중이면 null로 온다. 게임이 쓰지 않으므로 칸을 두지 않는다(null을 FString으로 읽다 실패하지 않게)
+
+	//시작 때 고정한 웨이브 구성(M24, 응답의 waveVersion·waves). JSON 칸 이름과 달라 FJsonObjectConverter는 건드리지 않고,
+	//응답을 받은 곳에서 WarriorWavePlan::ReadFromResponse로 채운다(waves·spawnGroup이 null일 수 있음)
+	UPROPERTY()
+	FWarriorStageWavePlan WavePlan;
 };
 
 //스테이지 플레이 응답 본문 전체: { "data": StagePlay, "meta": Meta }
@@ -86,6 +94,32 @@ enum class EWarriorCurrentStagePlay : uint8
 };
 
 //~ End 내 진행 중 플레이
+
+//~ Begin 체크포인트 받기 (GET /accounts/me/stage-plays/{stagePlayId}/checkpoint, C2)
+
+//체크포인트를 물은 결과
+UENUM()
+enum class EWarriorCheckpointFetch : uint8
+{
+	None,	// 204: 없음(올린 적 없음, 판이 끝남, 마감 지남)
+	Found,	// 200: 있음
+	Failed	// 연결 실패·응답을 읽지 못함·그 밖의 상태
+};
+
+//C2 응답 본문 전체: { "data": Checkpoint, "meta": Meta }. data의 stagePlayId·savedAt은 게임이 쓰지 않아 읽지 않는다
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorPlayCheckpointResponseDto
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FWarriorPlayCheckpoint Data;
+
+	UPROPERTY()
+	FWarriorApiMeta Meta;
+};
+
+//~ End 체크포인트 받기
 
 //~ Begin 결과 제출 (POST /accounts/me/stage-plays/{stagePlayId}/result, result-api.md)
 
@@ -162,7 +196,7 @@ struct PROJECTWARRIOR_API FWarriorStageResultDto
 	FWarriorStageRewardDto Reward;
 };
 
-//결과 제출 응답의 data. account(바뀐 계정 값)는 확장 칸이라 지금은 읽지 않는다
+//결과 제출 응답의 data. account(지금 계정 값)는 ApplyAccountSnapshot으로 적용한다(M25, account-api.md 동기화 시점 T2·T5b)
 USTRUCT()
 struct PROJECTWARRIOR_API FWarriorStageResultSubmitDto
 {
@@ -174,6 +208,10 @@ struct PROJECTWARRIOR_API FWarriorStageResultSubmitDto
 	//SAVED(이번에 저장) · ALREADY_SAVED(이미 저장돼 있어 처음 결과를 돌려줌). 둘 다 저장된 것으로 본다
 	UPROPERTY()
 	FString SaveStatus;
+
+	//지금 계정 값(ALREADY_SAVED여도 지금 값). 응답에 칸이 없으면 기본값(빈 AccountId)이라 적용하지 않는다
+	UPROPERTY()
+	FWarriorAccountSnapshotDto Account;
 };
 
 //결과 제출 응답 본문 전체: { "data": Submit, "meta": Meta }
@@ -187,6 +225,19 @@ struct PROJECTWARRIOR_API FWarriorStageResultSubmitResponseDto
 
 	UPROPERTY()
 	FWarriorApiMeta Meta;
+};
+
+//이번 판 결과 제출의 상태. 결과 화면은 Submitting이 끝나야 보인다(서버에 연결되지 않으면 보관 팝업이 먼저 뜬다)
+UENUM()
+enum class EWarriorResultSubmitState : uint8
+{
+	None,			// 아직 내지 않음(판 시작 때 되돌린다)
+	Submitting,		// 보냈고 답(자동 재시도·"다시 시도 / 보관 후 종료" 포함)을 기다리는 중
+	Saved,			// 200: 서버에 저장됨(SAVED·ALREADY_SAVED)
+	Rejected,		// 서버가 받지 않음(RESULT_INVALID·STAGE_PLAY_EXPIRED 등). 서버와는 연결됨
+	NotSent,		// 보내지 않음(플레이 ID 없음: 로그인 안 한 PIE, 시작 실패). 기다릴 답이 없다
+	Offline,		// 서버에 연결되지 않아 저장하지 못함(보관했으면 다음 로그인 때 재전송). 종료 안내로 이어진다
+	SessionEnded	// 401: 로그인 상태가 끝남. 메인메뉴로 돌아간다
 };
 
 //~ End 결과 제출

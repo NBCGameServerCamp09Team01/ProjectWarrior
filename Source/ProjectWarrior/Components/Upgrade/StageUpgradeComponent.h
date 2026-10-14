@@ -38,6 +38,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Upgrade")
 	void ResetAll();
 
+	// 체크포인트(M22)용: 레벨이 1 이상인 강화와 그 레벨
+	TMap<TObjectPtr<const UDataAsset_Upgrade>, int32> GetUpgradeLevels() const;
+
+	// 체크포인트(M22)에서 이어 갈 때: 전부 지우고 이 레벨로 다시 건다.
+	// 최대치가 늘어난 만큼 현재값을 채우지는 않는다(현재값은 체크포인트 값으로 따로 되돌린다)
+	void RestoreLevels(const TMap<TObjectPtr<const UDataAsset_Upgrade>, int32>& InLevels);
+
 	UPROPERTY(BlueprintAssignable)
 	FOnStageUpgradeChanged OnUpgradeChanged;
 
@@ -66,4 +73,4 @@ private:
 	TMap<FGameplayTag, TObjectPtr<const UDataAsset_Upgrade>> UpgradeAssets;
 
 	TMap<FGameplayTag, FActiveGameplayEffectHandle> ActiveHandles;
-};
+};

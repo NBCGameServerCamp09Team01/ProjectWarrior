@@ -4,21 +4,28 @@
 #include "WarriorStagePlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Styling/CoreStyle.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Text/STextBlock.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
+#include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorStageHUDWidget.h"
 #include "ProjectWarrior/Widgets/WarriorStageResultWidget.h"
 
 namespace
 {
-	//뷰포트에 쌓는 순서. 인벤토리 휠(AWarriorPlayerCharacter)이 10, 상점(AWarriorShopActor)이 20을 쓴다.
+	//뷰포트에 쌓는 순서. 인벤토리 휠(AWarriorPlayerCharacter)이 10, 상점(AWarriorShopActor)이 20, 오류 팝업이 100을 쓴다.
 	const int32 StageHUDZOrder = 0;
 	const int32 StageResultZOrder = 30;
+	const int32 SavingNoticeZOrder = 40;
 }
 
 void AWarriorStagePlayerController::BeginPlay()
@@ -107,6 +114,8 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	}
 
 	GetWorldTimerManager().ClearTimer(ResultRevealTimer);
+	UnbindResultSubmit();
+	HideSavingNotice();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -272,32 +281,62 @@ void AWarriorStagePlayerController::ShowResult(const FWarriorStageResult& InResu
 
 	const bool bDelayReveal = !InResult.bCleared && FailedResultDelay > 0.f;
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Show result. %s, Wave %d/%d, PlayTime %.1f s, Reveal in %.1f s"),
+	//FinishRun이 결과 제출을 먼저 보내고 이 알림을 내므로, 여기서 보면 이미 답을 기다리는 중이다(보내지 못했으면 NotSent로 끝나 있다)
+	UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this);
+	const bool bWaitSave = StagePlay && StagePlay->IsSubmittingResult();
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Show result. %s, Wave %d/%d, PlayTime %.1f s, Reveal in %.1f s, Wait for save: %s"),
 		InResult.bCleared ? TEXT("Cleared") : TEXT("Failed"),
 		InResult.ReachedWave,
 		InResult.TotalWaveCount,
 		InResult.PlayTimeSeconds,
-		bDelayReveal ? FailedResultDelay : 0.f);
+		bDelayReveal ? FailedResultDelay : 0.f,
+		bWaitSave ? TEXT("yes") : TEXT("no"));
 
 	ResultWidget->SetResult(InResult);
+	bResultCleared = InResult.bCleared;
+	bResultRevealed = false;
+	bResultRevealDelayPending = bDelayReveal;
+	bWaitingForResultSave = bWaitSave;
 
 	//결과 위젯은 지금 만들어 두어야 같은 프레임에 오는 통계·보상 알림(OnStageRecorded, OnStageRewarded)을 받는다.
-	//그래서 생성은 그대로 두고, 실패일 때 보이는 시점만 늦춰 플레이어 사망 연출을 보여 준다.
+	//그래서 생성은 그대로 두고, 보이는 시점만 늦춘다: 실패면 플레이어 사망 연출 뒤, 그리고 서버가 결과를 받은 뒤.
+	if ((bDelayReveal || bWaitSave) && !bResultHidden)
+	{
+		ResultVisibilityBeforeHide = ResultWidget->GetVisibility();
+		ResultWidget->SetVisibility(ESlateVisibility::Hidden);
+		bResultHidden = true;
+	}
+
 	if (bDelayReveal)
 	{
-		if (!GetWorldTimerManager().IsTimerActive(ResultRevealTimer))
-		{
-			ResultVisibilityBeforeHide = ResultWidget->GetVisibility();
-			ResultWidget->SetVisibility(ESlateVisibility::Hidden);
-		}
+		GetWorldTimerManager().SetTimer(ResultRevealTimer, this, &ThisClass::HandleResultRevealDelayElapsed, FailedResultDelay, false);
+	}
 
-		GetWorldTimerManager().SetTimer(ResultRevealTimer, this, &ThisClass::RevealResult, FailedResultDelay, false);
-	}
-	else if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+	if (bWaitSave && !ResultSubmitHandle.IsValid())
 	{
-		//클리어는 바로, 실패는 결과 화면이 보일 때(RevealResult) 결과 음악으로 바꾼다.
-		Sound->SetMusicState(InResult.bCleared ? WarriorSoundTags::Music_Result_Cleared : WarriorSoundTags::Music_Result_Failed);
+		ResultSubmitHandle = StagePlay->OnResultSubmitFinished.AddUObject(this, &ThisClass::HandleResultSubmitFinished);
 	}
+
+	TryRevealResult();
+}
+
+void AWarriorStagePlayerController::TryRevealResult()
+{
+	//사망 연출 중에는 저장 중 문구도 띄우지 않는다(연출이 끝난 뒤 남은 기다림에만 띄운다)
+	if (!ResultWidget || bResultRevealed || bResultRevealDelayPending)
+	{
+		return;
+	}
+
+	if (bWaitingForResultSave)
+	{
+		ShowSavingNotice();
+		return;
+	}
+
+	HideSavingNotice();
+	RevealResult();
 }
 
 void AWarriorStagePlayerController::RevealResult()
@@ -307,19 +346,112 @@ void AWarriorStagePlayerController::RevealResult()
 		return;
 	}
 
-	ResultWidget->SetVisibility(ResultVisibilityBeforeHide);
+	bResultRevealed = true;
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Reveal result after %.1f s"), FailedResultDelay);
-
-	//숨겨 둔 동안 결과 상태 진입(ApplyStatePermission)이 준 포커스는 보이지 않는 위젯에 갔으므로 다시 준다.
-	if (bAppliedUIInputMode)
+	if (bResultHidden)
 	{
-		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, ResultWidget);
+		ResultWidget->SetVisibility(ResultVisibilityBeforeHide);
+		bResultHidden = false;
+
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Reveal result."));
+
+		//숨겨 둔 동안 결과 상태 진입(ApplyStatePermission)이 준 포커스는 보이지 않는 위젯에 갔으므로 다시 준다.
+		if (bAppliedUIInputMode)
+		{
+			UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, ResultWidget);
+		}
 	}
 
-	//지연은 실패 결과에만 쓰므로 실패 음악으로 바꾼다.
 	if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
 	{
-		Sound->SetMusicState(WarriorSoundTags::Music_Result_Failed);
+		Sound->SetMusicState(bResultCleared ? WarriorSoundTags::Music_Result_Cleared : WarriorSoundTags::Music_Result_Failed);
 	}
+}
+
+void AWarriorStagePlayerController::HandleResultRevealDelayElapsed()
+{
+	bResultRevealDelayPending = false;
+	TryRevealResult();
+}
+
+void AWarriorStagePlayerController::HandleResultSubmitFinished(EWarriorResultSubmitState InState)
+{
+	UnbindResultSubmit();
+	bWaitingForResultSave = false;
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Result submit finished (%s)."), *UEnum::GetValueAsString(InState));
+
+	//연결 안 됨: 보관 후 종료 안내가 이어진다. 세션 종료: HandleSessionEnded가 메인메뉴로 돌아간다. 어느 쪽이든 결과는 보이지 않는다
+	if (InState == EWarriorResultSubmitState::Offline || InState == EWarriorResultSubmitState::SessionEnded)
+	{
+		HideSavingNotice();
+		return;
+	}
+
+	//저장·거절(거절 안내 팝업은 StagePlay가 띄운다)·보내지 않음: 결과를 보인다
+	TryRevealResult();
+}
+
+void AWarriorStagePlayerController::ShowSavingNotice()
+{
+	if (SavingNotice.IsValid())
+	{
+		return;
+	}
+
+	UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (!Viewport)
+	{
+		return;
+	}
+
+	//오류 팝업(가운데)과 겹치지 않게 화면 아래쪽에 둔다. 클릭은 통과시킨다
+	SavingNotice = SNew(SBox)
+		.Visibility(EVisibility::HitTestInvisible)
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Bottom)
+		.Padding(FMargin(0.f, 0.f, 0.f, 120.f))
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FLinearColor(0.f, 0.f, 0.f, 0.6f))
+			.Padding(FMargin(28.f, 12.f))
+			[
+				SNew(STextBlock)
+				.Text(SavingResultText)
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 20))
+				.ColorAndOpacity(FLinearColor::White)
+			]
+		];
+
+	Viewport->AddViewportWidgetContent(SavingNotice.ToSharedRef(), SavingNoticeZOrder);
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Waiting for the server to save the result."));
+}
+
+void AWarriorStagePlayerController::HideSavingNotice()
+{
+	if (!SavingNotice.IsValid())
+	{
+		return;
+	}
+
+	if (UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
+	{
+		Viewport->RemoveViewportWidgetContent(SavingNotice.ToSharedRef());
+	}
+	SavingNotice.Reset();
+}
+
+void AWarriorStagePlayerController::UnbindResultSubmit()
+{
+	if (!ResultSubmitHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this))
+	{
+		StagePlay->OnResultSubmitFinished.Remove(ResultSubmitHandle);
+	}
+	ResultSubmitHandle.Reset();
 }

@@ -25,13 +25,16 @@ struct PROJECTWARRIOR_API FWarriorStageCatalogEntry
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWorld> Level;
 
-	//비어 있으면 레벨의 FlowManager에 둔 웨이브를 그대로 쓴다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Stage")
+#if WITH_EDITORONLY_DATA
+	//개발용 로컬 웨이브(M24부터 에디터 전용). 서버 플레이가 없는 판에서만 쓴다. 비어 있으면 레벨의 FlowManager에 둔 웨이브.
+	//에디터 전용이라 쿠킹한 빌드에는 이 참조가 없다(웨이브 구성의 원본은 서버 master/stage-waves.json)
+	UPROPERTY(EditAnywhere, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWarriorStageWaveDataAsset> WaveData;
+#endif
 };
 
 /**
- * 스테이지 목록. 서버 스테이지 키 → 레벨·웨이브 DataAsset.
+ * 스테이지 목록. 서버 스테이지 키 → 레벨(+ 에디터 전용 개발용 웨이브 DataAsset).
  * 화면 이름·순서·해금은 두지 않는다(서버가 준다). 경로는 프로젝트 설정 > Game > Warrior Stage.
  */
 UCLASS(BlueprintType)

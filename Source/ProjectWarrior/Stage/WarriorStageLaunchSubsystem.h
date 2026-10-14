@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "ProjectWarrior/Stage/WarriorPlayCheckpointTypes.h"
+#include "ProjectWarrior/Stage/WarriorWavePlan.h"
 #include "WarriorStageLaunchSubsystem.generated.h"
 
 class UWarriorStageWaveDataAsset;
@@ -23,7 +25,7 @@ struct PROJECTWARRIOR_API FWarriorStageLaunchInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWorld> Level;
 
-	//비어 있으면 레벨의 FlowManager 웨이브를 쓴다
+	//개발용 로컬 웨이브(에디터에서만 채워짐, M24). 서버 플레이가 없는 판에서만 쓴다. 비어 있으면 레벨의 FlowManager 웨이브
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWarriorStageWaveDataAsset> WaveData;
 
@@ -35,15 +37,15 @@ struct PROJECTWARRIOR_API FWarriorStageLaunchInfo
 };
 
 /**
- * 진행 중인 서버 플레이를 이어 갈 때의 정보(stage-play-api.md "이어하기(1차)").
- * 1차는 늘 처음(1웨이브)부터 다시 한다. 웨이브 중간부터 이어 가는 단계에서 체크포인트 값(골드·인벤토리·판 강화 등)을 여기에 더한다.
+ * 진행 중인 서버 플레이를 이어 갈 때의 정보(stage-play-api.md "이어하기").
+ * 체크포인트가 없으면 처음(1웨이브)부터, 있으면 그 판 안 값으로 클리어한 웨이브 다음의 쉬는 시간부터 시작한다.
  */
 USTRUCT(BlueprintType)
 struct PROJECTWARRIOR_API FWarriorStageResumeInfo
 {
 	GENERATED_BODY()
 
-	//이어 갈 서버 플레이 ID. 비어 있으면 이어하기가 아니다
+	//이어 갈 서버 플레이 ID. 비어 있으면 서버 플레이 없이 이어 간다(디버그 명령으로 레벨 안에서 시험할 때)
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	FString StagePlayId;
 
@@ -51,11 +53,20 @@ struct PROJECTWARRIOR_API FWarriorStageResumeInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	FString ExpiresAt;
 
-	//이어서 시작할 웨이브(1부터). 1차는 늘 1
+	//이어서 시작할 웨이브(1부터). 체크포인트가 없으면 1, 있으면 클리어한 웨이브 + 1
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	int32 ResumeFromWave = 1;
 
-	bool IsSet() const { return !StagePlayId.IsEmpty(); }
+	//웨이브 클리어 때 저장한 판 안 값(M22 최종). 비어 있으면 처음부터
+	UPROPERTY()
+	FWarriorPlayCheckpoint Checkpoint;
+
+	//로그인 때 받은 P2 응답의 웨이브 구성(M24, 시작 때 서버가 고정한 값). 이어하기는 시작 요청을 보내지 않으므로 이 값으로 웨이브를 만든다.
+	//StartStagePlay가 체크포인트보다 먼저 넣는다(체크포인트 범위 검사가 총 웨이브 수를 쓴다). 서버 플레이 없는 디버그 이어하기는 비어 있다
+	UPROPERTY()
+	FWarriorStageWavePlan WavePlan;
+
+	bool IsSet() const { return !StagePlayId.IsEmpty() || Checkpoint.IsSet(); }
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorStageLaunchInfoChanged, const FWarriorStageLaunchInfo&, LaunchInfo);

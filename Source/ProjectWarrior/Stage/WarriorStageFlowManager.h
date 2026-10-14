@@ -17,6 +17,8 @@ class AWarriorWaveSpawner;
  * GameMode와의 이음매. "GameMode가 호출" 구역의 이름·인자·반환형은 바꾸지 않는다.
  * bUseDebugWaves가 false이면 DataAsset의 웨이브를 WaveSpawner로 실행한다.
  * bUseDebugWaves가 true여도 DataAsset이 있으면 웨이브 수·보스 웨이브는 DataAsset을 따른다(서버 waveCount와 맞추기 위해).
+ * M24: 실행 중 웨이브는 GameMode가 SetStageWaveData로 넣은 것만 쓴다(서버 구성, 또는 서버 플레이가 없는 개발 판의 로컬 DA).
+ * 레벨에 둔 StageWaveData는 에디터 전용이라 쿠킹한 빌드에는 들어가지 않는다(클라이언트에 웨이브 구성을 두지 않기).
  */
 UCLASS()
 class PROJECTWARRIOR_API AWarriorStageFlowManager : public AActor
@@ -43,10 +45,12 @@ public:
 	float GetRestTimeOverride(int32 InWaveIndex) const;
 	//~ End GameMode가 호출
 
-	//레벨에 둔 웨이브 대신 스테이지 목록의 웨이브를 쓴다. GameMode가 등록 직후(첫 웨이브 전) 호출한다.
+	//이번 판의 웨이브를 넣는다. GameMode가 첫 웨이브 전에 호출한다(서버 구성의 임시 에셋, 또는 개발용 로컬 DA).
 	//웨이브가 이미 시작됐거나 nullptr이면 무시한다.
-	//서버가 웨이브 내용을 내려주게 되면(TD-28 2단계) 그 데이터로 만든 웨이브도 이 입구로 넣는다.
 	void SetStageWaveData(UWarriorStageWaveDataAsset* InStageWaveData);
+
+	//레벨에 둔 개발용 웨이브(에디터 전용 칸). 쿠킹한 빌드에서는 늘 nullptr
+	UWarriorStageWaveDataAsset* GetLocalWaveData() const;
 
 	//현재 웨이브의 적이 전멸했고 대기 스폰도 없음. 직접 Broadcast 하지 말고 ReportWaveCleared를 쓴다.
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
@@ -67,7 +71,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Warrior|Stage|Debug")
 	bool bUseDebugWaves = true;
 
-	//StageWaveData가 없을 때만 쓴다
+	//웨이브 데이터가 없을 때만 쓴다
 	UPROPERTY(EditAnywhere, Category = "Warrior|Stage|Debug", meta = (EditCondition = "bUseDebugWaves", ClampMin = "1"))
 	int32 DebugWaveCount = 5;
 
@@ -79,8 +83,12 @@ protected:
 	int32 DebugEnemyCount = 3;
 	//~ End 디버그 웨이브
 
+#if WITH_EDITORONLY_DATA
+	//레벨에 둔 개발용 웨이브(M24부터 에디터 전용). 서버 플레이가 없는 판에서 스테이지 목록에도 웨이브가 없을 때만 GameMode가 쓴다.
+	//에디터 전용이라 쿠킹한 빌드에는 이 참조가 없다(웨이브 구성의 원본은 서버). 이름을 바꾸면 레벨에 저장된 값을 잃으므로 그대로 둔다
 	UPROPERTY(EditAnywhere, Category = "Warrior|Stage")
 	TObjectPtr<UWarriorStageWaveDataAsset> StageWaveData;
+#endif
 
 	UPROPERTY(EditAnywhere, Category = "Warrior|Stage")
 	TObjectPtr<AWarriorWaveSpawner> WaveSpawner;
@@ -89,6 +97,10 @@ private:
 	void HandleDebugWaveTimerElapsed();
 	void HandleSpawnerEnemyCountChanged(int32 InAliveCount, int32 InSpawnedCount);
 	void HandleSpawnerWaveCleared();
+
+	//이번 판이 쓰는 웨이브. SetStageWaveData로만 정한다(저장하지 않음)
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorStageWaveDataAsset> ActiveWaveData;
 
 	//현재 웨이브 데이터에 설정된 적 수량의 합
 	int32 PlannedEnemyCount = 0;

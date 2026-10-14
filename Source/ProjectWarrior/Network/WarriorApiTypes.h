@@ -223,6 +223,10 @@ struct PROJECTWARRIOR_API FWarriorErrorNotice
 	//"다시 시도 / 종료"를 묻는 팝업인가. 답은 UWarriorApiSubsystem::AnswerRetryPrompt로 돌려준다
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Api")
 	bool bAskRetry = false;
+
+	//묻는 팝업의 종료 버튼 문구. 비어 있으면 "게임 종료"(예: 결과를 보관했으면 "보관 후 종료")
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Api")
+	FText QuitButtonText;
 };
 
 //~ End S5 오류 처리
