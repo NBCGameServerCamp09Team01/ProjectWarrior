@@ -62,7 +62,7 @@ public:
 	//이어하면 시작할 웨이브. 체크포인트가 있으면 클리어한 웨이브 + 1, 없으면 1(처음부터)
 	int32 GetResumeFromWave() const { return ResumableCheckpoint.IsSet() ? ResumableCheckpoint.ClearedWave + 1 : 1; }
 
-	//이 빌드의 스테이지 목록(카탈로그)에 그 스테이지가 있어 이어할 수 있는가
+	//이 빌드에서 이어할 수 있는가: 스테이지 목록(카탈로그)에 그 스테이지가 있고, 웨이브 구성(M24)이 있으며 몬스터 키가 모두 몬스터 카탈로그에 있다
 	bool CanResumeInThisBuild() const;
 
 	//이어하기를 고른다. 이어하기 정보를 실행 정보에 넣는다. 레벨은 부른 쪽이 연다(StartStage). 이어할 수 없으면 false

@@ -13,7 +13,10 @@ namespace WarriorStageLaunch_Private
 		OutInfo.StageId = InEntry.StageId;
 		OutInfo.RegionId = InEntry.RegionId;
 		OutInfo.Level = InEntry.Level;
+#if WITH_EDITORONLY_DATA
+		//개발용 로컬 웨이브는 에디터에서만(쿠킹한 빌드에는 없음, M24)
 		OutInfo.WaveData = InEntry.WaveData;
+#endif
 		OutInfo.bFromCatalog = true;
 	}
 }

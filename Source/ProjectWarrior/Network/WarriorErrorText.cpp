@@ -67,6 +67,10 @@ namespace WarriorErrorTable
 			//~ 스테이지(stage-api.md)
 			Make(TEXT("STAGE_NOT_FOUND"),        LOCTEXT("StageNotFound", "스테이지 정보를 찾을 수 없습니다."), EShow::Popup, EAct::GoMainMenu, true),
 			Make(TEXT("STAGE_LOCKED"),           LOCTEXT("StageLocked", "아직 열리지 않은 스테이지입니다."), EShow::Popup, EAct::GoMainMenu),
+			//게임이 만드는 판 시작 실패(M24 서버 웨이브 구성, stage-play-api.md "웨이브 구성"). 서버는 보내지 않는다
+			Make(TEXT("STAGE_WAVE_PLAN_TIMEOUT"),  LOCTEXT("StageWavePlanTimeout", "스테이지 정보를 받지 못했습니다.\n잠시 뒤 다시 시도해 주세요."), EShow::Popup, EAct::GoMainMenu),
+			Make(TEXT("STAGE_WAVE_PLAN_MISSING"),  LOCTEXT("StageWavePlanMissing", "이 버전에서 열 수 없는 스테이지입니다."), EShow::Popup, EAct::GoMainMenu, true),
+			Make(TEXT("STAGE_WAVE_MONSTER_UNKNOWN"), LOCTEXT("StageWaveMonsterUnknown", "이 버전에서 열 수 없는 스테이지입니다."), EShow::Popup, EAct::GoMainMenu),
 
 			//~ 스테이지 플레이(stage-play-api.md)
 			Make(TEXT("STAGE_PLAY_NOT_FOUND"),   LOCTEXT("StagePlayNotFound", "스테이지 플레이 기록이 없어\n결과를 저장할 수 없습니다."), EShow::Popup, EAct::DiscardStored, true),

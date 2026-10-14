@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorPlayCheckpointTypes.h"
+#include "ProjectWarrior/Stage/WarriorWavePlan.h"
 #include "WarriorStageLaunchSubsystem.generated.h"
 
 class UWarriorStageWaveDataAsset;
@@ -24,7 +25,7 @@ struct PROJECTWARRIOR_API FWarriorStageLaunchInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWorld> Level;
 
-	//비어 있으면 레벨의 FlowManager 웨이브를 쓴다
+	//개발용 로컬 웨이브(에디터에서만 채워짐, M24). 서버 플레이가 없는 판에서만 쓴다. 비어 있으면 레벨의 FlowManager 웨이브
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	TSoftObjectPtr<UWarriorStageWaveDataAsset> WaveData;
 
@@ -59,6 +60,11 @@ struct PROJECTWARRIOR_API FWarriorStageResumeInfo
 	//웨이브 클리어 때 저장한 판 안 값(M22 최종). 비어 있으면 처음부터
 	UPROPERTY()
 	FWarriorPlayCheckpoint Checkpoint;
+
+	//로그인 때 받은 P2 응답의 웨이브 구성(M24, 시작 때 서버가 고정한 값). 이어하기는 시작 요청을 보내지 않으므로 이 값으로 웨이브를 만든다.
+	//StartStagePlay가 체크포인트보다 먼저 넣는다(체크포인트 범위 검사가 총 웨이브 수를 쓴다). 서버 플레이 없는 디버그 이어하기는 비어 있다
+	UPROPERTY()
+	FWarriorStageWavePlan WavePlan;
 
 	bool IsSet() const { return !StagePlayId.IsEmpty() || Checkpoint.IsSet(); }
 };
