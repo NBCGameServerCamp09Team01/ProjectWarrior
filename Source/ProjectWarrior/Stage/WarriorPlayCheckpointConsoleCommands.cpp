@@ -86,10 +86,12 @@ namespace WarriorPlayCheckpointConsole
 		}
 
 		//서버 플레이가 있으면 같은 ID로 이어 간다(없으면 서버 없이)
+		//M24: 그 판의 웨이브 구성(시작 때 고정)도 함께 넘긴다. 없으면 이어한 판이 STAGE_WAVE_PLAN_MISSING으로 시작하지 않는다
 		FWarriorStageResumeInfo ResumeInfo;
 		if (const UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(World))
 		{
 			ResumeInfo.StagePlayId = StagePlay->GetCurrentStagePlayId();
+			ResumeInfo.WavePlan = StagePlay->GetWavePlan();
 		}
 		ResumeInfo.ResumeFromWave = Stored.ClearedWave + 1;
 		ResumeInfo.Checkpoint = Stored;

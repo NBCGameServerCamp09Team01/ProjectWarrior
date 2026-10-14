@@ -8,6 +8,8 @@
 #include "ProjectWarrior/Network/WarriorStageListTypes.h"
 #include "WarriorStageListSubsystem.generated.h"
 
+class FJsonObject;
+
 struct FWarriorStageLaunchInfo;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnWarriorStageListUpdated);
@@ -71,6 +73,8 @@ private:
 		int32 Order = 0;
 		FName RequiresStageId;
 		int32 WaveCount = 0;
+		//웨이브 미리보기(M24, ST1 stages[].waves). 이름은 monsters에서 채워 둔다
+		TArray<FWarriorStageWaveInfo> Waves;
 	};
 
 	struct FRegionDef
@@ -105,9 +109,12 @@ private:
 	//지역을 열 수 있는가. 지금은 늘 열림. 서버가 지역 상태를 보내거나 규칙(안에 열린 스테이지가 없으면 잠김)이 생기면 여기만 바꾼다
 	static bool IsRegionOpen(const FWarriorRegionListEntry& InRegion);
 
-	//웨이브 구성을 채운다. 지금 출처는 UE 스테이지 목록의 웨이브 DataAsset.
-	//서버가 ST1에 웨이브 구성을 보내게 되면 이 함수가 서버 값을 쓰도록 바꾼다(호출하는 쪽은 그대로)
-	static void BuildWaveInfo(const FWarriorStageLaunchInfo& InLaunchInfo, int32 InServerWaveCount, TArray<FWarriorStageWaveInfo>& OutWaves);
+	//웨이브 구성을 채운다. 출처는 서버 스테이지 목록(ST1)의 waves·monsters(M24, stage-api.md v1.3). UE 웨이브 DataAsset은 읽지 않는다.
+	//서버가 웨이브를 보내지 않으면(v1.3 전 서버) 비워 둔다
+	static void BuildWaveInfo(const FStageDef& InStageDef, TArray<FWarriorStageWaveInfo>& OutWaves);
+
+	//ST1 stages[].waves를 읽는다. 몬스터 이름은 InMonsterNames(monsters[])에서, 없으면 키
+	static void ParseWaves(const TSharedPtr<FJsonObject>& InStageObject, const TMap<FString, FString>& InMonsterNames, TArray<FWarriorStageWaveInfo>& OutWaves);
 
 	UFUNCTION()
 	void HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage);

@@ -6,6 +6,7 @@
 #include "ProjectWarrior/Auth/WarriorAuthTypes.h"
 #include "ProjectWarrior/Network/WarriorApiTypes.h"
 #include "ProjectWarrior/Stage/WarriorPlayCheckpointTypes.h"
+#include "ProjectWarrior/Stage/WarriorWavePlan.h"
 #include "WarriorStagePlayTypes.generated.h"
 
 /**
@@ -59,6 +60,11 @@ struct PROJECTWARRIOR_API FWarriorStagePlayDto
 	FString ExpiresAt;
 
 	//endReason·endedAt은 진행 중이면 null로 온다. 게임이 쓰지 않으므로 칸을 두지 않는다(null을 FString으로 읽다 실패하지 않게)
+
+	//시작 때 고정한 웨이브 구성(M24, 응답의 waveVersion·waves). JSON 칸 이름과 달라 FJsonObjectConverter는 건드리지 않고,
+	//응답을 받은 곳에서 WarriorWavePlan::ReadFromResponse로 채운다(waves·spawnGroup이 null일 수 있음)
+	UPROPERTY()
+	FWarriorStageWavePlan WavePlan;
 };
 
 //스테이지 플레이 응답 본문 전체: { "data": StagePlay, "meta": Meta }

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "ProjectWarrior/Auth/WarriorAuthTypes.h"
+#include "ProjectWarrior/Network/WarriorApiTypes.h"
 #include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
 #include "WarriorStagePlaySubsystem.generated.h"
 
@@ -16,6 +17,19 @@ struct FWarriorPlayCheckpoint;
 
 //결과 제출이 끝났다(Submitting에서 다른 상태로). 결과 화면이 받아 보일지 정한다
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnWarriorResultSubmitFinished, EWarriorResultSubmitState);
+
+//판의 웨이브 구성 상태(M24, stage-play-api.md v1.3 "웨이브 구성")
+UENUM()
+enum class EWarriorWavePlanState : uint8
+{
+	None,			// StartStagePlay 전
+	Waiting,		// 시작 요청(P1)을 보내고 응답을 기다림
+	Ready,			// 서버 구성을 웨이브 데이터로 바꿈(GetWaveData)
+	Failed,			// 이 판은 시작하지 않음(GetWavePlanError로 안내)
+	NoServerPlay	// 서버 플레이 없음(로그인 없이 연 PIE, 서버 플레이 없는 디버그 이어하기). 개발 빌드면 로컬 웨이브로 대신할 수 있음
+};
+
+DECLARE_MULTICAST_DELEGATE(FOnWarriorWavePlanChanged);
 
 /**
  * 스테이지 플레이 서브시스템. 스테이지에 들어갈 때 서버에 플레이를 시작하고, 받은 stagePlayId를 보관한다.
@@ -35,6 +49,9 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FOnWarriorResultSubmitFinished, EWarriorResu
  * - 로그인 상태가 끝나면 플레이 ID를 비운다(다른 계정이 이어받지 않게).
  * - 이어하기(stage-play-api.md "이어하기(1차)"): 로그인 뒤 UWarriorPlayCheckpointSubsystem이 P2·P4를 부르고,
  *   이어하면 BeginRun이 이어하기 정보를 넘겨 P1 없이 같은 stagePlayId로 시작한다.
+ * - 웨이브 구성(M24): 판의 웨이브는 서버가 시작 때 고정한 구성(waves)으로만 만든다. 보통 시작은 P1 201 응답, 이어하기는
+ *   이어하기 정보의 WavePlan(로그인 때 받은 P2)을 ApplyWavePlan 한 입구로 넣는다. 몬스터 키는 DA_MonsterCatalog로 BP를 찾는다.
+ *   구성을 쓸 수 없으면(P1 실패, waves 없음, 모르는 몬스터) 상태를 Failed로 두고 GameMode가 안내 후 메인메뉴로 간다.
  */
 UCLASS()
 class PROJECTWARRIOR_API UWarriorStagePlaySubsystem : public UGameInstanceSubsystem
@@ -85,6 +102,28 @@ public:
 	//서버가 발급한 지금 플레이 ID(소문자 하이픈 GUID). 시작 응답 전이나 시작 실패면 비어 있다
 	const FString& GetCurrentStagePlayId() const { return CurrentStagePlayId; }
 
+	//~ Begin 웨이브 구성(M24)
+	//구성 상태가 바뀌었을 때. 이어하기면 StartStagePlay 안에서 바로 온다(GameMode는 그 전에 구독한다)
+	FOnWarriorWavePlanChanged OnWavePlanChanged;
+
+	EWarriorWavePlanState GetWavePlanState() const { return WavePlanState; }
+
+	//Ready일 때 FlowManager에 넣을 웨이브 데이터(몬스터 BP를 찾아 둔 것)
+	const TArray<FWarriorStageWaveData>& GetWaveData() const { return CurrentWaveData; }
+
+	//지금 판의 서버 구성(웨이브 정보 버전 포함)
+	const FWarriorStageWavePlan& GetWavePlan() const { return CurrentWavePlan; }
+
+	//Failed일 때 안내할 오류. 문구는 오류 문구 표, 보이는 방법은 늘 팝업, 다음 행동은 늘 메인메뉴
+	const FWarriorApiResult& GetWavePlanError() const { return WavePlanError; }
+
+	//게임에서 정한 판 시작 실패(예: 구성 기다림 한도를 넘은 STAGE_WAVE_PLAN_TIMEOUT). 상태를 Failed로 바꾸고 알린다
+	void FailWavePlan(const FString& InGameErrorCode);
+
+	//판 시작 실패를 안내용 결과로 만든다(늘 팝업 + 메인메뉴). 자동화 시험에서도 쓴다
+	static FWarriorApiResult MakeStageStartError(const FWarriorApiError& InError);
+	//~ End 웨이브 구성
+
 	//POST /accounts/me/stage-plays/{CurrentStagePlayId}/result. 플레이 ID가 없으면(시작 응답 전·시작 실패) 경고 로그만 남기고 보내지 않는다.
 	//실패 처리(재시도·보관·안내)는 UWarriorApiSubsystem이 한다(서버는 같은 플레이의 결과를 한 번만 반영한다)
 	//보내면 상태가 Submitting이 되고, 보내지 못하면 바로 NotSent로 끝난다(OnResultSubmitFinished)
@@ -133,6 +172,24 @@ private:
 	//로그인 상태가 끝났다(UWarriorAuthSubsystem::OnSessionEnded). 플레이 ID를 비운다
 	UFUNCTION()
 	void HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage);
+
+	//~ Begin 웨이브 구성(M24)
+	//이전 판 구성을 비운다(알리지 않음). StartStagePlay 첫머리·세션 끝에서 부른다
+	void ClearWavePlan();
+
+	//서버 구성을 넣는 한 입구(P1 201, 이어하기). 비었으면 STAGE_WAVE_PLAN_MISSING, 모르는 몬스터면 STAGE_WAVE_MONSTER_UNKNOWN
+	void ApplyWavePlan(const FWarriorStageWavePlan& InPlan);
+
+	void SetWavePlanState(EWarriorWavePlanState InState);
+
+	//서버·연결 오류로 판을 시작하지 못함
+	void FailWavePlanWithError(const FWarriorApiError& InError);
+
+	EWarriorWavePlanState WavePlanState = EWarriorWavePlanState::None;
+	FWarriorStageWavePlan CurrentWavePlan;
+	TArray<FWarriorStageWaveData> CurrentWaveData;
+	FWarriorApiResult WavePlanError;
+	//~ End 웨이브 구성
 
 	//StartStagePlay를 부를 때마다 1씩 오른다. 늦게 온 지난 시작의 응답이 새 플레이 ID를 덮지 않게 비교한다
 	bool IsCurrentStart(int32 InStartSerial) const { return InStartSerial == StartSerial; }

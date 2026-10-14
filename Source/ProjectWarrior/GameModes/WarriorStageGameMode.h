@@ -9,6 +9,8 @@
 #include "WarriorStageGameMode.generated.h"
 
 class AWarriorStageFlowManager;
+class UWarriorStageWaveDataAsset;
+struct FWarriorApiResult;
 class UWarriorStageStateBase;
 
 /**
@@ -64,6 +66,12 @@ public:
 	//방금 클리어한 웨이브의 체크포인트를 서버에 올린다(M22, C1). 마지막 웨이브면 올리지 않는다(결과를 낸다).
 	//실패해도 판은 그대로 진행하고 보관하지 않는다(다음 웨이브 클리어 때 새로 올림)
 	void UploadWaveCheckpoint();
+
+	//웨이브를 시작해도 되는가(M24): 서버 웨이브 구성을 FlowManager에 넣었거나, 서버 플레이가 없는 판이라 로컬 웨이브로 대신함
+	bool CanStartWaves() const { return bWavePlanApplied || bUsingLocalWaves; }
+
+	//준비 시간이 끝났는데 구성이 아직 없다(M24). UWarriorStageSettings::ServerWaveWaitSeconds까지 기다리고, 넘으면 판을 시작하지 않는다
+	void WaitForWavePlan();
 	//~ End 상태 객체 전용
 
 	// Stage종료 후 StageUpgrade 원상복구.
@@ -128,8 +136,35 @@ private:
 	//이 판의 스테이지를 정한다. 순서: 선택 화면의 실행 정보 → StageId 칸 → 목록에서 이 레벨의 첫 스테이지 → 레벨 이름
 	void ResolveStageLaunch();
 
-	//목록에 웨이브가 있으면 FlowManager의 웨이브를 바꾼다. 첫 웨이브 전에 불러야 한다.
+	//개발용 로컬 웨이브(스테이지 목록 → 레벨 FlowManager 순, 둘 다 에디터 전용)를 FlowManager에 넣는다.
+	//M24: 서버 플레이가 없는 판에서만 HandleWavePlanChanged가 부른다. 서버 판은 로컬 구성을 읽지 않는다
 	void ApplyStageWaveData(AWarriorStageFlowManager* InFlowManager) const;
+
+	//~ Begin 서버 웨이브 구성(M24, stage-play-api.md v1.3 "웨이브 구성")
+	//UWarriorStagePlaySubsystem::OnWavePlanChanged. BeginRun 전에는 무시한다(지난 판의 늦은 알림). 여러 번 불러도 같다
+	void HandleWavePlanChanged();
+
+	//서버 구성을 임시 웨이브 에셋에 담아 FlowManager에 넣고, 총 웨이브 수를 GameState에 알린다
+	void ApplyServerWavePlan(const TArray<FWarriorStageWaveData>& InWaves, const FString& InWaveVersion);
+
+	//기다림 한도를 넘음 → STAGE_WAVE_PLAN_TIMEOUT
+	void HandleWavePlanTimeout();
+
+	//판을 시작하지 않는다: 웨이브를 멈추고, 쓸 수 없는 서버 판은 포기(P4)하고, 안내 팝업을 띄운 뒤 메인메뉴로 간다(결과는 내지 않음)
+	void FailRunStart(const FWarriorApiResult& InError);
+
+	//서버 구성을 담는 임시 웨이브 에셋(저장하지 않음)
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorStageWaveDataAsset> ServerWaveData;
+
+	FDelegateHandle WavePlanChangedHandle;
+	FTimerHandle WavePlanWaitHandle;
+
+	bool bWavePlanApplied = false;
+	bool bUsingLocalWaves = false;
+	bool bWaitingForWavePlan = false;
+	bool bRunStartFailed = false;
+	//~ End 서버 웨이브 구성
 
 	FWarriorStageLaunchInfo ResolvedLaunchInfo;
 

@@ -10,9 +10,11 @@
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 #include "ProjectWarrior/Network/WarriorAccountSync.h"
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
+#include "ProjectWarrior/Network/WarriorErrorText.h"
 #include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
 #include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
 #include "ProjectWarrior/Stage/WarriorPlayCheckpoint.h"
+#include "ProjectWarrior/Stage/WarriorMonsterCatalogDataAsset.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 
@@ -54,6 +56,7 @@ void UWarriorStagePlaySubsystem::HandleSessionEnded(EWarriorSessionEndReason InR
 	++StartSerial;
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
+	ClearWavePlan();
 }
 
 void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume)
@@ -63,6 +66,8 @@ void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorS
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
 	ResultSubmitState = EWarriorResultSubmitState::None;
+	//M24: 이전 판(다시 하기·409 복구) 구성이 남지 않게 비운다. 이번 판 구성은 아래에서 넣는다
+	ClearWavePlan();
 
 	//── 이어하기: 서버의 진행 중 플레이를 그대로 쓴다. 결과 검사의 경과 시간·마감은 원래 시작 기준이다(stage-play-api.md "이어하기(1차)")
 	if (InResume && InResume->IsSet())
@@ -74,9 +79,20 @@ void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorS
 		}
 		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Resumed. stagePlayId=%s stage=%s fromWave=%d expiresAt=%s (no start request)"),
 			*CurrentStagePlayId, *InStageId.ToString(), InResume->ResumeFromWave, *InResume->ExpiresAt);
+
+		//M24: 로그인 때 받은 P2의 구성(시작 때 고정)을 바로 넣는다. 서버 플레이 없는 디버그 이어하기는 구성이 없다
+		if (CurrentStagePlayId.IsEmpty())
+		{
+			SetWavePlanState(EWarriorWavePlanState::NoServerPlay);
+		}
+		else
+		{
+			ApplyWavePlan(InResume->WavePlan);
+		}
 		return;
 	}
 
+	SetWavePlanState(EWarriorWavePlanState::Waiting);
 	SendStart(InStageId.ToString().ToLower(), true);
 }
 
@@ -100,6 +116,8 @@ bool UWarriorStagePlaySubsystem::RequestCurrentStagePlay(FCurrentStagePlayCallba
 
 			if (Status == 200 && FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto) && !ResponseDto.Data.StagePlayId.IsEmpty())
 			{
+				//M24: 시작 때 고정한 웨이브 구성. 이어하기 정보에 실어 레벨에서 그대로 쓴다
+				WarriorWavePlan::ReadFromResponse(Body, ResponseDto.Data.WavePlan);
 				Callback(EWarriorCurrentStagePlay::InProgress, ResponseDto.Data);
 				return;
 			}
@@ -210,6 +228,7 @@ void UWarriorStagePlaySubsystem::SendStart(const FString& InStageId, bool bInRec
 	if (!Auth)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start not sent. No auth subsystem. Stage %s"), *InStageId);
+		SetWavePlanState(EWarriorWavePlanState::NoServerPlay);
 		return;
 	}
 
@@ -236,8 +255,17 @@ void UWarriorStagePlaySubsystem::SendStart(const FString& InStageId, bool bInRec
 
 	if (!bStarted)
 	{
-		//로그인하지 않은 상태(로그인 화면을 거치지 않은 PIE 등). 이번 판은 서버에 저장되지 않는다
+		//로그인하지 않은 상태(로그인 화면을 거치지 않은 PIE 등). 이번 판은 서버에 저장되지 않는다.
+		//처음 시작이면 서버 플레이가 없는 판(개발 빌드는 로컬 웨이브), 409 복구 중이면 그사이 로그인이 끝난 것이라 시작하지 않는다
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start not sent. Stage %s. This run will not be saved."), *InStageId);
+		if (bInRecoverInProgress)
+		{
+			SetWavePlanState(EWarriorWavePlanState::NoServerPlay);
+		}
+		else
+		{
+			FailWavePlan(TEXT("NETWORK_ERROR"));
+		}
 		return;
 	}
 
@@ -259,6 +287,16 @@ void UWarriorStagePlaySubsystem::HandleStartResponse(int32 InStartSerial, const 
 		if (!FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto) || ResponseDto.Data.StagePlayId.IsEmpty())
 		{
 			UE_LOG(LogProjectWarrior, Error, TEXT("[StagePlay] Start response could not be read. Stage %s"), *InStageId);
+			FailWavePlan(TEXT("INVALID_RESPONSE"));
+			return;
+		}
+
+		//M24: 구성을 기다리다 이미 포기한 판(기다림 한도를 넘김)이면 서버에 남지 않게 바로 포기한다
+		if (WavePlanState == EWarriorWavePlanState::Failed)
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start response came after the run was given up. Abandoning play %s."),
+				*ResponseDto.Data.StagePlayId);
+			AbandonStagePlay(ResponseDto.Data.StagePlayId, [](int32, const FString&) {});
 			return;
 		}
 
@@ -269,6 +307,10 @@ void UWarriorStagePlaySubsystem::HandleStartResponse(int32 InStartSerial, const 
 		}
 		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Started. stagePlayId=%s stage=%s waveCount=%d expiresAt=%s serverRequestId=%s"),
 			*CurrentStagePlayId, *ResponseDto.Data.StageId, ResponseDto.Data.WaveCount, *ResponseDto.Data.ExpiresAt, *ResponseDto.Meta.RequestId);
+
+		//M24: 시작 때 고정한 웨이브 구성
+		WarriorWavePlan::ReadFromResponse(Body, ResponseDto.Data.WavePlan);
+		ApplyWavePlan(ResponseDto.Data.WavePlan);
 		return;
 	}
 
@@ -286,6 +328,12 @@ void UWarriorStagePlaySubsystem::HandleStartResponse(int32 InStartSerial, const 
 	//401은 Auth가 이미 로그인 상태를 끝냈다. 안내 후 메인메뉴는 S5 3단계
 	UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start failed. Stage %s status=%d code=%s. This run will not be saved."),
 		*InStageId, Status, *Error.Code);
+
+	//M24: 서버 구성이 없으므로 이 판은 시작하지 않는다(안내 후 메인메뉴). 401은 Auth가 로그인 상태를 끝내 컨트롤러가 메인메뉴로 간다
+	if (Status != 401)
+	{
+		FailWavePlanWithError(Error);
+	}
 }
 
 void UWarriorStagePlaySubsystem::RecoverInProgress(int32 InStartSerial, const FString& InStageId)
@@ -322,11 +370,13 @@ void UWarriorStagePlaySubsystem::RecoverInProgress(int32 InStartSerial, const FS
 			}
 
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play could not be read. This run will not be saved."));
+			WeakThis->FailWavePlan(TEXT("NETWORK_ERROR"));
 		});
 
 	if (!bStarted)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Current play request not sent. This run will not be saved."));
+		FailWavePlan(TEXT("NETWORK_ERROR"));
 	}
 }
 
@@ -385,6 +435,7 @@ void UWarriorStagePlaySubsystem::ResendStoredThenRestart(int32 InStartSerial, co
 	if (!bStarted)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Stored result could not be sent. This run will not be saved."));
+		FailWavePlan(TEXT("NETWORK_ERROR"));
 	}
 }
 
@@ -408,11 +459,16 @@ void UWarriorStagePlaySubsystem::AbandonAndRestart(int32 InStartSerial, const FS
 
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Abandon failed. stagePlayId=%s status=%d code=%s. This run will not be saved."),
 				*InStagePlayId, Status, *ErrorCode);
+			if (Status != 401)
+			{
+				WeakThis->FailWavePlan(Status == 0 ? TEXT("NETWORK_ERROR") : (ErrorCode.IsEmpty() ? TEXT("UNKNOWN") : *ErrorCode));
+			}
 		});
 
 	if (!bStarted)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Abandon request not sent. This run will not be saved."));
+		FailWavePlan(TEXT("NETWORK_ERROR"));
 	}
 }
 
@@ -592,3 +648,87 @@ bool UWarriorStagePlaySubsystem::ApplyResultAccount(const FString& InStagePlayId
 	Auth->ApplyAccountSnapshot(InAccount);
 	return true;
 }
+
+//~ Begin 웨이브 구성(M24)
+
+void UWarriorStagePlaySubsystem::ClearWavePlan()
+{
+	WavePlanState = EWarriorWavePlanState::None;
+	CurrentWavePlan = FWarriorStageWavePlan();
+	CurrentWaveData.Reset();
+	WavePlanError = FWarriorApiResult();
+}
+
+void UWarriorStagePlaySubsystem::ApplyWavePlan(const FWarriorStageWavePlan& InPlan)
+{
+	CurrentWavePlan = InPlan;
+	if (!InPlan.IsSet())
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[StagePlay] Wave plan is missing in the play response. stagePlayId=%s"), *CurrentStagePlayId);
+		FailWavePlan(TEXT("STAGE_WAVE_PLAN_MISSING"));
+		return;
+	}
+
+	const UWarriorMonsterCatalogDataAsset* Catalog = UWarriorMonsterCatalogDataAsset::LoadFromSettings();
+	if (!Catalog)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[StagePlay] MonsterCatalog is not set in Project Settings > Warrior Stage."));
+	}
+
+	FName UnknownMonster;
+	if (!WarriorWavePlan::ToWaveData(InPlan, Catalog, CurrentWaveData, UnknownMonster))
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[StagePlay] Monster %s is not in this build's monster catalog. stagePlayId=%s waveVersion=%s"),
+			*UnknownMonster.ToString(), *CurrentStagePlayId, *InPlan.WaveVersion);
+		FailWavePlan(TEXT("STAGE_WAVE_MONSTER_UNKNOWN"));
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Wave plan ready. stagePlayId=%s waveVersion=%s waves=%d"),
+		*CurrentStagePlayId, *InPlan.WaveVersion, CurrentWaveData.Num());
+	SetWavePlanState(EWarriorWavePlanState::Ready);
+}
+
+void UWarriorStagePlaySubsystem::SetWavePlanState(EWarriorWavePlanState InState)
+{
+	WavePlanState = InState;
+	OnWavePlanChanged.Broadcast();
+}
+
+void UWarriorStagePlaySubsystem::FailWavePlan(const FString& InGameErrorCode)
+{
+	FWarriorApiError Error;
+	Error.Code = InGameErrorCode;
+	FailWavePlanWithError(Error);
+}
+
+void UWarriorStagePlaySubsystem::FailWavePlanWithError(const FWarriorApiError& InError)
+{
+	//한 판에 한 번만 안내한다(예: 기다림 한도를 넘긴 뒤 늦게 온 실패 응답)
+	if (WavePlanState == EWarriorWavePlanState::Failed)
+	{
+		return;
+	}
+
+	CurrentWaveData.Reset();
+	WavePlanError = MakeStageStartError(InError);
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] This run will not start. code=%s status=%d"), *InError.Code, InError.HttpStatus);
+	SetWavePlanState(EWarriorWavePlanState::Failed);
+}
+
+FWarriorApiResult UWarriorStagePlaySubsystem::MakeStageStartError(const FWarriorApiError& InError)
+{
+	FWarriorApiResult Result;
+	Result.bOk = false;
+	Result.HttpStatus = InError.HttpStatus;
+	Result.Error = InError;
+	Result.Rule = FWarriorErrorText::Resolve(InError);
+	//문구만 표에서 가져온다. 판 시작 실패는 메인메뉴에 안내할 화면 칸이 없어 늘 팝업이고,
+	//이 레벨에서 다시 시도할 플레이가 없어 다음 행동은 코드와 관계없이 메인메뉴다(stage-play-api.md "웨이브 구성")
+	Result.Rule.Presentation = EWarriorErrorPresentation::Popup;
+	Result.Rule.Action = EWarriorErrorAction::GoMainMenu;
+	return Result;
+}
+
+//~ End 웨이브 구성
+

@@ -68,7 +68,7 @@ bool AWarriorStageFlowManager::StartWave(int32 InWaveIndex)
 	}
 
 	FWarriorStageWaveData WaveData;
-	if (!IsValid(StageWaveData) || !IsValid(WaveSpawner) || !StageWaveData->GetWaveData(InWaveIndex, WaveData))
+	if (!IsValid(ActiveWaveData) || !IsValid(WaveSpawner) || !ActiveWaveData->GetWaveData(InWaveIndex, WaveData))
 	{
 		UE_LOG(LogProjectWarrior, Error, TEXT("[Stage] Wave %d has no data or spawner."), ActiveWaveNumber);
 		ActiveWaveNumber = 0;
@@ -105,9 +105,9 @@ void AWarriorStageFlowManager::StopAll()
 int32 AWarriorStageFlowManager::GetTotalWaveCount() const
 {
 	//디버그 웨이브도 DataAsset이 있으면 그 수만큼 돈다. 서버는 DataAsset과 같은 waveCount로 결과를 검사한다.
-	if (IsValid(StageWaveData))
+	if (IsValid(ActiveWaveData))
 	{
-		return StageWaveData->GetWaveCount();
+		return ActiveWaveData->GetWaveCount();
 	}
 
 	return bUseDebugWaves ? DebugWaveCount : 0;
@@ -115,7 +115,7 @@ int32 AWarriorStageFlowManager::GetTotalWaveCount() const
 
 void AWarriorStageFlowManager::SetStageWaveData(UWarriorStageWaveDataAsset* InStageWaveData)
 {
-	if (!IsValid(InStageWaveData) || InStageWaveData == StageWaveData)
+	if (!IsValid(InStageWaveData) || InStageWaveData == ActiveWaveData)
 	{
 		return;
 	}
@@ -126,9 +126,18 @@ void AWarriorStageFlowManager::SetStageWaveData(UWarriorStageWaveDataAsset* InSt
 		return;
 	}
 
-	StageWaveData = InStageWaveData;
+	ActiveWaveData = InStageWaveData;
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] %s uses wave data %s (%d waves)"), *GetName(), *StageWaveData->GetName(), StageWaveData->GetWaveCount());
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] %s uses wave data %s (%d waves)"), *GetName(), *ActiveWaveData->GetName(), ActiveWaveData->GetWaveCount());
+}
+
+UWarriorStageWaveDataAsset* AWarriorStageFlowManager::GetLocalWaveData() const
+{
+#if WITH_EDITORONLY_DATA
+	return StageWaveData;
+#else
+	return nullptr;
+#endif
 }
 
 bool AWarriorStageFlowManager::IsLastWave(int32 InWaveIndex) const
@@ -138,13 +147,13 @@ bool AWarriorStageFlowManager::IsLastWave(int32 InWaveIndex) const
 
 bool AWarriorStageFlowManager::IsBossWave(int32 InWaveIndex) const
 {
-	if (bUseDebugWaves && !IsValid(StageWaveData))
+	if (bUseDebugWaves && !IsValid(ActiveWaveData))
 	{
 		return InWaveIndex == DebugWaveCount - 1;
 	}
 
 	FWarriorStageWaveData WaveData;
-	return IsValid(StageWaveData) && StageWaveData->GetWaveData(InWaveIndex, WaveData) && WaveData.bBossWave;
+	return IsValid(ActiveWaveData) && ActiveWaveData->GetWaveData(InWaveIndex, WaveData) && WaveData.bBossWave;
 }
 
 float AWarriorStageFlowManager::GetRestTimeOverride(int32 InWaveIndex) const
@@ -155,7 +164,7 @@ float AWarriorStageFlowManager::GetRestTimeOverride(int32 InWaveIndex) const
 	}
 
 	FWarriorStageWaveData WaveData;
-	return IsValid(StageWaveData) && StageWaveData->GetWaveData(InWaveIndex, WaveData) ? WaveData.RestTimeOverride : 0.f;
+	return IsValid(ActiveWaveData) && ActiveWaveData->GetWaveData(InWaveIndex, WaveData) ? WaveData.RestTimeOverride : 0.f;
 }
 
 void AWarriorStageFlowManager::HandleSpawnerEnemyCountChanged(int32 InAliveCount, int32 InSpawnedCount)

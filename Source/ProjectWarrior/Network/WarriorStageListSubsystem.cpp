@@ -13,7 +13,6 @@
 #include "ProjectWarrior/Characters/WarriorAICharacter.h"
 #include "ProjectWarrior/Network/WarriorApiTypes.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
-#include "ProjectWarrior/Stage/WarriorStageWaveDataAsset.h"
 
 namespace WarriorStageListApi
 {
@@ -223,6 +222,21 @@ bool UWarriorStageListSubsystem::ParseDefinitions(const FString& InBody)
 		return false;
 	}
 
+	//M24: 몬스터 이름(미리보기). 없으면(v1.3 전 서버) 키를 그대로 보인다
+	TMap<FString, FString> MonsterNames;
+	const TArray<TSharedPtr<FJsonValue>>* MonsterValues = nullptr;
+	if (Data->TryGetArrayField(TEXT("monsters"), MonsterValues))
+	{
+		for (const TSharedPtr<FJsonValue>& MonsterValue : *MonsterValues)
+		{
+			const TSharedPtr<FJsonObject> MonsterObject = MonsterValue.IsValid() ? MonsterValue->AsObject() : nullptr;
+			if (MonsterObject.IsValid())
+			{
+				MonsterNames.Add(GetStringOrEmpty(MonsterObject, TEXT("monsterId")), GetStringOrEmpty(MonsterObject, TEXT("name")));
+			}
+		}
+	}
+
 	TArray<FRegionDef> NewRegions;
 	for (const TSharedPtr<FJsonValue>& RegionValue : *RegionValues)
 	{
@@ -255,6 +269,7 @@ bool UWarriorStageListSubsystem::ParseDefinitions(const FString& InBody)
 				const FString Requires = GetStringOrEmpty(StageObject, TEXT("requires"));
 				Stage.RequiresStageId = Requires.IsEmpty() ? NAME_None : FName(*Requires);
 				Stage.WaveCount = GetIntOrZero(StageObject, TEXT("waveCount"));
+				ParseWaves(StageObject, MonsterNames, Stage.Waves);
 			}
 		}
 
@@ -353,7 +368,7 @@ void UWarriorStageListSubsystem::RebuildRegions()
 				++Region.ClearedCount;
 			}
 
-			BuildWaveInfo(LaunchInfo, StageDef.WaveCount, Stage.Waves);
+			BuildWaveInfo(StageDef, Stage.Waves);
 		}
 
 		Region.bCanOpen = IsRegionOpen(Region);
@@ -399,46 +414,56 @@ bool UWarriorStageListSubsystem::IsRegionOpen(const FWarriorRegionListEntry& InR
 	return true;
 }
 
-void UWarriorStageListSubsystem::BuildWaveInfo(const FWarriorStageLaunchInfo& InLaunchInfo, int32 InServerWaveCount, TArray<FWarriorStageWaveInfo>& OutWaves)
+void UWarriorStageListSubsystem::BuildWaveInfo(const FStageDef& InStageDef, TArray<FWarriorStageWaveInfo>& OutWaves)
 {
-	OutWaves.Reset();
+	//출처: 서버 스테이지 목록(ST1)의 지금 정의. 실제 판의 구성은 판 시작 때 서버가 고정한 값이라 다를 수 있다(waveVersion)
+	OutWaves = InStageDef.Waves;
+}
 
-	//지금 출처: UE 웨이브 DataAsset(작은 에셋이라 프론트 레벨에서 바로 읽는다)
-	const UWarriorStageWaveDataAsset* WaveData = InLaunchInfo.WaveData.LoadSynchronous();
-	if (!WaveData)
+void UWarriorStageListSubsystem::ParseWaves(const TSharedPtr<FJsonObject>& InStageObject, const TMap<FString, FString>& InMonsterNames, TArray<FWarriorStageWaveInfo>& OutWaves)
+{
+	using namespace WarriorStageListApi;
+
+	OutWaves.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* WaveValues = nullptr;
+	if (!InStageObject.IsValid() || !InStageObject->TryGetArrayField(TEXT("waves"), WaveValues))
 	{
 		return;
 	}
 
-	const int32 WaveCount = WaveData->GetWaveCount();
-	for (int32 WaveIndex = 0; WaveIndex < WaveCount; ++WaveIndex)
+	for (const TSharedPtr<FJsonValue>& WaveValue : *WaveValues)
 	{
-		FWarriorStageWaveData Data;
-		if (!WaveData->GetWaveData(WaveIndex, Data))
+		const TSharedPtr<FJsonObject> WaveObject = WaveValue.IsValid() ? WaveValue->AsObject() : nullptr;
+		if (!WaveObject.IsValid())
 		{
 			continue;
 		}
 
 		FWarriorStageWaveInfo& Wave = OutWaves.AddDefaulted_GetRef();
-		Wave.WaveNumber = WaveIndex + 1;
-		Wave.bBossWave = Data.bBossWave;
+		Wave.WaveNumber = GetIntOrZero(WaveObject, TEXT("waveNumber"));
+		WaveObject->TryGetBoolField(TEXT("bossWave"), Wave.bBossWave);
 
-		for (const FWarriorWaveEnemySpawnData& Enemy : Data.Enemies)
+		const TArray<TSharedPtr<FJsonValue>>* EnemyValues = nullptr;
+		if (!WaveObject->TryGetArrayField(TEXT("enemies"), EnemyValues))
 		{
-			FWarriorStageWaveEnemyInfo& EnemyInfo = Wave.Enemies.AddDefaulted_GetRef();
-			//임시 몬스터 키 = BP 파일 이름(클래스 이름의 _C를 뗀 값). 이름·종류 변환 도우미가 생기면 이 키로 찾는다
-			EnemyInfo.EnemyKey = Enemy.EnemyClass ? Enemy.EnemyClass->GetName() : TEXT("(none)");
-			EnemyInfo.EnemyKey.RemoveFromEnd(TEXT("_C"));
-			EnemyInfo.Count = Enemy.Count;
-			EnemyInfo.bBoss = Enemy.bBossEnemy;
+			continue;
 		}
-	}
 
-	//서버 waveCount와 다르면 이 스테이지의 결과가 서버에서 거절된다(웨이브 수를 바꾸면 master/stages.json도 같이)
-	if (WaveCount != InServerWaveCount)
-	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[StageList] Stage %s: wave data has %d waves but the server waveCount is %d. Results will be rejected."),
-			*InLaunchInfo.StageId.ToString(), WaveCount, InServerWaveCount);
+		for (const TSharedPtr<FJsonValue>& EnemyValue : *EnemyValues)
+		{
+			const TSharedPtr<FJsonObject> EnemyObject = EnemyValue.IsValid() ? EnemyValue->AsObject() : nullptr;
+			if (!EnemyObject.IsValid())
+			{
+				continue;
+			}
+
+			FWarriorStageWaveEnemyInfo& Enemy = Wave.Enemies.AddDefaulted_GetRef();
+			Enemy.EnemyKey = GetStringOrEmpty(EnemyObject, TEXT("monsterId"));
+			const FString* Name = InMonsterNames.Find(Enemy.EnemyKey);
+			Enemy.DisplayName = FText::FromString(Name && !Name->IsEmpty() ? *Name : Enemy.EnemyKey);
+			Enemy.Count = GetIntOrZero(EnemyObject, TEXT("count"));
+			EnemyObject->TryGetBoolField(TEXT("boss"), Enemy.bBoss);
+		}
 	}
 }
 
