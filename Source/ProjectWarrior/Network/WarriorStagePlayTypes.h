@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ProjectWarrior/Auth/WarriorAuthTypes.h"
 #include "ProjectWarrior/Network/WarriorApiTypes.h"
 #include "ProjectWarrior/Stage/WarriorPlayCheckpointTypes.h"
 #include "WarriorStagePlayTypes.generated.h"
@@ -189,7 +190,7 @@ struct PROJECTWARRIOR_API FWarriorStageResultDto
 	FWarriorStageRewardDto Reward;
 };
 
-//결과 제출 응답의 data. account(바뀐 계정 값)는 확장 칸이라 지금은 읽지 않는다
+//결과 제출 응답의 data. account(지금 계정 값)는 ApplyAccountSnapshot으로 적용한다(M25, account-api.md 동기화 시점 T2·T5b)
 USTRUCT()
 struct PROJECTWARRIOR_API FWarriorStageResultSubmitDto
 {
@@ -201,6 +202,10 @@ struct PROJECTWARRIOR_API FWarriorStageResultSubmitDto
 	//SAVED(이번에 저장) · ALREADY_SAVED(이미 저장돼 있어 처음 결과를 돌려줌). 둘 다 저장된 것으로 본다
 	UPROPERTY()
 	FString SaveStatus;
+
+	//지금 계정 값(ALREADY_SAVED여도 지금 값). 응답에 칸이 없으면 기본값(빈 AccountId)이라 적용하지 않는다
+	UPROPERTY()
+	FWarriorAccountSnapshotDto Account;
 };
 
 //결과 제출 응답 본문 전체: { "data": Submit, "meta": Meta }
