@@ -20,6 +20,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -39,6 +41,9 @@ UPlayerGameplayAbility_BladeMode::UPlayerGameplayAbility_BladeMode()
 
 	ActivationOwnedTags.AddTag(WarriorGameplayTags::Player_Status_BladeMode);
 	ActivationBlockedTags.AddTag(WarriorGameplayTags::Shared_Status_Death);
+
+	// 전술 모드와 시간 배율을 서로 덮어쓰지 않도록 동시에 켜지 않음
+	ActivationBlockedTags.AddTag(WarriorGameplayTags::Player_Status_TacticalMode);
 
 	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Light;
 	WeakPointHitSoundTag = WarriorSoundTags::Sound_Player_BladeMode_WeakPoint;
@@ -436,7 +441,7 @@ void UPlayerGameplayAbility_BladeMode::StartSlashTrail()
 {
 	AWarriorPlayerCharacter* PlayerCharacter = GetPlayerCharacterFromActorInfo();
 
-	if (!SlashTrailEffect || !PlayerCharacter)
+	if ((!SlashTrailEffect && !SlashSwingParticle) || !PlayerCharacter)
 	{
 		return;
 	}
@@ -444,8 +449,19 @@ void UPlayerGameplayAbility_BladeMode::StartSlashTrail()
 	// 연달아 벨 때는 이전 궤적을 끝내고 새로 그림(이전 것은 남은 꼬리가 자연스럽게 사라짐)
 	StopSlashTrail();
 
-	SlashTrailComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(SlashTrailEffect, PlayerCharacter->GetMesh(), SlashTrailSocketName,
-		FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true);
+	if (SlashTrailEffect)
+	{
+		SlashTrailComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(SlashTrailEffect, PlayerCharacter->GetMesh(), SlashTrailSocketName,
+			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true);
+	}
+
+	// 플레이어에 붙으므로 블레이드 모드 슬로모션 중에도 플레이어 속도로 재생됨
+	if (SlashSwingParticle)
+	{
+		SlashSwingParticleComponent = UGameplayStatics::SpawnEmitterAttached(SlashSwingParticle, PlayerCharacter->GetMesh(), SlashSwingParticleSocketName,
+			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true);
+	}
+
 	SlashTrailRemaining = SlashTrailDuration;
 }
 
@@ -456,6 +472,13 @@ void UPlayerGameplayAbility_BladeMode::StopSlashTrail()
 		// 기본 공격의 TimedNiagaraEffect(bDestroyAtEnd = false)처럼 비활성화만 해서 그려진 궤적은 사라질 때까지 둠
 		SlashTrailComponent->Deactivate();
 		SlashTrailComponent = nullptr;
+	}
+
+	if (SlashSwingParticleComponent)
+	{
+		// 새 입자만 멈추고 이미 나온 불꽃은 수명대로 사라짐(bAutoDestroy로 정리)
+		SlashSwingParticleComponent->DeactivateSystem();
+		SlashSwingParticleComponent = nullptr;
 	}
 
 	SlashTrailRemaining = 0.0f;

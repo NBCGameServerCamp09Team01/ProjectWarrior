@@ -15,6 +15,8 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UMeshComponent;
 class UNiagaraComponent;
+class UParticleSystem;
+class UParticleSystemComponent;
 class USpringArmComponent;
 class UCameraComponent;
 class UWarriorAnimInstance;
@@ -334,6 +336,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Slash")
 	FName SlashTrailSocketName = TEXT("SwordTrailSocket");
 
+	// 벨 때 칼에 붙이는 Cascade 파티클(선택, 예: P_Sparks). 궤적과 같은 시간 동안 켜 둠
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Slash")
+	TObjectPtr<UParticleSystem> SlashSwingParticle;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Slash")
+	FName SlashSwingParticleSocketName = TEXT("SwordEffectSocket");
+
 	// 궤적을 켜 두는 시간(실제 시간, 초). 자세 블렌드보다 조금 길게 두면 끝까지 그려짐
 	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Slash", meta = (ClampMin = "0.0"))
 	float SlashTrailDuration = 0.2f;
@@ -460,6 +469,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> SlashTrailComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UParticleSystemComponent> SlashSwingParticleComponent;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> SlashMarks;
