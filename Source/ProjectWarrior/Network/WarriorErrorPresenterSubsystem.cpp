@@ -103,7 +103,8 @@ void UWarriorErrorPresenterSubsystem::ShowCurrent()
 	{
 		if (Popup->HasSecondaryButton())
 		{
-			Popup->SetButtons(LOCTEXT("Retry", "다시 시도"), LOCTEXT("QuitGame", "게임 종료"));
+			Popup->SetButtons(LOCTEXT("Retry", "다시 시도"),
+				CurrentNotice.QuitButtonText.IsEmpty() ? LOCTEXT("QuitGame", "게임 종료") : CurrentNotice.QuitButtonText);
 		}
 		else
 		{

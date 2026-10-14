@@ -221,4 +221,17 @@ struct PROJECTWARRIOR_API FWarriorStageResultSubmitResponseDto
 	FWarriorApiMeta Meta;
 };
 
+//이번 판 결과 제출의 상태. 결과 화면은 Submitting이 끝나야 보인다(서버에 연결되지 않으면 보관 팝업이 먼저 뜬다)
+UENUM()
+enum class EWarriorResultSubmitState : uint8
+{
+	None,			// 아직 내지 않음(판 시작 때 되돌린다)
+	Submitting,		// 보냈고 답(자동 재시도·"다시 시도 / 보관 후 종료" 포함)을 기다리는 중
+	Saved,			// 200: 서버에 저장됨(SAVED·ALREADY_SAVED)
+	Rejected,		// 서버가 받지 않음(RESULT_INVALID·STAGE_PLAY_EXPIRED 등). 서버와는 연결됨
+	NotSent,		// 보내지 않음(플레이 ID 없음: 로그인 안 한 PIE, 시작 실패). 기다릴 답이 없다
+	Offline,		// 서버에 연결되지 않아 저장하지 못함(보관했으면 다음 로그인 때 재전송). 종료 안내로 이어진다
+	SessionEnded	// 401: 로그인 상태가 끝남. 메인메뉴로 돌아간다
+};
+
 //~ End 결과 제출
