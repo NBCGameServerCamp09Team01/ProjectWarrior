@@ -38,6 +38,9 @@ public:
 	// 사망 몽타주가 쓰러진 자세에 도달했는지(AI.Event.Death.PoseReached를 받았는지)
 	bool HasReachedDeathPose() const;
 
+	// UI(전술 모드 대상 목록 등)에 보이는 이름. 비어 있으면 BP 클래스 이름에서 만듦(BP_SamuraiAI → SamuraiAI)
+	FText GetDisplayName() const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -62,6 +65,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat", meta = (Categories = "Shared.Status,AI.Status"))
 	FGameplayTagContainer DefaultStatusTags;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	FText DisplayName;
 
 private:
 	void InitAIStartUpData();

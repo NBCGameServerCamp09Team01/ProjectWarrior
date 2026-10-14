@@ -99,6 +99,19 @@ void AWarriorAICharacter::OnDeathPoseReached(const FGameplayEventData* Payload)
     UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(this, WarriorGameplayTags::AI_Status_DeathPoseReached);
 }
 
+FText AWarriorAICharacter::GetDisplayName() const
+{
+    if (!DisplayName.IsEmpty())
+    {
+        return DisplayName;
+    }
+
+    FString ClassName = GetClass()->GetName();
+    ClassName.RemoveFromStart(TEXT("BP_"));
+    ClassName.RemoveFromEnd(TEXT("_C"));
+    return FText::FromString(ClassName);
+}
+
 bool AWarriorAICharacter::HasReachedDeathPose() const
 {
     return WarriorAbilitySystemComponent && WarriorAbilitySystemComponent->HasMatchingGameplayTag(WarriorGameplayTags::AI_Status_DeathPoseReached);
