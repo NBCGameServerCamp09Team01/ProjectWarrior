@@ -97,15 +97,18 @@ void UPlayerCombatComponent::OnHitTargetActor(AActor* HitActor)
 
 	OverlappedActors.AddUnique(HitActor);
 
+	// 전술 모드 기술 실행 중에는 적이 멈춘 채라 회피·가드 상태가 그대로 남음 → 회피·가드 무시(무적은 그대로)
+	const bool bTacticalExecution = UWarriorFunctionLibrary::NativeDoesActorHaveTag(GetOwningPawn(), WarriorGameplayTags::Player_Status_TacticalMode);
+
 	// 회피 중이거나 무적인 대상은 피해·히트스톱 없음
-	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::Shared_Status_Dodge)
+	if ((!bTacticalExecution && UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::Shared_Status_Dodge))
 		|| UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::Shared_Status_Invulnerable))
 	{
 		return;
 	}
 
 	// 정면에서 가드 중이면 막힘. 대상에게 가드 피격을, 플레이어에게 막힘을 알림 (뒤나 옆에서 치면 그대로 맞음)
-	if (UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::AI_Status_Guarding)
+	if (!bTacticalExecution && UWarriorFunctionLibrary::NativeDoesActorHaveTag(HitActor, WarriorGameplayTags::AI_Status_Guarding)
 		&& UWarriorFunctionLibrary::IsValidBlock(GetOwningPawn(), HitActor))
 	{
 		FGameplayEventData BlockData;
