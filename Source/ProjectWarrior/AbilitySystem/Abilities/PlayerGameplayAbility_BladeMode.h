@@ -59,9 +59,6 @@ private:
 	// 베는 각도(0 = 가로, ±90 = 세로)에 따른 데미지 배율
 	float GetSlashDamageMultiplier(float InAngle) const;
 
-	// 쓰러지는 중인 시체를 베면 사망 몽타주를 처음부터 다시 재생. 다 쓰러진 시체(PoseReached 이후)는 아무것도 하지 않음
-	void ReplayDeathFall(APawn* InDeadPawn) const;
-
 	// 화면 기준 베는 선의 방향(월드). 0도 = 카메라 오른쪽, 90도 = 카메라 위
 	FVector GetSlashLineDirection(const FRotator& ViewRotation, float InAngle) const;
 

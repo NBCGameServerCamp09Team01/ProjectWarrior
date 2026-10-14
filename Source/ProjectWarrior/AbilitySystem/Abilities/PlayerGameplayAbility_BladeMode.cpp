@@ -3,9 +3,6 @@
 
 #include "PlayerGameplayAbility_BladeMode.h"
 #include "ProjectWarrior/Characters/WarriorPlayerCharacter.h"
-#include "ProjectWarrior/Characters/WarriorAICharacter.h"
-#include "Animation/AnimInstance.h"
-#include "Animation/AnimMontage.h"
 #include "ProjectWarrior/Characters/AnimInstance/WarriorAnimInstance.h"
 #include "ProjectWarrior/Controllers/WarriorPlayerController.h"
 #include "ProjectWarrior/AbilitySystem/AbilityTask_ExecuteTaskOnTick.h"
@@ -767,25 +764,6 @@ FVector UPlayerGameplayAbility_BladeMode::GetSlashLineDirection(const FRotator& 
 	return (ViewMatrix.GetUnitAxis(EAxis::Y) * FMath::Cos(AngleRad) + ViewMatrix.GetUnitAxis(EAxis::Z) * FMath::Sin(AngleRad)).GetSafeNormal();
 }
 
-void UPlayerGameplayAbility_BladeMode::ReplayDeathFall(APawn* InDeadPawn) const
-{
-	const AWarriorAICharacter* DeadAI = Cast<AWarriorAICharacter>(InDeadPawn);
-
-	if (!DeadAI || DeadAI->HasReachedDeathPose())
-	{
-		return;
-	}
-
-	UAnimInstance* AnimInstance = DeadAI->GetMesh() ? DeadAI->GetMesh()->GetAnimInstance() : nullptr;
-	UAnimMontage* DeathMontage = AnimInstance ? AnimInstance->GetCurrentActiveMontage() : nullptr;
-
-	// 새 몽타주를 틀면 사망 GA의 PlayMontageAndWait가 끊기므로 같은 몽타주를 처음으로 되감기만 함(PoseReached는 다시 기다림)
-	if (DeathMontage)
-	{
-		AnimInstance->Montage_SetPosition(DeathMontage, 0.0f);
-	}
-}
-
 float UPlayerGameplayAbility_BladeMode::GetSlashDamageMultiplier(float InAngle) const
 {
 	// 가로(0·180도)에서 얼마나 벗어났는지 0~90도 → 0~1
@@ -857,11 +835,9 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 
 		ProcessedActors.Add(HitPawn);
 
-		// 죽은 적은 데미지·피격 반응을 주지 않음(피격 모션이 재생되면 시체가 일어섬).
-		// 아직 쓰러지는 중이면 사망 모션을 처음부터 다시 보여 주고, 다 쓰러진 뒤에는 맞지 않음
+		// 죽은 적은 맞지 않음(피격 모션이 재생되면 시체가 일어섬)
 		if (UWarriorFunctionLibrary::IsActorDead(HitPawn))
 		{
-			ReplayDeathFall(HitPawn);
 			continue;
 		}
 
