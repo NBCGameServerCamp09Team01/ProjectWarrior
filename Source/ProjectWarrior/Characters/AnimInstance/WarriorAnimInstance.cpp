@@ -30,6 +30,26 @@ void UWarriorAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		SuppressFootIK();
 	}
+
+	BladeModeAlpha = FMath::FInterpConstantTo(BladeModeAlpha, bBladeModeActive ? 1.0f : 0.0f, DeltaSeconds, BladeModeBlendSpeed);
+
+	if (BladeSlashBlendAlpha < 1.0f)
+	{
+		BladeSlashBlendAlpha = BladeSlashBlendDuration > 0.0f ? FMath::Min(1.0f, BladeSlashBlendAlpha + DeltaSeconds / BladeSlashBlendDuration) : 1.0f;
+	}
+}
+
+void UWarriorAnimInstance::SetBladeModeState(bool bInActive, float InAimAngle)
+{
+	bBladeModeActive = bInActive;
+	BladeAimAngle = InAimAngle;
+}
+
+void UWarriorAnimInstance::StartBladeSlashBlend(float InFromAngle, float InDuration)
+{
+	BladeSlashFromAngle = InFromAngle;
+	BladeSlashBlendDuration = InDuration;
+	BladeSlashBlendAlpha = InDuration > 0.0f ? 0.0f : 1.0f;
 }
 
 void UWarriorAnimInstance::SuppressFootIK()

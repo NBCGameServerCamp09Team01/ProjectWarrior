@@ -23,6 +23,18 @@ UWarriorAttributeSet::UWarriorAttributeSet()
 	InitCurrentBalance(1.f);
 }
 
+bool UWarriorAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data)
+{
+	// 시작 GE 적용 전(체력 1)에 맞으면 사망 태그만 붙고 사망 GA는 아직 없어 죽지 않는 적이 된다 → 초기화 중에는 피해 무시
+	if ((Data.EvaluatedData.Attribute == GetDamageTakenAttribute() || Data.EvaluatedData.Attribute == GetBalanceDamageTakenAttribute())
+		&& Data.Target.HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Initializing))
+	{
+		return false;
+	}
+
+	return Super::PreGameplayEffectExecute(Data);
+}
+
 void UWarriorAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	if (!CachedPawnUIInterface.IsValid())

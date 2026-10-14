@@ -22,6 +22,8 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_MustBeHeld);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_MustBeHeld_Block);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_MustBeHeld_Sprint);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Toggleable_BladeMode);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Toggleable_TacticalMode);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Toggleable);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Toggleable_TargetLock);
@@ -40,6 +42,10 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Dodge);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_DodgeRoll);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_TargetLock);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_BladeMode);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_TacticalMode);
+	// 전술 모드 전용 기술(UPlayerGameplayAbility_TacticalTechnique). 전술 모드가 이벤트 데이터로 대상을 넘겨 발동
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_TacticalTechnique);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Finisher);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Ability_Counter);
 	// 퍼펙트 패링한 투사체를 발사자에게 되돌림 (스킬 해금 시 부여)
@@ -73,10 +79,13 @@ namespace WarriorGameplayTags
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_SetByCaller_AttackType_Light);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_SetByCaller_AttackType_Heavy);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_SetByCaller_StaminaDrain);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_Blocking);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_Blocking_Perfect);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_TargetLock);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_BladeMode);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_TacticalMode);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_OverrideLockOnRotation_Character);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_OverrideLockOnRotation_Controller);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Status_RegenStamina);
@@ -114,6 +123,8 @@ namespace WarriorGameplayTags
 	// 사망 몽타주 노티파이 -> 사망/처형 어빌리티: 죽은 자세 도달 (Loop 구간 시작). 이 시점에 어빌리티 종료
 	// AI.Event.Finisher 하위에 두면 GA_AI_Finisher가 다시 발동하므로 별도 계층
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Death_PoseReached);
+	// 사망 몽타주가 쓰러진 자세에 도달함(AI.Event.Death.PoseReached를 받은 뒤). 이 뒤로는 시체가 공격을 받지 않음
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Status_DeathPoseReached);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Projectile_Spawn);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Projectile_Fire);
 	// 플레이어가 공격을 시작함 -> 전방 범위 안의 적에게 전송 (회피 어빌리티 발동)
@@ -226,6 +237,9 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Death_Normal);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Death_Finisher);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Death_Knockback);
+
+	// StartUpData 비동기 로드 중. 시작 GE·사망 GA가 들어가기 전이라 피해를 무시함
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Initializing);
 
 	// 피격 경직 중 (플레이어 피격 경직·넉다운 GA의 활성 태그)
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_HitReact);

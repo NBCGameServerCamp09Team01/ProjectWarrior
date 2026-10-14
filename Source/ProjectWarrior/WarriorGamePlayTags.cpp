@@ -21,6 +21,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_MustBeHeld, "InputTag.MustBeHeld");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_MustBeHeld_Block, "InputTag.MustBeHeld.Block");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_MustBeHeld_Sprint, "InputTag.MustBeHeld.Sprint");
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_BladeMode, "InputTag.Toggleable.BladeMode");
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_TacticalMode, "InputTag.Toggleable.TacticalMode");
 
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable, "InputTag.Toggleable");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_TargetLock, "InputTag.Toggleable.TargetLock");
@@ -39,6 +41,9 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Dodge, "Player.Ability.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_DodgeRoll, "Player.Ability.DodgeRoll");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_TargetLock, "Player.Ability.TargetLock");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_BladeMode, "Player.Ability.BladeMode");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_TacticalMode, "Player.Ability.TacticalMode");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_TacticalTechnique, "Player.Ability.TacticalTechnique");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Finisher, "Player.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Counter, "Player.Ability.Counter");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_ParryReflect, "Player.Ability.ParryReflect");
@@ -70,10 +75,13 @@ namespace WarriorGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_AttackType_Light, "Player.SetByCaller.AttackType.Light");
 	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_AttackType_Heavy, "Player.SetByCaller.AttackType.Heavy");
+	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_StaminaDrain, "Player.SetByCaller.StaminaDrain");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_Blocking, "Player.Status.Blocking");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_Blocking_Perfect, "Player.Status.Blocking.Perfect");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_TargetLock, "Player.Status.TargetLock");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Status_BladeMode, "Player.Status.BladeMode");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Status_TacticalMode, "Player.Status.TacticalMode");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_OverrideLockOnRotation_Character, "Player.Status.OverrideLockOnRotation.Character");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_OverrideLockOnRotation_Controller, "Player.Status.OverrideLockOnRotation.Controller");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_RegenStamina, "Player.Status.RegenStamina");
@@ -105,6 +113,7 @@ namespace WarriorGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Death_PoseReached, "AI.Event.Death.PoseReached");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_DeathPoseReached, "AI.Status.DeathPoseReached");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Spawn, "AI.Event.Projectile.Spawn");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Fire, "AI.Event.Projectile.Fire");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_IncomingAttack, "AI.Event.IncomingAttack");
@@ -196,6 +205,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Normal, "Shared.Status.Death.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Finisher, "Shared.Status.Death.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Knockback, "Shared.Status.Death.Knockback");
+
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Initializing, "Shared.Status.Initializing");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact, "Shared.Status.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact_Front, "Shared.Status.HitReact.Front");

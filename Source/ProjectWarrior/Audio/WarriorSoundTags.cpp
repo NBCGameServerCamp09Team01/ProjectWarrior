@@ -44,6 +44,10 @@ namespace WarriorSoundTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Sound_Player_Dodge, "Sound.Player.Dodge", "회피 동작");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Sound_Player_Death, "Sound.Player.Death", "플레이어 사망(AM_Player_Death)");
 
+	// 블레이드 모드 약점 베기
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Sound_Player_BladeMode_WeakPoint, "Sound.Player.BladeMode.WeakPoint", "블레이드 모드 약점 베기(한 명)");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Sound_Player_BladeMode_WeakPoint_Multi, "Sound.Player.BladeMode.WeakPoint.Multi", "블레이드 모드 약점 동시 베기(두 명 이상). 칸이 없으면 Sound.Player.BladeMode.WeakPoint");
+
 	// 몬스터 동작·액터
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Sound_Enemy_Melee_Swing, "Sound.Enemy.Melee.Swing", "근거리 몬스터 칼 휘두르기(몬스터 전용 공격 몽타주 노티파이)");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(Sound_Enemy_Bow_Release, "Sound.Enemy.Bow.Release", "활 시위(AM_BowShot 노티파이)");
