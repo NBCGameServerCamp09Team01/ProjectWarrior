@@ -13,6 +13,7 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UMeshComponent;
 class UNiagaraComponent;
 class USpringArmComponent;
 class UCameraComponent;
@@ -62,8 +63,30 @@ private:
 	// 화면 기준 베는 선의 방향(월드). 0도 = 카메라 오른쪽, 90도 = 카메라 위
 	FVector GetSlashLineDirection(const FRotator& ViewRotation, float InAngle) const;
 
-	// 베는 판정 상자의 중심과 회전(X = 카메라 앞, Y = 베는 선). 인디케이터도 같은 값을 씀
+	// 베는 판정 상자의 중심과 회전(X = 카메라 앞, Y = 베는 선). 인디케이터도 같은 값을 씀.
+	// 약점 선 대상이 있으면 평면이 캐릭터 → 대상 중심을 지나게 돌려, 어떤 각도로 베어도 대상을 지나감
 	bool GetSlashTransform(float InAngle, FVector& OutCenter, FQuat& OutRotation);
+
+	// 베는 평면의 회전 기준(위쪽은 카메라와 같음). 약점 선 대상이 있으면 X축이 캐릭터 → 대상 중심.
+	// 카메라를 지나는 평면은 옆면으로만 보여 인디케이터가 사라지므로 축은 캐릭터에서 시작
+	bool GetSlashView(FRotator& OutViewRotation);
+
+#pragma region WeakLineLogic
+	// 화면 중앙에 가장 가까운, 맞을 수 있는 적. 지금 대상이 아직 유효하면 그대로 유지
+	APawn* FindWeakLineTarget();
+
+	// 약점 선을 보여도 되는지(= 베면 반드시 피해가 들어가는 상태인지)
+	bool CanShowWeakLine(APawn* InPawn);
+
+	void SetWeakLineTarget(APawn* InPawn);
+	void UpdateWeakLine();
+
+	// 대상의 약점 각도(-90~90, 선이라 180도 주기). 처음 보는 적이면 무작위로 정함
+	float GetWeakLineAngle(const AActor* InActor);
+	void RerollWeakLineAngle(const AActor* InActor);
+
+	bool IsAimAlignedWithWeakLine();
+#pragma endregion
 
 	void CreateIndicator();
 	void UpdateIndicator();
@@ -72,8 +95,8 @@ private:
 	void StartSlashTrail();
 	void StopSlashTrail();
 
-	// InRotation은 판정 상자 회전(X = 카메라 앞, Y = 베는 선, Z = 평면 법선)
-	void SpawnSlashMark(const FQuat& InRotation);
+	// InRotation은 판정 상자 회전(X = 카메라 앞, Y = 베는 선, Z = 평면 법선). 약점을 베었으면 빛줄기 색을 바꿈
+	void SpawnSlashMark(const FQuat& InRotation, bool bWeakPointHit);
 
 	void QueueSlashSparks(const FQuat& InRotation);
 
@@ -307,6 +330,69 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Indicator", meta = (ClampMin = "0.0"))
 	float IndicatorFlashTime = 0.15f;
+
+#pragma region WeakLine
+	// 블레이드 모드 대상(화면 중앙에 가장 가까운 적) 몸에 약점 선을 그림. 칼 각도를 선에 맞춰 베면 추가 데미지를 주고 선이 바뀜
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line")
+	bool bUseWeakLine = true;
+
+	// 대상 메시에 거는 오버레이 머티리얼. WeakPlanePoint·WeakPlaneNormal(벡터), Width·Intensity(스칼라)를 씀. 비우면 M_BladeWeakLine
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line")
+	TObjectPtr<UMaterialInterface> WeakLineMaterial;
+
+	// 칼 각도와 약점 선 각도 차이가 이 안이면 약점 베기(도)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "1.0", ClampMax = "45.0"))
+	float WeakLineTolerance = 15.0f;
+
+	// 허용 범위 밖에서 이만큼 멀어질 때까지 선이 점점 흐려짐(도)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "1.0"))
+	float WeakLineFadeRange = 45.0f;
+
+	// 새 약점 선은 이전 선과 최소 이만큼 다른 각도(도)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.0", ClampMax = "90.0"))
+	float WeakLineMinRerollDelta = 45.0f;
+
+	// 약점 베기 데미지 배율(각도 배율에 곱함)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "1.0"))
+	float WeakPointDamageMultiplier = 3.0f;
+
+	// 카메라 정면에서 이 각도 안에 있는 적만 대상으로 고름(도)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "1.0", ClampMax = "90.0"))
+	float WeakLineTargetConeAngle = 35.0f;
+
+	// 선 두께(cm, 중심에서 한쪽)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.1"))
+	float WeakLineWidth = 3.0f;
+
+	// 각도가 멀 때 / 허용 범위 안일 때 선 밝기
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.0"))
+	float WeakLineFaintIntensity = 0.4f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.0"))
+	float WeakLineAlignedIntensity = 5.0f;
+
+	// 허용 범위 안일 때 인디케이터 색, 약점을 베었을 때 빛줄기 색
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line")
+	FLinearColor WeakLineAlignedColor = FLinearColor(1.0f, 0.65f, 0.1f, 1.0f);
+#pragma endregion
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> WeakLineMaterialInstance;
+
+	// 대상의 보이는 스켈레탈 메시들과 원래 걸려 있던 오버레이(같은 순서, 대상이 바뀌면 되돌림)
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInterface>> SavedTargetOverlayMaterials;
+
+	TWeakObjectPtr<APawn> WeakLineTarget;
+	TArray<TWeakObjectPtr<UMeshComponent>> WeakLineTargetMeshes;
+
+	// 적마다 약점 각도. 블레이드 모드를 나갔다 들어와도 유지(어빌리티가 액터마다 하나라 계속 남음)
+	TMap<TWeakObjectPtr<const AActor>, float> WeakLineAngles;
+
+	FLinearColor IndicatorBaseColor = FLinearColor::White;
+
+	// GetSlashLineOrigin이 빛줄기·불꽃을 베는 평면 위로 옮길 때 쓰는 평면 위의 점
+	FVector LastSlashPlanePoint = FVector::ZeroVector;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> IndicatorComponent;
