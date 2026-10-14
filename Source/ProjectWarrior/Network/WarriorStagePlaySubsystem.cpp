@@ -11,6 +11,7 @@
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
 #include "ProjectWarrior/Network/WarriorStagePlayTypes.h"
+#include "ProjectWarrior/Stage/WarriorPlayCheckpoint.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 
@@ -120,6 +121,60 @@ bool UWarriorStagePlaySubsystem::AbandonStagePlay(const FString& InStagePlayId, 
 		[Callback = MoveTemp(InCallback)](int32 Status, const FString& Body)
 		{
 			Callback(Status, Status == 200 ? FString() : UWarriorApiSubsystem::ParseError(Status, Body).Code);
+		});
+}
+
+bool UWarriorStagePlaySubsystem::SaveCheckpoint(const FWarriorPlayCheckpoint& InCheckpoint, FCheckpointSaveCallback InCallback)
+{
+	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	if (!Auth || CurrentStagePlayId.IsEmpty())
+	{
+		return false;
+	}
+
+	FString RequestBody;
+	if (!WarriorPlayCheckpoint::ToJson(InCheckpoint, RequestBody))
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[StagePlay] Checkpoint body could not be built. stagePlayId=%s"), *CurrentStagePlayId);
+		return false;
+	}
+
+	const FString Path = FString::Printf(TEXT("%s/%s/checkpoint"), WarriorStagePlayApi::StagePlaysPath, *CurrentStagePlayId);
+	return Auth->SendAuthorized(TEXT("PUT"), Path, RequestBody,
+		[Callback = MoveTemp(InCallback)](int32 Status, const FString& Body)
+		{
+			Callback(Status, Status == 200 ? FString() : UWarriorApiSubsystem::ParseError(Status, Body).Code);
+		});
+}
+
+bool UWarriorStagePlaySubsystem::RequestCheckpoint(const FString& InStagePlayId, FCheckpointFetchCallback InCallback)
+{
+	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
+	if (!Auth || InStagePlayId.IsEmpty())
+	{
+		return false;
+	}
+
+	const FString Path = FString::Printf(TEXT("%s/%s/checkpoint"), WarriorStagePlayApi::StagePlaysPath, *InStagePlayId);
+	return Auth->SendAuthorized(TEXT("GET"), Path, FString(),
+		[Callback = MoveTemp(InCallback), InStagePlayId](int32 Status, const FString& Body)
+		{
+			FWarriorPlayCheckpointResponseDto ResponseDto;
+			if (Status == 204)
+			{
+				Callback(EWarriorCheckpointFetch::None, ResponseDto.Data);
+				return;
+			}
+
+			if (Status == 200 && FJsonObjectConverter::JsonObjectStringToUStruct(Body, &ResponseDto))
+			{
+				Callback(EWarriorCheckpointFetch::Found, ResponseDto.Data);
+				return;
+			}
+
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Checkpoint could not be read. stagePlayId=%s status=%d code=%s"),
+				*InStagePlayId, Status, *UWarriorApiSubsystem::ParseError(Status, Body).Code);
+			Callback(EWarriorCheckpointFetch::Failed, FWarriorPlayCheckpoint());
 		});
 }
 

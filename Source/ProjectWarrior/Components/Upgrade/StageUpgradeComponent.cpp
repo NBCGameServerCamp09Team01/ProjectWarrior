@@ -73,6 +73,42 @@ void UStageUpgradeComponent::ResetAll()
 	OnUpgradesReset.Broadcast();
 }
 
+TMap<TObjectPtr<const UDataAsset_Upgrade>, int32> UStageUpgradeComponent::GetUpgradeLevels() const
+{
+	TMap<TObjectPtr<const UDataAsset_Upgrade>, int32> Result;
+	for (const TPair<FGameplayTag, TObjectPtr<const UDataAsset_Upgrade>>& Pair : UpgradeAssets)
+	{
+		const int32 Level = Levels.FindRef(Pair.Key);
+		if (Pair.Value && Level > 0)
+		{
+			Result.Add(Pair.Value, Level);
+		}
+	}
+	return Result;
+}
+
+void UStageUpgradeComponent::RestoreLevels(const TMap<TObjectPtr<const UDataAsset_Upgrade>, int32>& InLevels)
+{
+	ResetAll();
+
+	for (const TPair<TObjectPtr<const UDataAsset_Upgrade>, int32>& Pair : InLevels)
+	{
+		const UDataAsset_Upgrade* Upgrade = Pair.Key;
+		if (!Upgrade || !Upgrade->UpgradeId.IsValid() || !Upgrade->UpgradeEffect || Pair.Value <= 0)
+		{
+			continue;
+		}
+
+		const int32 Level = FMath::Min(Pair.Value, Upgrade->GetMaxLevel());
+		Levels.Add(Upgrade->UpgradeId, Level);
+		UpgradeAssets.Add(Upgrade->UpgradeId, Upgrade);
+
+		ApplyUpgrade(Upgrade, false);
+
+		OnUpgradeChanged.Broadcast(Upgrade->UpgradeId, Level);
+	}
+}
+
 void UStageUpgradeComponent::ApplyUpgrade(const UDataAsset_Upgrade* InUpgrade, bool bRestoreIncreasedAmount)
 {
 	UWarriorAbilitySystemComponent* ASC = GetOwningASC();
@@ -152,4 +188,4 @@ UWarriorAbilitySystemComponent* UStageUpgradeComponent::GetOwningASC() const
 	const APlayerState* PS = GetOwner<APlayerState>();
 	APawn* Pawn = PS ? PS->GetPawn() : nullptr;
 	return Pawn ? UWarriorFunctionLibrary::NativeGetWarriorASCFromActor(Pawn) : nullptr;
-}
+}

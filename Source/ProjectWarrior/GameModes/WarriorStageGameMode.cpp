@@ -18,6 +18,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
+#include "ProjectWarrior/Stage/WarriorPlayCheckpoint.h"
 #include "TimerManager.h"
 
 
@@ -169,6 +170,52 @@ void AWarriorStageGameMode::StopAllWaves()
 	if (AWarriorStageFlowManager* FlowManager = GetStageFlowManager())
 	{
 		FlowManager->StopAll();
+	}
+}
+
+void AWarriorStageGameMode::UploadWaveCheckpoint()
+{
+	if (IsCurrentWaveLast() || CurrentWaveIndex < 0)
+	{
+		return;
+	}
+
+	UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this);
+	if (!StagePlay || StagePlay->GetCurrentStagePlayId().IsEmpty())
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Stage] Checkpoint not uploaded. No stage play id (offline or start failed)."));
+		return;
+	}
+
+	FWarriorPlayCheckpoint Checkpoint;
+	FString Error;
+	if (!WarriorPlayCheckpoint::Capture(this, Checkpoint, Error))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Checkpoint not captured: %s"), *Error);
+		return;
+	}
+	//웨이브 번호는 GameMode 기준(판 통계의 마지막 클리어와 같지만, 건너뛴 웨이브가 있어도 진행 위치와 맞게)
+	Checkpoint.ClearedWave = CurrentWaveIndex + 1;
+	//시간은 결과 제출과 같은 기준(이어한 판이면 체크포인트 시간부터 이어짐)
+	Checkpoint.ElapsedSeconds = GetRunPlayTimeSeconds();
+
+	const FString StagePlayId = StagePlay->GetCurrentStagePlayId();
+	const int32 ClearedWave = Checkpoint.ClearedWave;
+	const bool bSent = StagePlay->SaveCheckpoint(Checkpoint, [StagePlayId, ClearedWave](int32 Status, const FString& ErrorCode)
+	{
+		if (Status == 200)
+		{
+			UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Checkpoint saved. stagePlayId=%s clearedWave=%d"), *StagePlayId, ClearedWave);
+			return;
+		}
+		//재시도·보관하지 않는다. 다음 웨이브 클리어 때 새로 올리고, 이어하기는 서버에 마지막으로 저장된 것으로 한다
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Checkpoint not saved. stagePlayId=%s clearedWave=%d status=%d code=%s"),
+			*StagePlayId, ClearedWave, Status, *ErrorCode);
+	});
+
+	if (bSent)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Checkpoint sent. %s"), *WarriorPlayCheckpoint::Describe(Checkpoint));
 	}
 }
 
@@ -327,15 +374,60 @@ void AWarriorStageGameMode::BeginRun()
 		*GetResolvedStageId().ToString(),
 		Difficulty);
 
+	//로그인 때 이어하기를 골랐으면 그 정보를 꺼낸다(한 번만). 체크포인트가 있으면 판 안 값을 넣고 다음 웨이브의 쉬는 시간부터 시작한다
+	FWarriorStageResumeInfo ResumeInfo;
+	UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+	const bool bResume = LaunchSubsystem && LaunchSubsystem->ConsumeResumeInfo(GetResolvedStageId(), ResumeInfo);
+
+	bResumingFromCheckpoint = bResume && ResumeInfo.Checkpoint.IsSet() && ApplyResumeCheckpoint(ResumeInfo.Checkpoint);
+
 	//서버에 스테이지 플레이 시작(응답을 기다리지 않는다). 받은 stagePlayId로 FinishRun에서 결과를 낸다.
-	//로그인 때 이어하기를 골랐으면 시작 요청 없이 그 플레이 ID를 그대로 쓴다(1차: 웨이브는 늘 처음부터)
+	//이어하기면 시작 요청 없이 그 플레이 ID를 그대로 쓴다
 	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this))
 	{
-		FWarriorStageResumeInfo ResumeInfo;
-		UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
-		const bool bResume = LaunchSubsystem && LaunchSubsystem->ConsumeResumeInfo(GetResolvedStageId(), ResumeInfo);
 		StagePlay->StartStagePlay(GetResolvedStageId(), bResume ? &ResumeInfo : nullptr);
 	}
+}
+
+bool AWarriorStageGameMode::ApplyResumeCheckpoint(const FWarriorPlayCheckpoint& InCheckpoint)
+{
+	const AWarriorStageFlowManager* FlowManager = GetStageFlowManager();
+	const int32 TotalWaveCount = FlowManager ? FlowManager->GetTotalWaveCount() : 0;
+
+	//마지막 웨이브를 클리어한 체크포인트는 없다(그때는 결과를 낸다). 범위를 벗어나면 처음부터
+	if (InCheckpoint.ClearedWave <= 0 || InCheckpoint.ClearedWave >= TotalWaveCount)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Checkpoint ignored. clearedWave %d is out of range (total %d). Starting from wave 1."),
+			InCheckpoint.ClearedWave, TotalWaveCount);
+		return false;
+	}
+
+	FString Error;
+	if (!WarriorPlayCheckpoint::Restore(this, InCheckpoint, Error))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Checkpoint not restored (%s). Starting from wave 1."), *Error);
+		return false;
+	}
+
+	//클리어한 웨이브에 머문 것처럼 맞춘다. 쉬는 시간이 끝나면 StartNextWave가 그다음 웨이브를 시작한다.
+	//판 통계는 위 Restore에서 같은 웨이브를 가리키게 되었으므로 아래 웨이브 알림으로 새 웨이브를 열지 않는다
+	CurrentWaveIndex = InCheckpoint.ClearedWave - 1;
+	if (AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>())
+	{
+		StageGameState->SetWaveInfo(InCheckpoint.ClearedWave, TotalWaveCount, FlowManager->IsBossWave(CurrentWaveIndex));
+	}
+
+	//이어한 판의 플레이 시간 = 체크포인트까지의 시간 + 이어한 뒤 시간(결정 F1). BeginRun이 정한 시작 시각을 그만큼 당긴다
+	RunStartRealTime = GetWorld()->GetRealTimeSeconds() - FMath::Max(0.f, InCheckpoint.ElapsedSeconds);
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Resuming from checkpoint. Cleared wave %d/%d, next wave %d starts after rest. Play time continues from %.1f s."),
+		InCheckpoint.ClearedWave, TotalWaveCount, InCheckpoint.ClearedWave + 1, InCheckpoint.ElapsedSeconds);
+	return true;
+}
+
+float AWarriorStageGameMode::GetRunPlayTimeSeconds() const
+{
+	return static_cast<float>(GetWorld()->GetRealTimeSeconds() - RunStartRealTime);
 }
 
 void AWarriorStageGameMode::FinishRun(bool bInCleared)
@@ -352,7 +444,7 @@ void AWarriorStageGameMode::FinishRun(bool bInCleared)
 	Result.StageId = GetResolvedStageId();
 	Result.Difficulty = Difficulty;
 	Result.bCleared = bInCleared;
-	Result.PlayTimeSeconds = static_cast<float>(GetWorld()->GetRealTimeSeconds() - RunStartRealTime);
+	Result.PlayTimeSeconds = GetRunPlayTimeSeconds();
 
 	AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>();
 	if (StageGameState)

@@ -57,6 +57,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool SpendGold(int32 InAmount);
 
+	//체크포인트(M22)에서 이어 갈 때: 칸과 골드를 통째로 바꾼다. 빈 칸·칸 수 초과·최대 묶음 초과는 버리거나 잘라 낸다.
+	//골드 변화를 사용·획득으로 세지 않도록 판 통계는 이 다음에 되돌린다(WarriorPlayCheckpoint::Restore)
+	void RestoreState(int32 InGold, const TArray<FWarriorInventorySlot>& InSlots);
+
 	UPROPERTY(BlueprintAssignable)
 	FOnInventoryChangedDelegate OnInventoryChanged;
 
@@ -74,4 +78,4 @@ private:
 	FWarriorInventorySlot* FindSlot(const UDataAsset_Item* InItem);
 
 	APawn* GetOwningPlayerPawn() const;
-};
+};

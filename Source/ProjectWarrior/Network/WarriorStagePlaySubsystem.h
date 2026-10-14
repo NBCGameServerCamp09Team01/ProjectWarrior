@@ -12,6 +12,7 @@ struct FWarriorApiResult;
 struct FWarriorPendingRequest;
 struct FWarriorStageResult;
 struct FWarriorStageResumeInfo;
+struct FWarriorPlayCheckpoint;
 
 /**
  * 스테이지 플레이 서브시스템. 스테이지에 들어갈 때 서버에 플레이를 시작하고, 받은 stagePlayId를 보관한다.
@@ -59,6 +60,19 @@ public:
 
 	//POST /accounts/me/stage-plays/{id}/abandon. 보내지 못했으면 false이고 콜백은 오지 않는다
 	bool AbandonStagePlay(const FString& InStagePlayId, FAbandonCallback InCallback);
+
+	//체크포인트 저장 결과. InStatus는 HTTP 상태(연결 실패는 0), InErrorCode는 오류 본문의 code
+	using FCheckpointSaveCallback = TFunction<void(int32 InStatus, const FString& InErrorCode)>;
+
+	//PUT /accounts/me/stage-plays/{CurrentStagePlayId}/checkpoint(C1). 덮어쓴다. 재시도·보관은 하지 않는다(다음 웨이브 클리어 때 새로 올림).
+	//플레이 ID가 없거나(시작 전·시작 실패·디버그) 보내지 못했으면 false이고 콜백은 오지 않는다
+	bool SaveCheckpoint(const FWarriorPlayCheckpoint& InCheckpoint, FCheckpointSaveCallback InCallback);
+
+	//체크포인트 받기 결과. InCheckpoint는 Found일 때만 채워진다
+	using FCheckpointFetchCallback = TFunction<void(EWarriorCheckpointFetch InResult, const FWarriorPlayCheckpoint& InCheckpoint)>;
+
+	//GET /accounts/me/stage-plays/{id}/checkpoint(C2). 보내지 못했으면 false이고 콜백은 오지 않는다
+	bool RequestCheckpoint(const FString& InStagePlayId, FCheckpointFetchCallback InCallback);
 
 	//지금 플레이를 포기하고 ID를 비운다. 판 도중 스스로 나가는 메뉴(일시정지 → 나가기)용. 앱 종료·세션 종료에는 부르지 않는다(다음 로그인 때 이어하기를 묻는다)
 	void AbandonCurrentStagePlay();

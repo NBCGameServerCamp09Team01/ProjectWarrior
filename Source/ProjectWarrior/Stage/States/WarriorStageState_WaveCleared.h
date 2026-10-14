@@ -17,6 +17,9 @@ class PROJECTWARRIOR_API UWarriorStageState_WaveCleared : public UWarriorStageSt
 public:
 	UWarriorStageState_WaveCleared();
 
+	//마지막 웨이브가 아니면 체크포인트를 서버에 올린다(M22)
+	virtual void OnEnter(EWarriorStageState InPrevState) override;
+
 	virtual EWarriorStageState HandleEvent(EWarriorStageEvent InEvent) override;
 	virtual bool UsesTimer() const override { return true; }
 	virtual float GetDuration() const override;

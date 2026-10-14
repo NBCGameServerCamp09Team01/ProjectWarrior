@@ -208,6 +208,59 @@ void UWarriorStageStatsSubsystem::FinishStageRecord(const EWarriorStatOutcome In
 	}
 }
 
+bool UWarriorStageStatsSubsystem::CaptureForCheckpoint(FWarriorStageRecord& OutRecord, float& OutStageTimeSeconds) const
+{
+	if (!IsRecording())
+	{
+		return false;
+	}
+
+	OutRecord = Record;
+	OutRecord.Stats.PlayTimeSeconds = GetLivePlayTimeSeconds();
+	OutStageTimeSeconds = GetStageTimeSeconds();
+	return true;
+}
+
+bool UWarriorStageStatsSubsystem::RestoreFromCheckpoint(const FWarriorStageRecord& InRecord, const float InStageTimeSeconds)
+{
+	UWorld* World = GetWorld();
+	if (!IsRecording() || !World)
+	{
+		return false;
+	}
+
+	//판 식별값은 이번 기록 것을 남긴다
+	const FWarriorStageRecord Current = Record;
+	Record = InRecord;
+	Record.SchemaVersion = Current.SchemaVersion;
+	Record.BuildVersion = Current.BuildVersion;
+	Record.RecordId = Current.RecordId;
+	Record.RunId = Current.RunId;
+	Record.StageId = Current.StageId;
+	Record.StartedAtUtc = Current.StartedAtUtc;
+	Record.Outcome = EWarriorStatOutcome::InProgress;
+	Record.EndedAtUtc = FDateTime();
+
+	//스테이지 시각이 체크포인트 시각부터 이어지게 시작 기준을 당긴다. 지금 상태의 시간은 지금부터 센다
+	const double Now = World->GetTimeSeconds();
+	StageStartWorldTime = Now - FMath::Max(0.0f, InStageTimeSeconds);
+	StateEnterWorldTime = Now;
+
+	//마지막 웨이브는 이미 클리어되어 닫혀 있다. 같은 번호가 다시 와도 새로 열지 않게 그 위치를 가리킨다
+	CurrentWaveIndex = Record.Waves.Num() > 0 ? Record.Waves.Num() - 1 : INDEX_NONE;
+	bPlayerHitThisWave = false;
+	ResetTracking();
+
+	if (const UPlayerInventoryComponent* Inventory = WatchedInventory.Get())
+	{
+		LastKnownGold = Inventory->GetGold();
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stats] Stage record restored from checkpoint: %s waves %d cleared %d playTime %.1f s stageTime %.1f s"),
+		*Record.StageId.ToString(), Record.Waves.Num(), Record.WavesCleared, Record.Stats.PlayTimeSeconds, InStageTimeSeconds);
+	return true;
+}
+
 bool UWarriorStageStatsSubsystem::IsPlayState(const EWarriorStageState InState)
 {
 	switch (InState)

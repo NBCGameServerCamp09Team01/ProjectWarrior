@@ -101,6 +101,19 @@ public:
 	 */
 	void FinishAsAbandoned(UWarriorProfileStatsSubsystem* InProfileStats);
 
+	/**
+	 * 체크포인트(M22)용: 지금까지의 기록 복사본과 스테이지 경과 시간. 기록 중이 아니면 false.
+	 * 복사본의 PlayTimeSeconds는 지금 상태에 머문 시간까지 더한 값이다.
+	 */
+	bool CaptureForCheckpoint(FWarriorStageRecord& OutRecord, float& OutStageTimeSeconds) const;
+
+	/**
+	 * 체크포인트(M22)에서 이어 갈 때: 기록 내용(합계·웨이브·구매·사망·적)을 넣고, 웨이브 시각·플레이 시간이 이어지게 맞춘다.
+	 * 판 식별값(RecordId·RunId·StageId·StartedAtUtc·BuildVersion)은 이번 기록 것을 그대로 쓴다. 기록 중이 아니면 false.
+	 * 인벤토리를 되돌린 뒤에 불러야 그 골드 변화가 사용량으로 세지지 않는다.
+	 */
+	bool RestoreFromCheckpoint(const FWarriorStageRecord& InRecord, float InStageTimeSeconds);
+
 	/** 이번 웨이브에 플레이어가 맞았음을 표시 (무피격 웨이브 판정용) */
 	void MarkPlayerHitThisWave() { bPlayerHitThisWave = true; }
 

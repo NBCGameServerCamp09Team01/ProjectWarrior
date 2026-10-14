@@ -709,7 +709,14 @@ FText AWarriorFrontPlayerController::BuildResumeMessage() const
 		? LOCTEXT("ResumeFromStart", "처음(1웨이브)부터 다시 시작합니다.")
 		: FText::Format(LOCTEXT("ResumeFromWave", "{0}웨이브부터 이어서 합니다."), FText::AsNumber(FromWave));
 
-	return FText::Format(LOCTEXT("ResumeMessage", "진행 중인 스테이지가 있습니다.\n이어하시겠습니까?\n\n{0}{1}\n{2}"), StageName, Remaining, FromText);
+	//체크포인트에서 이어 가면 그때의 골드·체력을 함께 보인다(결정 H2)
+	const FWarriorPlayCheckpoint& Checkpoint = PlayCheckpoint->GetResumableCheckpoint();
+	const FText SummaryText = Checkpoint.IsSet()
+		? FText::Format(LOCTEXT("ResumeSummary", "\n골드 {0} · 체력 {1}"),
+			FText::AsNumber(Checkpoint.State.Gold), FText::AsNumber(FMath::RoundToInt(Checkpoint.State.Attributes.CurrentHealth)))
+		: FText::GetEmpty();
+
+	return FText::Format(LOCTEXT("ResumeMessage", "진행 중인 스테이지가 있습니다.\n이어하시겠습니까?\n\n{0}{1}\n{2}{3}"), StageName, Remaining, FromText, SummaryText);
 }
 
 void AWarriorFrontPlayerController::HandleResumeChoice(bool bConfirmed)
