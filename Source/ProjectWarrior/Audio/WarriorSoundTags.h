@@ -65,6 +65,10 @@ namespace WarriorSoundTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sound_Player_Dodge);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sound_Player_Death);
 
+	// 블레이드 모드 약점 베기 (UPlayerGameplayAbility_BladeMode). 동시에 여럿이면 Multi, 칸이 없으면 부모 칸
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sound_Player_BladeMode_WeakPoint);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sound_Player_BladeMode_WeakPoint_Multi);
+
 	// 몬스터 동작·액터 (근접 휘두르기·활 시위는 몬스터 전용 몽타주의 노티파이, 화살 비행은 SpawnSoundAttached)
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sound_Enemy_Melee_Swing);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sound_Enemy_Bow_Release);

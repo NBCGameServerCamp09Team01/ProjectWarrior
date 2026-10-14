@@ -8,6 +8,8 @@
 #include "ProjectWarrior/AbilitySystem/AbilityTask_ExecuteTaskOnTick.h"
 #include "ProjectWarrior/WarriorFunctionLibrary.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
+#include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -39,6 +41,8 @@ UPlayerGameplayAbility_BladeMode::UPlayerGameplayAbility_BladeMode()
 	ActivationBlockedTags.AddTag(WarriorGameplayTags::Shared_Status_Death);
 
 	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Light;
+	WeakPointHitSoundTag = WarriorSoundTags::Sound_Player_BladeMode_WeakPoint;
+	MultiWeakPointHitSoundTag = WarriorSoundTags::Sound_Player_BladeMode_WeakPoint_Multi;
 }
 
 bool UPlayerGameplayAbility_BladeMode::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -196,6 +200,8 @@ void UPlayerGameplayAbility_BladeMode::BeginBladeMode()
 	}
 
 	ShakeRemaining = 0.0f;
+	BladeBaseFieldOfView = SavedFieldOfView;
+	FovPunchRemaining = 0.0f;
 
 	CachedAnimInstance = Cast<UWarriorAnimInstance>(PlayerCharacter->GetMesh()->GetAnimInstance());
 
@@ -232,6 +238,9 @@ void UPlayerGameplayAbility_BladeMode::RestoreBladeMode()
 	StopSlashTrail();
 	DestroyIndicator();
 	ClearWeakLineTargets();
+
+	// FOV는 아래에서 원래 값으로 되돌림
+	FovPunchRemaining = 0.0f;
 
 	AWarriorPlayerCharacter* PlayerCharacter = GetPlayerCharacterFromActorInfo();
 	AWarriorPlayerController* PlayerController = GetPlayerControllerFromActorInfo();
@@ -327,15 +336,33 @@ void UPlayerGameplayAbility_BladeMode::OnBladeModeTick(float DeltaTime)
 		CachedCameraBoom->TargetArmLength = FMath::FInterpTo(CachedCameraBoom->TargetArmLength, ZoomArmLength, RealDeltaTime, CameraInterpSpeed);
 	}
 
-	if (CachedFollowCamera.IsValid())
-	{
-		CachedFollowCamera->SetFieldOfView(FMath::FInterpTo(CachedFollowCamera->FieldOfView, ZoomFieldOfView, RealDeltaTime, CameraInterpSpeed));
-	}
+	TickFieldOfView(RealDeltaTime);
 
 	UpdateWeakLine();
 	UpdateIndicator();
 	TickSlashEffects(RealDeltaTime);
 	TickCameraShake(RealDeltaTime);
+}
+
+void UPlayerGameplayAbility_BladeMode::TickFieldOfView(float RealDeltaTime)
+{
+	if (!CachedFollowCamera.IsValid())
+	{
+		return;
+	}
+
+	BladeBaseFieldOfView = FMath::FInterpTo(BladeBaseFieldOfView, ZoomFieldOfView, RealDeltaTime, CameraInterpSpeed);
+
+	// 약점 베기 순간 확 좁혔다가 천천히 돌아옴
+	float Punch = 0.0f;
+
+	if (FovPunchRemaining > 0.0f)
+	{
+		FovPunchRemaining = FMath::Max(0.0f, FovPunchRemaining - RealDeltaTime);
+		Punch = FovPunchAmount * FMath::Square(FovPunchRemaining / FovPunchDuration);
+	}
+
+	CachedFollowCamera->SetFieldOfView(BladeBaseFieldOfView - Punch);
 }
 
 void UPlayerGameplayAbility_BladeMode::TickCameraShake(float RealDeltaTime)
@@ -363,8 +390,8 @@ void UPlayerGameplayAbility_BladeMode::TickCameraShake(float RealDeltaTime)
 
 	const FVector Offset(0.0f, NoiseRight, NoiseUp);
 	CachedFollowCamera->SetRelativeLocationAndRotation(
-		SavedCameraRelativeLocation + Offset * SlashShakeAmplitude * Falloff,
-		SavedCameraRelativeRotation + FRotator(0.0f, 0.0f, NoiseRoll * SlashShakeRollAmplitude * Falloff));
+		SavedCameraRelativeLocation + Offset * SlashShakeAmplitude * ShakeScale * Falloff,
+		SavedCameraRelativeRotation + FRotator(0.0f, 0.0f, NoiseRoll * SlashShakeRollAmplitude * ShakeScale * Falloff));
 }
 
 void UPlayerGameplayAbility_BladeMode::ResetCameraShake()
@@ -1199,7 +1226,7 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 		}
 	}
 
-	bool bWeakPointHit = false;
+	int32 WeakPointHitCount = 0;
 
 	for (APawn* HitPawn : HitPawns)
 	{
@@ -1249,7 +1276,7 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 
 		if (bIsWeakPointTarget)
 		{
-			bWeakPointHit = true;
+			++WeakPointHitCount;
 
 			// 베는 평면 밖에 있는 적은 그 적의 약점 선 자리에 금색 빛줄기를 따로 그림
 			FQuat WeakRotation;
@@ -1265,8 +1292,22 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 		}
 	}
 
-	SpawnSlashMark(SlashRotation, bWeakPointHit);
+	SpawnSlashMark(SlashRotation, WeakPointHitCount > 0);
 	QueueSlashSparks(SlashRotation);
+
+	// 약점 베기는 일반 베기와 다르게 소리·센 흔들림·순간 줌인을 줌. 동시에 여럿이면 더 세게
+	// 소리는 사운드 표(DA_SoundSet)에 태그 칸이 있어야 남
+	ShakeScale = 1.0f;
+
+	if (WeakPointHitCount > 0)
+	{
+		const bool bMultiWeakPointHit = WeakPointHitCount >= 2;
+		UWarriorSoundSubsystem::PlaySound2D(PlayerCharacter, bMultiWeakPointHit ? MultiWeakPointHitSoundTag : WeakPointHitSoundTag);
+
+		ShakeScale = bMultiWeakPointHit ? MultiWeakPointShakeScale : WeakPointShakeScale;
+		FovPunchAmount = bMultiWeakPointHit ? MultiWeakPointFovPunch : WeakPointFovPunch;
+		FovPunchRemaining = FovPunchDuration;
+	}
 
 	// 벤 뒤에는 칼이 반대편에 있음. 다음 베기는 그 자리에서 시작
 	// 각도를 돌려 보간하면 칼이 원을 그리며 돌아가므로, 벤 자세에서 반대편 자세로 바로 섞어 몸 앞을 가로지르게 함

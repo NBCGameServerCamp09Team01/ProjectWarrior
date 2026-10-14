@@ -145,6 +145,9 @@ private:
 	void TickCameraShake(float RealDeltaTime);
 	void ResetCameraShake();
 
+	// 줌 보간 + 줌인 펀치를 카메라 FOV에 씀
+	void TickFieldOfView(float RealDeltaTime);
+
 	void BeginBladeMode();
 	void RestoreBladeMode();
 
@@ -399,7 +402,40 @@ private:
 	// 허용 범위 안일 때 인디케이터 색, 약점을 베었을 때 빛줄기 색
 	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line")
 	FLinearColor WeakLineAlignedColor = FLinearColor(1.0f, 0.65f, 0.1f, 1.0f);
+
+	// 약점 베기 효과음(사운드 표의 태그). 동시에 두 명 이상이면 Multi 태그(표에 칸이 없으면 부모 태그 소리)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (Categories = "Sound"))
+	FGameplayTag WeakPointHitSoundTag;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (Categories = "Sound"))
+	FGameplayTag MultiWeakPointHitSoundTag;
+
+	// 약점 베기 카메라 흔들림 배율(일반 베기 흔들림에 곱함). 동시에 두 명 이상이면 Multi
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "1.0"))
+	float WeakPointShakeScale = 2.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "1.0"))
+	float MultiWeakPointShakeScale = 4.0f;
+
+	// 약점 베기 순간 줌인(FOV를 몇 도 좁혔다가 되돌림). 동시에 두 명 이상이면 Multi
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.0"))
+	float WeakPointFovPunch = 6.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.0"))
+	float MultiWeakPointFovPunch = 12.0f;
+
+	// 줌인에서 원래 FOV로 돌아오는 시간(실제 시간, 초)
+	UPROPERTY(EditDefaultsOnly, Category = "Blade Mode|Weak Line", meta = (ClampMin = "0.01"))
+	float FovPunchDuration = 0.3f;
 #pragma endregion
+
+	// 이번 흔들림의 세기 배율(일반 베기 1)
+	float ShakeScale = 1.0f;
+
+	// 줌 보간만 한 FOV(줌인 펀치를 빼고). 매 틱 여기서 펀치를 빼서 카메라에 씀
+	float BladeBaseFieldOfView = 90.0f;
+	float FovPunchAmount = 0.0f;
+	float FovPunchRemaining = 0.0f;
 
 	// 약점 선을 그리고 있는 적 전부
 	UPROPERTY(Transient)
