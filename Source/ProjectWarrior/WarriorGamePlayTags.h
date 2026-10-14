@@ -233,6 +233,9 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Death_Finisher);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Death_Knockback);
 
+	// StartUpData 비동기 로드 중. 시작 GE·사망 GA가 들어가기 전이라 피해를 무시함
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Initializing);
+
 	// 피격 경직 중 (플레이어 피격 경직·넉다운 GA의 활성 태그)
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_HitReact);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_HitReact_Front);

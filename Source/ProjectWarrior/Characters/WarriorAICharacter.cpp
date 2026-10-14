@@ -138,6 +138,9 @@ void AWarriorAICharacter::InitAIStartUpData()
         return;
     }
 
+    // 로드가 끝날 때까지 피해를 받지 않도록 (WarriorAttributeSet::PreGameplayEffectExecute)
+    UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(this, WarriorGameplayTags::Shared_Status_Initializing);
+
     // 로드가 끝나기 전에 적이 사라질 수 있다(스폰 직후 레벨 이동, 즉사). WeakLambda는 this가 무효면 호출하지 않는다
     UAssetManager::GetStreamableManager().RequestAsyncLoad(
         CharacterStartUpData.ToSoftObjectPath(),
@@ -148,6 +151,8 @@ void AWarriorAICharacter::InitAIStartUpData()
                 if (UDataAsset_StartUpDataBase* LoadedData = CharacterStartUpData.Get())
                 {
                     LoadedData->GiveToAbilitySystemComponent(WarriorAbilitySystemComponent);
+
+                    UWarriorFunctionLibrary::RemoveGameplayTagFromActorIfFound(this, WarriorGameplayTags::Shared_Status_Initializing);
 
                     GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::Printf(TEXT("Enemy Start Up Data Loaded")));
                 }

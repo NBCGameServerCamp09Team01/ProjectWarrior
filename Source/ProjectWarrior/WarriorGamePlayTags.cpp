@@ -202,6 +202,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Finisher, "Shared.Status.Death.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Knockback, "Shared.Status.Death.Knockback");
 
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Initializing, "Shared.Status.Initializing");
+
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact, "Shared.Status.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact_Front, "Shared.Status.HitReact.Front");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact_Left, "Shared.Status.HitReact.Left");
