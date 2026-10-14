@@ -27,9 +27,13 @@ struct PROJECTWARRIOR_API FWarriorStageWaveEnemyInfo
 {
 	GENERATED_BODY()
 
-	//몬스터 키. 지금은 임시로 적 BP 파일 이름(예: BP_SamuraiAI). 이름·종류로 바꾸는 도우미는 나중에 붙인다
+	//몬스터 키(서버 monsterId, 예: monster.samurai). M24부터 서버 스테이지 목록(ST1) 값
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	FString EnemyKey;
+
+	//화면 이름(ST1 monsters[].name). 서버 목록에 이름이 없으면 몬스터 키
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	FText DisplayName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	int32 Count = 0;

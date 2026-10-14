@@ -13,7 +13,17 @@ EWarriorStageState UWarriorStageState_Preparing::HandleEvent(EWarriorStageEvent 
 {
 	switch (InEvent)
 	{
-	case EWarriorStageEvent::StateTimerElapsed:	return EWarriorStageState::InProgress;
+	case EWarriorStageEvent::StateTimerElapsed:
+	{
+		//M24: 서버 웨이브 구성이 아직 없으면 준비 상태에서 기다린다. GameMode가 한도를 재고, 구성이 오면 이 이벤트를 다시 보낸다
+		AWarriorStageGameMode* StageGameMode = GetStageGameMode();
+		if (StageGameMode && !StageGameMode->CanStartWaves())
+		{
+			StageGameMode->WaitForWavePlan();
+			return EWarriorStageState::None;
+		}
+		return EWarriorStageState::InProgress;
+	}
 	case EWarriorStageEvent::PlayerDied:		return EWarriorStageState::StageFailed;
 	default:									return EWarriorStageState::None;
 	}

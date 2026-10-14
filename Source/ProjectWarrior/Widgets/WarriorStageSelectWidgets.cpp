@@ -37,7 +37,7 @@ void UWarriorWaveEntryWidget::SetWave(const FWarriorStageWaveInfo& InWave)
 		TArray<FText> Parts;
 		for (const FWarriorStageWaveEnemyInfo& Enemy : InWave.Enemies)
 		{
-			const FText Part = FText::Format(EnemyFormat, FText::FromString(Enemy.EnemyKey), Enemy.Count);
+			const FText Part = FText::Format(EnemyFormat, Enemy.DisplayName, Enemy.Count);
 			Parts.Add(Enemy.bBoss ? FText::Format(LOCTEXT("BossJoin", "{0}{1}"), Part, BossSuffix) : Part);
 		}
 		Text_Enemies->SetText(FText::Join(LOCTEXT("EnemySeparator", " · "), Parts));

@@ -11,6 +11,7 @@
 #include "ProjectWarrior/Network/WarriorPendingRequestStore.h"
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
 #include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
+#include "ProjectWarrior/Stage/WarriorMonsterCatalogDataAsset.h"
 #include "ProjectWarrior/Stage/WarriorPlayCheckpoint.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 
@@ -257,7 +258,22 @@ bool UWarriorPlayCheckpointSubsystem::CanResumeInThisBuild() const
 	}
 
 	FWarriorStageLaunchInfo Info;
-	return UWarriorStageLaunchSubsystem::BuildLaunchInfo(FName(*ResumablePlay.StageId), Info) && !Info.Level.IsNull();
+	if (!UWarriorStageLaunchSubsystem::BuildLaunchInfo(FName(*ResumablePlay.StageId), Info) || Info.Level.IsNull())
+	{
+		return false;
+	}
+
+	//M24: 그 판의 웨이브 구성(시작 때 고정)을 이 빌드에서 만들 수 있어야 한다. 아니면 레벨을 열어도 시작하지 못하고,
+	//플레이가 진행 중으로 남아 로그인마다 같은 실패가 되풀이되므로 팝업에서 [포기]만 보인다(stage-play-api.md "이어하기")
+	FName UnknownMonster;
+	if (!ResumablePlay.WavePlan.IsSet()
+		|| WarriorWavePlan::FindUnknownMonster(ResumablePlay.WavePlan, UWarriorMonsterCatalogDataAsset::LoadFromSettings(), UnknownMonster))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[PlayCheckpoint] Play %s cannot be resumed in this build. waves=%d unknownMonster=%s"),
+			*ResumablePlay.StagePlayId, ResumablePlay.WavePlan.Waves.Num(), *UnknownMonster.ToString());
+		return false;
+	}
+	return true;
 }
 
 bool UWarriorPlayCheckpointSubsystem::Resume()
@@ -278,6 +294,7 @@ bool UWarriorPlayCheckpointSubsystem::Resume()
 	ResumeInfo.ExpiresAt = ResumablePlay.ExpiresAt;
 	ResumeInfo.ResumeFromWave = GetResumeFromWave();
 	ResumeInfo.Checkpoint = ResumableCheckpoint;
+	ResumeInfo.WavePlan = ResumablePlay.WavePlan;
 	LaunchSubsystem->SelectStageForResume(FName(*ResumablePlay.StageId), ResumeInfo);
 
 	UE_LOG(LogProjectWarrior, Log, TEXT("[PlayCheckpoint] Resume play %s (stage %s) from wave %d."),
