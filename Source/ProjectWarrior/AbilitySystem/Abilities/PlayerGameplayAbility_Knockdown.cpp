@@ -39,7 +39,10 @@ UPlayerGameplayAbility_Knockdown::UPlayerGameplayAbility_Knockdown()
 		WarriorGameplayTags::Player_Ability_Counter,
 		WarriorGameplayTags::Player_Ability_Equip_Weapon_Katana,
 		WarriorGameplayTags::Player_Ability_Unequip_Weapon_Katana,
-		WarriorGameplayTags::Shared_Ability_HitReact };
+		WarriorGameplayTags::Shared_Ability_HitReact,
+		// 시간을 늦추는 모드도 넘어지면 풀고(시간·카메라·입력 복구), 누워 있는 동안 다시 켜지 않음
+		WarriorGameplayTags::Player_Ability_BladeMode,
+		WarriorGameplayTags::Player_Ability_TacticalMode };
 	for (const FGameplayTag& Tag : InterruptedAbilityTags)
 	{
 		CancelAbilitiesWithTag.AddTag(Tag);
