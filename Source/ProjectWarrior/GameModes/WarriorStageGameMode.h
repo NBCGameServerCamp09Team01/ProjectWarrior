@@ -60,6 +60,10 @@ public:
 	float GetNextRestTime() const;
 
 	void StopAllWaves();
+
+	//방금 클리어한 웨이브의 체크포인트를 서버에 올린다(M22, C1). 마지막 웨이브면 올리지 않는다(결과를 낸다).
+	//실패해도 판은 그대로 진행하고 보관하지 않는다(다음 웨이브 클리어 때 새로 올림)
+	void UploadWaveCheckpoint();
 	//~ End 상태 객체 전용
 
 	// Stage종료 후 StageUpgrade 원상복구.
@@ -149,7 +153,11 @@ private:
 	FGuid RunId;
 
 	//BeginRun 시점의 실제 시간(초). 플레이 시간 계산에 쓴다.
+	//체크포인트에서 이어 가면 그때까지의 플레이 시간만큼 앞으로 당긴다(이어한 판의 시간 = 체크포인트 시간 + 이어한 뒤, M22)
 	double RunStartRealTime = 0.0;
+
+	//이번 판의 플레이 시간(초). 결과 제출과 체크포인트에 같은 값을 쓴다
+	float GetRunPlayTimeSeconds() const;
 
 	bool bRunFinished = false;
 

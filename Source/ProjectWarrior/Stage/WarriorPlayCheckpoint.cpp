@@ -89,23 +89,23 @@ namespace WarriorPlayCheckpoint
 		FWarriorPlayCheckpoint Checkpoint;
 
 		//판 통계·시간
-		if (!Parts.Stats->CaptureForCheckpoint(Checkpoint.StageRecord, Checkpoint.StageTimeSeconds))
+		if (!Parts.Stats->CaptureForCheckpoint(Checkpoint.State.StageRecord, Checkpoint.State.StageTimeSeconds))
 		{
 			OutError = TEXT("stage record is not recording");
 			return false;
 		}
-		Checkpoint.ElapsedSeconds = Checkpoint.StageRecord.Stats.PlayTimeSeconds;
-		Checkpoint.ClearedWave = FindLastClearedWave(Checkpoint.StageRecord);
+		Checkpoint.ElapsedSeconds = Checkpoint.State.StageRecord.Stats.PlayTimeSeconds;
+		Checkpoint.ClearedWave = FindLastClearedWave(Checkpoint.State.StageRecord);
 
 		//인벤토리
-		Checkpoint.Gold = Parts.Inventory->GetGold();
+		Checkpoint.State.Gold = Parts.Inventory->GetGold();
 		for (const FWarriorInventorySlot& Slot : Parts.Inventory->GetSlots())
 		{
 			if (Slot.IsEmpty())
 			{
 				continue;
 			}
-			FWarriorCheckpointItem& Item = Checkpoint.Items.AddDefaulted_GetRef();
+			FWarriorCheckpointItem& Item = Checkpoint.State.Items.AddDefaulted_GetRef();
 			Item.ItemPath = FSoftObjectPath(Slot.ItemData).ToString();
 			Item.Quantity = Slot.Quantity;
 		}
@@ -113,16 +113,16 @@ namespace WarriorPlayCheckpoint
 		//판 강화
 		for (const TPair<TObjectPtr<const UDataAsset_Upgrade>, int32>& Pair : Parts.Upgrades->GetUpgradeLevels())
 		{
-			FWarriorCheckpointUpgrade& Upgrade = Checkpoint.Upgrades.AddDefaulted_GetRef();
+			FWarriorCheckpointUpgrade& Upgrade = Checkpoint.State.Upgrades.AddDefaulted_GetRef();
 			Upgrade.UpgradeId = Pair.Key->UpgradeId;
 			Upgrade.UpgradePath = FSoftObjectPath(Pair.Key.Get()).ToString();
 			Upgrade.Level = Pair.Value;
 		}
 
 		//GAS 현재값
-		Checkpoint.Attributes.CurrentHealth = Parts.ASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentHealthAttribute());
-		Checkpoint.Attributes.CurrentStamina = Parts.ASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentStaminaAttribute());
-		Checkpoint.Attributes.CurrentBalance = Parts.ASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentBalanceAttribute());
+		Checkpoint.State.Attributes.CurrentHealth = Parts.ASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentHealthAttribute());
+		Checkpoint.State.Attributes.CurrentStamina = Parts.ASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentStaminaAttribute());
+		Checkpoint.State.Attributes.CurrentBalance = Parts.ASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentBalanceAttribute());
 
 		OutCheckpoint = MoveTemp(Checkpoint);
 		return true;
@@ -146,7 +146,7 @@ namespace WarriorPlayCheckpoint
 
 		//1) 판 강화: 최대치를 먼저 맞춘다
 		TMap<TObjectPtr<const UDataAsset_Upgrade>, int32> UpgradeLevels;
-		for (const FWarriorCheckpointUpgrade& Saved : InCheckpoint.Upgrades)
+		for (const FWarriorCheckpointUpgrade& Saved : InCheckpoint.State.Upgrades)
 		{
 			const UDataAsset_Upgrade* Upgrade = Cast<UDataAsset_Upgrade>(FSoftObjectPath(Saved.UpgradePath).TryLoad());
 			if (!Upgrade || Upgrade->UpgradeId != Saved.UpgradeId)
@@ -159,14 +159,14 @@ namespace WarriorPlayCheckpoint
 		Parts.Upgrades->RestoreLevels(UpgradeLevels);
 
 		//2) GAS 현재값: 강화로 맞춰진 최대치 안으로. 체크포인트는 웨이브 클리어 뒤라 체력은 1 이상으로 둔다
-		const FWarriorCheckpointAttributes& Attributes = InCheckpoint.Attributes;
+		const FWarriorCheckpointAttributes& Attributes = InCheckpoint.State.Attributes;
 		SetCurrentAttribute(Parts.ASC, UWarriorAttributeSet::GetCurrentHealthAttribute(), UWarriorAttributeSet::GetMaxHealthAttribute(), Attributes.CurrentHealth, 1.f);
 		SetCurrentAttribute(Parts.ASC, UWarriorAttributeSet::GetCurrentStaminaAttribute(), UWarriorAttributeSet::GetMaxStaminaAttribute(), Attributes.CurrentStamina, 0.f);
 		SetCurrentAttribute(Parts.ASC, UWarriorAttributeSet::GetCurrentBalanceAttribute(), UWarriorAttributeSet::GetMaxBalanceAttribute(), Attributes.CurrentBalance, 0.f);
 
 		//3) 인벤토리
 		TArray<FWarriorInventorySlot> Slots;
-		for (const FWarriorCheckpointItem& Saved : InCheckpoint.Items)
+		for (const FWarriorCheckpointItem& Saved : InCheckpoint.State.Items)
 		{
 			UDataAsset_Item* Item = Cast<UDataAsset_Item>(FSoftObjectPath(Saved.ItemPath).TryLoad());
 			if (!Item || Saved.Quantity <= 0)
@@ -178,10 +178,10 @@ namespace WarriorPlayCheckpoint
 			Slot.ItemData = Item;
 			Slot.Quantity = Saved.Quantity;
 		}
-		Parts.Inventory->RestoreState(InCheckpoint.Gold, Slots);
+		Parts.Inventory->RestoreState(InCheckpoint.State.Gold, Slots);
 
 		//4) 판 통계: 마지막(골드 변화가 사용량으로 세지지 않게)
-		if (!Parts.Stats->RestoreFromCheckpoint(InCheckpoint.StageRecord, InCheckpoint.StageTimeSeconds))
+		if (!Parts.Stats->RestoreFromCheckpoint(InCheckpoint.State.StageRecord, InCheckpoint.State.StageTimeSeconds))
 		{
 			UE_LOG(LogProjectWarrior, Warning, TEXT("[PlayCheckpoint] Stage record not restored (not recording)."));
 		}
@@ -203,9 +203,9 @@ namespace WarriorPlayCheckpoint
 	FString Describe(const FWarriorPlayCheckpoint& InCheckpoint)
 	{
 		return FString::Printf(TEXT("version=%d clearedWave=%d elapsed=%.1f s stageTime=%.1f s gold=%d items=%d upgrades=%d hp=%.0f stamina=%.0f balance=%.0f statWaves=%d"),
-			InCheckpoint.ContentVersion, InCheckpoint.ClearedWave, InCheckpoint.ElapsedSeconds, InCheckpoint.StageTimeSeconds,
-			InCheckpoint.Gold, InCheckpoint.Items.Num(), InCheckpoint.Upgrades.Num(),
-			InCheckpoint.Attributes.CurrentHealth, InCheckpoint.Attributes.CurrentStamina, InCheckpoint.Attributes.CurrentBalance,
-			InCheckpoint.StageRecord.Waves.Num());
+			InCheckpoint.ContentVersion, InCheckpoint.ClearedWave, InCheckpoint.ElapsedSeconds, InCheckpoint.State.StageTimeSeconds,
+			InCheckpoint.State.Gold, InCheckpoint.State.Items.Num(), InCheckpoint.State.Upgrades.Num(),
+			InCheckpoint.State.Attributes.CurrentHealth, InCheckpoint.State.Attributes.CurrentStamina, InCheckpoint.State.Attributes.CurrentBalance,
+			InCheckpoint.State.StageRecord.Waves.Num());
 	}
 }

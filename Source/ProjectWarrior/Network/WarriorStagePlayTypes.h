@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ProjectWarrior/Network/WarriorApiTypes.h"
+#include "ProjectWarrior/Stage/WarriorPlayCheckpointTypes.h"
 #include "WarriorStagePlayTypes.generated.h"
 
 /**
@@ -86,6 +87,32 @@ enum class EWarriorCurrentStagePlay : uint8
 };
 
 //~ End 내 진행 중 플레이
+
+//~ Begin 체크포인트 받기 (GET /accounts/me/stage-plays/{stagePlayId}/checkpoint, C2)
+
+//체크포인트를 물은 결과
+UENUM()
+enum class EWarriorCheckpointFetch : uint8
+{
+	None,	// 204: 없음(올린 적 없음, 판이 끝남, 마감 지남)
+	Found,	// 200: 있음
+	Failed	// 연결 실패·응답을 읽지 못함·그 밖의 상태
+};
+
+//C2 응답 본문 전체: { "data": Checkpoint, "meta": Meta }. data의 stagePlayId·savedAt은 게임이 쓰지 않아 읽지 않는다
+USTRUCT()
+struct PROJECTWARRIOR_API FWarriorPlayCheckpointResponseDto
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FWarriorPlayCheckpoint Data;
+
+	UPROPERTY()
+	FWarriorApiMeta Meta;
+};
+
+//~ End 체크포인트 받기
 
 //~ Begin 결과 제출 (POST /accounts/me/stage-plays/{stagePlayId}/result, result-api.md)
 

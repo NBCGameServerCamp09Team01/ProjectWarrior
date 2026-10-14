@@ -9,6 +9,15 @@ UWarriorStageState_WaveCleared::UWarriorStageState_WaveCleared()
 	StateType = EWarriorStageState::WaveCleared;
 }
 
+void UWarriorStageState_WaveCleared::OnEnter(EWarriorStageState InPrevState)
+{
+	//판 통계는 이 상태로 바뀌는 알림에서 이미 이 웨이브를 클리어로 닫았다. 처치 골드는 적이 죽을 때 들어왔다
+	if (AWarriorStageGameMode* StageGameMode = GetStageGameMode())
+	{
+		StageGameMode->UploadWaveCheckpoint();
+	}
+}
+
 EWarriorStageState UWarriorStageState_WaveCleared::HandleEvent(EWarriorStageEvent InEvent)
 {
 	switch (InEvent)
