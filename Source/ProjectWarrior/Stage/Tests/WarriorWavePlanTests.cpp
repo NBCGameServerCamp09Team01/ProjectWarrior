@@ -180,4 +180,61 @@ bool FWarriorStageStartErrorTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorWavePlanDifficultyTest, "ProjectWarrior.Stage.M9.WavePlanDifficulty",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWarriorWavePlanDifficultyTest::RunTest(const FString& Parameters)
+{
+	// M9(stage-play-api.md v1.4): 판의 difficulty와 적 줄 healthMultiplier·damageMultiplier를 읽어 생성 데이터까지 넘긴다.
+	// 칸이 없으면(M9 전 서버·구성) 난이도 0·배율 1, 0 이하가 와도 1(체력 0인 적이 생기지 않게).
+	// 실패하면 WarriorWavePlan::ReadFromData의 칸 이름과 ToWaveData의 복사를 의심한다
+	const TCHAR* Body = TEXT(R"({
+		"data": {
+			"stagePlayId": "3f2b8c1e-7a4d-4e2f-9b10-6c5d4e3f2a1b",
+			"difficulty": 2,
+			"waveVersion": "w2-m2-d1",
+			"waves": [
+				{ "waveNumber": 1, "restSeconds": 0, "bossWave": false, "goldChanceMultiplier": 1.0, "goldAmountMultiplier": 1.0,
+				  "enemies": [ { "monsterId": "monster.samurai", "count": 5, "boss": false, "spawnGroup": null, "goldReward": 2, "goldDropChance": 1.0,
+				                 "healthMultiplier": 1.5, "damageMultiplier": 1.3 },
+				               { "monsterId": "monster.samurai", "count": 1, "boss": false, "spawnGroup": null, "goldReward": 2, "goldDropChance": 1.0,
+				                 "healthMultiplier": 0, "damageMultiplier": -1 } ] },
+				{ "waveNumber": 2, "restSeconds": 0, "bossWave": false, "goldChanceMultiplier": 1.0, "goldAmountMultiplier": 1.0,
+				  "enemies": [ { "monsterId": "monster.samurai", "count": 2, "boss": false, "spawnGroup": null, "goldReward": 2, "goldDropChance": 1.0 } ] }
+			]
+		},
+		"meta": {}
+	})");
+
+	FWarriorStageWavePlan Plan;
+	WarriorWavePlan::ReadFromResponse(Body, Plan);
+	TestEqual(TEXT("Difficulty"), Plan.Difficulty, 2);
+	if (!TestEqual(TEXT("Wave count"), Plan.Waves.Num(), 2))
+	{
+		return false;
+	}
+	TestEqual(TEXT("Health multiplier"), Plan.Waves[0].Enemies[0].HealthMultiplier, 1.5f);
+	TestEqual(TEXT("Damage multiplier"), Plan.Waves[0].Enemies[0].DamageMultiplier, 1.3f);
+	TestEqual(TEXT("Zero health multiplier becomes 1"), Plan.Waves[0].Enemies[1].HealthMultiplier, 1.f);
+	TestEqual(TEXT("Negative damage multiplier becomes 1"), Plan.Waves[0].Enemies[1].DamageMultiplier, 1.f);
+	TestEqual(TEXT("Missing health multiplier is 1"), Plan.Waves[1].Enemies[0].HealthMultiplier, 1.f);
+	TestEqual(TEXT("Missing damage multiplier is 1"), Plan.Waves[1].Enemies[0].DamageMultiplier, 1.f);
+
+	TArray<FWarriorStageWaveData> Waves;
+	FName Unknown;
+	TestTrue(TEXT("Converted"), WarriorWavePlan::ToWaveData(Plan, WarriorWavePlanTests::MakeCatalog(false), Waves, Unknown));
+	if (TestEqual(TEXT("Wave data count"), Waves.Num(), 2))
+	{
+		TestEqual(TEXT("Spawn data health"), Waves[0].Enemies[0].HealthMultiplier, 1.5f);
+		TestEqual(TEXT("Spawn data damage"), Waves[0].Enemies[0].DamageMultiplier, 1.3f);
+		TestEqual(TEXT("Spawn data default health"), Waves[1].Enemies[0].HealthMultiplier, 1.f);
+	}
+
+	// M9 전 응답(difficulty 칸 없음)은 난이도 0
+	FWarriorStageWavePlan OldPlan;
+	WarriorWavePlan::ReadFromResponse(WarriorWavePlanTests::ResponseBody, OldPlan);
+	TestEqual(TEXT("Old response difficulty"), OldPlan.Difficulty, 0);
+	return true;
+}
+
 #endif

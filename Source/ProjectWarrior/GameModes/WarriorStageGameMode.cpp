@@ -407,7 +407,7 @@ void AWarriorStageGameMode::BeginRun()
 	//이어하기면 시작 요청 없이 그 플레이 ID를 그대로 쓰고, 로그인 때 받은 웨이브 구성이 여기서 바로 들어온다(M24, HandleWavePlanChanged)
 	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this))
 	{
-		StagePlay->StartStagePlay(GetResolvedStageId(), bResume ? &ResumeInfo : nullptr);
+		StagePlay->StartStagePlay(GetResolvedStageId(), bResume ? &ResumeInfo : nullptr, Difficulty);
 	}
 	//구독이 없거나(서브시스템 없음) 이미 정해진 상태도 같은 판단을 한다
 	HandleWavePlanChanged();
@@ -508,6 +508,8 @@ void AWarriorStageGameMode::ResolveStageLaunch()
 	if (LaunchSubsystem && LaunchSubsystem->HasLaunchInfo())
 	{
 		ResolvedLaunchInfo = LaunchSubsystem->GetLaunchInfo();
+		//M9: 선택 화면에서 고른 난이도로 시작 요청을 보낸다
+		Difficulty = ResolvedLaunchInfo.Difficulty;
 		Source = TEXT("selection");
 	}
 	else if (!StageId.IsNone())
@@ -595,6 +597,8 @@ void AWarriorStageGameMode::HandleWavePlanChanged()
 	switch (State)
 	{
 	case EWarriorWavePlanState::Ready:
+		//M9: 결과에 싣는 난이도는 서버가 고정한 그 판의 값(이어하기도 P2의 값)
+		Difficulty = StagePlay->GetWavePlan().Difficulty;
 		ApplyServerWavePlan(StagePlay->GetWaveData(), StagePlay->GetWavePlan().WaveVersion);
 		break;
 

@@ -11,6 +11,7 @@
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
+#include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 
 #define LOCTEXT_NAMESPACE "WarriorStageSelect"
@@ -25,7 +26,7 @@ UWarriorWaveEntryWidget::UWarriorWaveEntryWidget(const FObjectInitializer& Objec
 	BossSuffix = LOCTEXT("BossSuffix", " (보스)");
 }
 
-void UWarriorWaveEntryWidget::SetWave(const FWarriorStageWaveInfo& InWave)
+void UWarriorWaveEntryWidget::SetWave(const FWarriorStageWaveInfo& InWave, int32 InDifficulty)
 {
 	if (Text_WaveLabel)
 	{
@@ -37,7 +38,7 @@ void UWarriorWaveEntryWidget::SetWave(const FWarriorStageWaveInfo& InWave)
 		TArray<FText> Parts;
 		for (const FWarriorStageWaveEnemyInfo& Enemy : InWave.Enemies)
 		{
-			const FText Part = FText::Format(EnemyFormat, Enemy.DisplayName, Enemy.Count);
+			const FText Part = FText::Format(EnemyFormat, Enemy.DisplayName, Enemy.GetCount(InDifficulty));
 			Parts.Add(Enemy.bBoss ? FText::Format(LOCTEXT("BossJoin", "{0}{1}"), Part, BossSuffix) : Part);
 		}
 		Text_Enemies->SetText(FText::Join(LOCTEXT("EnemySeparator", " · "), Parts));
@@ -79,10 +80,11 @@ void UWarriorStageEntryWidget::NativeOnInitialized()
 	}
 }
 
-void UWarriorStageEntryWidget::SetStage(const FWarriorStageListEntry& InStage)
+void UWarriorStageEntryWidget::SetStage(const FWarriorStageListEntry& InStage, int32 InDifficulty)
 {
 	const bool bSameStage = Stage.StageId == InStage.StageId;
 	Stage = InStage;
+	Difficulty = InDifficulty;
 
 	if (Text_StageLabel)
 	{
@@ -184,6 +186,18 @@ void UWarriorStageEntryWidget::HandleRankingClicked()
 	OnRankingClicked.Broadcast(Stage.StageId);
 }
 
+void UWarriorStageEntryWidget::SetDifficulty(int32 InDifficulty)
+{
+	if (Difficulty == InDifficulty)
+	{
+		return;
+	}
+
+	Difficulty = InDifficulty;
+	bWavesBuilt = false;
+	SetWavesExpanded(bWavesExpanded);
+}
+
 void UWarriorStageEntryWidget::SetWavesExpanded(bool bInExpanded)
 {
 	bWavesExpanded = bInExpanded;
@@ -202,7 +216,7 @@ void UWarriorStageEntryWidget::SetWavesExpanded(bool bInExpanded)
 			{
 				if (UWarriorWaveEntryWidget* WaveEntry = CreateWidget<UWarriorWaveEntryWidget>(this, WaveEntryClass))
 				{
-					WaveEntry->SetWave(Wave);
+					WaveEntry->SetWave(Wave, Difficulty);
 					ScrollBox_Waves->AddChild(WaveEntry);
 				}
 			}
@@ -288,6 +302,7 @@ UWarriorStageSelectPopupWidget::UWarriorStageSelectPopupWidget(const FObjectInit
 	: Super(ObjectInitializer)
 {
 	SetIsFocusable(true);
+	DifficultyLabelFormat = LOCTEXT("DifficultyLabelFormat", "난이도: {0}");
 }
 
 void UWarriorStageSelectPopupWidget::NativeOnInitialized()
@@ -302,6 +317,11 @@ void UWarriorStageSelectPopupWidget::NativeOnInitialized()
 	if (Button_Retry)
 	{
 		Button_Retry->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRetryClicked);
+	}
+
+	if (Button_Difficulty)
+	{
+		Button_Difficulty->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleDifficultyClicked);
 	}
 }
 
@@ -425,8 +445,70 @@ void UWarriorStageSelectPopupWidget::HandleEnterFailed()
 void UWarriorStageSelectPopupWidget::HandleListUpdated()
 {
 	SetViewState(EWarriorStageSelectViewState::List);
+	//서버 난이도 목록이 바뀌었을 수 있다(없는 번호면 0으로)
+	SetDifficulty(GetDifficulty());
 	RebuildRegions();
 	RebuildStages();
+}
+
+int32 UWarriorStageSelectPopupWidget::GetDifficulty() const
+{
+	const UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+	return LaunchSubsystem ? LaunchSubsystem->GetSelectedDifficulty() : 0;
+}
+
+void UWarriorStageSelectPopupWidget::SetDifficulty(int32 InDifficulty)
+{
+	//서버 목록(ST1 difficulties)에 있는 번호만. 목록이 없으면(M9 전 서버) 0만
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const bool bKnown = StageList && StageList->GetDifficulties().ContainsByPredicate(
+		[InDifficulty](const FWarriorDifficultyInfo& Info) { return Info.Difficulty == InDifficulty; });
+	const int32 NewDifficulty = bKnown ? InDifficulty : 0;
+
+	if (UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this))
+	{
+		LaunchSubsystem->SetSelectedDifficulty(NewDifficulty);
+	}
+
+	for (UWarriorStageEntryWidget* StageEntry : StageEntries)
+	{
+		if (StageEntry)
+		{
+			StageEntry->SetDifficulty(NewDifficulty);
+		}
+	}
+	UpdateDifficultyLabel();
+}
+
+void UWarriorStageSelectPopupWidget::HandleDifficultyClicked()
+{
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const int32 Count = StageList ? StageList->GetDifficulties().Num() : 0;
+	if (bEnterPending || Count <= 1)
+	{
+		return;
+	}
+	SetDifficulty((GetDifficulty() + 1) % Count);
+}
+
+void UWarriorStageSelectPopupWidget::UpdateDifficultyLabel()
+{
+	const int32 Difficulty = GetDifficulty();
+	FText DisplayName = FText::AsNumber(Difficulty);
+	if (const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this))
+	{
+		if (const FWarriorDifficultyInfo* Info = StageList->GetDifficulties().FindByPredicate(
+			[Difficulty](const FWarriorDifficultyInfo& Entry) { return Entry.Difficulty == Difficulty; }))
+		{
+			DisplayName = Info->DisplayName;
+		}
+	}
+
+	if (Text_Difficulty)
+	{
+		Text_Difficulty->SetText(FText::Format(DifficultyLabelFormat, DisplayName));
+	}
+	BP_OnDifficultyChanged(Difficulty, DisplayName);
 }
 
 void UWarriorStageSelectPopupWidget::HandleListFailed(const FString& InErrorCode, const FString& InErrorMessage)
@@ -572,7 +654,7 @@ void UWarriorStageSelectPopupWidget::RebuildStages()
 	{
 		if (UWarriorStageEntryWidget* StageEntry = CreateWidget<UWarriorStageEntryWidget>(this, StageEntryClass))
 		{
-			StageEntry->SetStage(Stage);
+			StageEntry->SetStage(Stage, GetDifficulty());
 			StageEntry->SetInteractionLocked(bEnterPending);
 			StageEntry->OnEnterClicked.AddUObject(this, &ThisClass::HandleStageEnterClicked);
 			StageEntry->OnRankingClicked.AddUObject(this, &ThisClass::HandleStageRankingClicked);

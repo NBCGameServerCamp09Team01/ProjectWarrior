@@ -75,7 +75,8 @@ public:
 	//POST /accounts/me/stage-plays. 이전 플레이 ID는 지우고, 201이면 새 ID를 보관한다.
 	//InStageId는 소문자로 바꿔 보낸다(예: stage.01.01)
 	//InResume이 있으면(이어하기) 시작 요청을 보내지 않고 그 플레이 ID와 마감을 그대로 쓴다
-	void StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume = nullptr);
+	//InDifficulty: 선택 화면에서 고른 난이도(M9). 이어하기는 쓰지 않는다(시작 때 고정한 구성의 difficulty)
+	void StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume = nullptr, int32 InDifficulty = 0);
 
 	//GET /accounts/me/stage-plays/current. 보내지 못했으면(로그인 안 함) false이고 콜백은 오지 않는다
 	bool RequestCurrentStagePlay(FCurrentStagePlayCallback InCallback);
@@ -195,6 +196,9 @@ private:
 	bool IsCurrentStart(int32 InStartSerial) const { return InStartSerial == StartSerial; }
 
 	FString CurrentStagePlayId;
+
+	//이번 시작 요청의 난이도(M9). 409 복구로 다시 보낼 때도 같은 값
+	int32 StartDifficulty = 0;
 
 	//지금 플레이의 마감(시작 + 24시간). 결과 보관 유효 기간. 못 읽었으면 비어 있다(설정 기본값을 쓴다)
 	FDateTime CurrentStagePlayExpiresAt;

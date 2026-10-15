@@ -130,6 +130,8 @@ bool AWarriorWaveSpawner::BuildPendingRequests(const FWarriorStageWaveData& InWa
 			Request.SpawnGroup = EnemyData.SpawnGroup;
 			Request.GoldReward = FMath::Max(0, EnemyData.GoldReward);
 			Request.GoldDropChance = FMath::Clamp(EnemyData.GoldDropChance, 0.0f, 1.0f);
+			Request.HealthMultiplier = EnemyData.HealthMultiplier;
+			Request.DamageMultiplier = EnemyData.DamageMultiplier;
 		}
 	}
 	return true;
@@ -235,6 +237,8 @@ bool AWarriorWaveSpawner::TrySpawnEnemy(const FWarriorPendingWaveSpawnRequest& S
 		}
 		AliveEnemies.Add(Enemy);
 		EnemyRewards.Add(Enemy, FWarriorWaveEnemyReward{ SpawnRequest.GoldReward, SpawnRequest.GoldDropChance });
+		//M9 난이도: 시작 데이터 로드가 끝난 뒤 체력·공격력에 곱해진다(AWarriorAICharacter::SetDifficultyScale)
+		Enemy->SetDifficultyScale(SpawnRequest.HealthMultiplier, SpawnRequest.DamageMultiplier);
 		++SpawnedEnemyCount;
 		Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
 		Enemy->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);

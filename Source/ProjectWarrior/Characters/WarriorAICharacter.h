@@ -41,6 +41,13 @@ public:
 	// UI(전술 모드 대상 목록 등)에 보이는 이름. 비어 있으면 BP 클래스 이름에서 만듦(BP_SamuraiAI → SamuraiAI)
 	FText GetDisplayName() const;
 
+	// 난이도 배율(M9, 서버 웨이브 구성의 적 줄 healthMultiplier·damageMultiplier). 웨이브 생성기·졸개 소환이 스폰 직후 부른다.
+	// 시작 데이터(GE, 비동기 로드)가 적용된 뒤에 최대·현재 체력과 공격력 기본값에 한 번 곱한다(먼저 곱하면 시작 GE의 Override가 덮어씀)
+	void SetDifficultyScale(float InHealthMultiplier, float InDamageMultiplier);
+
+	float GetDifficultyHealthMultiplier() const { return DifficultyHealthMultiplier; }
+	float GetDifficultyDamageMultiplier() const { return DifficultyDamageMultiplier; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -70,6 +77,17 @@ protected:
 
 private:
 	void InitAIStartUpData();
+
+	// 시작 데이터가 적용됐고 아직 곱하지 않았으면 난이도 배율을 곱한다(한 번만)
+	void ApplyDifficultyScale();
+
+	float DifficultyHealthMultiplier = 1.f;
+	float DifficultyDamageMultiplier = 1.f;
+
+	// 시작 데이터(GE) 적용이 끝났는가. 그 전에 받은 배율은 적용을 미룬다
+	bool bStartUpDataApplied = false;
+
+	bool bDifficultyScaleApplied = false;
 
 public:
 	FORCEINLINE UAICombatComponent* GetAICombatComponent() const { return AICombatComponent; }

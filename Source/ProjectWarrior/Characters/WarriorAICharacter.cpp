@@ -15,6 +15,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "ProjectWarrior/WarriorFunctionLibrary.h"
+#include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
+#include "ProjectWarrior/ProjectWarrior.h"
 
 AWarriorAICharacter::AWarriorAICharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -148,6 +150,9 @@ void AWarriorAICharacter::InitAIStartUpData()
 {
     if (CharacterStartUpData.IsNull())
     {
+        //시작 데이터가 없는 적도 난이도 배율은 받는다(기본값 1에 곱함)
+        bStartUpDataApplied = true;
+        ApplyDifficultyScale();
         return;
     }
 
@@ -165,6 +170,10 @@ void AWarriorAICharacter::InitAIStartUpData()
                 {
                     LoadedData->GiveToAbilitySystemComponent(WarriorAbilitySystemComponent);
 
+                    // M9: 시작 GE(Instant Override)가 기본값을 정한 뒤에 난이도 배율을 곱한다. 피해를 받기 시작하기(태그 해제) 전에
+                    bStartUpDataApplied = true;
+                    ApplyDifficultyScale();
+
                     UWarriorFunctionLibrary::RemoveGameplayTagFromActorIfFound(this, WarriorGameplayTags::Shared_Status_Initializing);
 
                     GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::Printf(TEXT("Enemy Start Up Data Loaded")));
@@ -172,4 +181,39 @@ void AWarriorAICharacter::InitAIStartUpData()
             }
         )
     );
+}
+
+void AWarriorAICharacter::SetDifficultyScale(float InHealthMultiplier, float InDamageMultiplier)
+{
+    //서버가 0보다 큰 값만 보내지만, 잘못 와도 체력 0인 적이 생기지 않게 1로 둔다
+    DifficultyHealthMultiplier = InHealthMultiplier > 0.f ? InHealthMultiplier : 1.f;
+    DifficultyDamageMultiplier = InDamageMultiplier > 0.f ? InDamageMultiplier : 1.f;
+    ApplyDifficultyScale();
+}
+
+void AWarriorAICharacter::ApplyDifficultyScale()
+{
+    //시작 데이터가 아직이면 로드 콜백에서 다시 부른다. 한 번만 곱한다
+    if (!bStartUpDataApplied || bDifficultyScaleApplied || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+    bDifficultyScaleApplied = true;
+
+    if (FMath::IsNearlyEqual(DifficultyHealthMultiplier, 1.f) && FMath::IsNearlyEqual(DifficultyDamageMultiplier, 1.f))
+    {
+        return;
+    }
+
+    //최대 체력을 먼저 올린다(현재 체력이 최대를 넘으면 PostAttributeChange가 잘라냄). 체력 비율은 그대로라 보스 페이즈 판정이 바뀌지 않는다
+    UAbilitySystemComponent* ASC = WarriorAbilitySystemComponent;
+    const float MaxHealth = ASC->GetNumericAttributeBase(UWarriorAttributeSet::GetMaxHealthAttribute());
+    const float CurrentHealth = ASC->GetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute());
+    const float AttackPower = ASC->GetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute());
+    ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetMaxHealthAttribute(), MaxHealth * DifficultyHealthMultiplier);
+    ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute(), CurrentHealth * DifficultyHealthMultiplier);
+    ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute(), AttackPower * DifficultyDamageMultiplier);
+
+    UE_LOG(LogProjectWarrior, Verbose, TEXT("[Stage] %s difficulty scale applied. health x%.2f (%.0f -> %.0f), attack x%.2f"),
+        *GetName(), DifficultyHealthMultiplier, MaxHealth, MaxHealth * DifficultyHealthMultiplier, DifficultyDamageMultiplier);
 }

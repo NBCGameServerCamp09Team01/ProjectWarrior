@@ -39,24 +39,33 @@ void UWarriorStageLaunchSubsystem::SelectStage(FName InStageId)
 		return;
 	}
 
-	if (LaunchInfo.StageId == InStageId)
+	//같은 스테이지·같은 난이도면 그대로. 난이도만 바꾼 재입장은 아래에서 다시 만든다(M9)
+	if (LaunchInfo.StageId == InStageId && LaunchInfo.Difficulty == SelectedDifficulty)
 	{
 		return;
 	}
 
-	if (!BuildLaunchInfo(InStageId, LaunchInfo))
+	const bool bFromCatalog = BuildLaunchInfo(InStageId, LaunchInfo);
+	LaunchInfo.Difficulty = SelectedDifficulty;
+	if (!bFromCatalog)
 	{
 		//임시: 목록에 없는 키도 그대로 쓴다(서버가 판 시작에서 STAGE_NOT_FOUND로 거절한다).
 		//게임 파일 검사(세션 연결 뒤 서버 정의와 목록 대조)가 생기면 그 단계에서 막는다. 인계: stage-p4-handover-1009.md
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] Selected stage %s is not in the stage catalog. The level's own waves will be used."), *InStageId.ToString());
 	}
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Stage selected: %s (level %s, waves %s)"),
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Stage selected: %s difficulty %d (level %s, waves %s)"),
 		*LaunchInfo.StageId.ToString(),
+		LaunchInfo.Difficulty,
 		LaunchInfo.Level.IsNull() ? TEXT("-") : *LaunchInfo.Level.ToSoftObjectPath().GetLongPackageName(),
 		LaunchInfo.WaveData.IsNull() ? TEXT("level") : *LaunchInfo.WaveData.ToSoftObjectPath().GetAssetName());
 
 	OnLaunchInfoChanged.Broadcast(LaunchInfo);
+}
+
+void UWarriorStageLaunchSubsystem::SetSelectedDifficulty(int32 InDifficulty)
+{
+	SelectedDifficulty = FMath::Max(0, InDifficulty);
 }
 
 void UWarriorStageLaunchSubsystem::SelectStageForResume(FName InStageId, const FWarriorStageResumeInfo& InResume)

@@ -35,11 +35,19 @@ struct PROJECTWARRIOR_API FWarriorStageWaveEnemyInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	FText DisplayName;
 
+	//난이도 0의 마리 수(ST1 count)
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	int32 Count = 0;
 
+	//난이도별 마리 수(M9, ST1 counts, 서버가 계산한 값). 난이도 번호 순. 비어 있으면(M9 전 서버) Count
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	TArray<int32> Counts;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	bool bBoss = false;
+
+	//고른 난이도의 마리 수. 게임은 직접 계산하지 않는다(반올림·계단식 규칙은 서버에만 있음)
+	int32 GetCount(int32 InDifficulty) const { return Counts.IsValidIndex(InDifficulty) ? Counts[InDifficulty] : Count; }
 };
 
 /** 웨이브 하나의 구성. */
@@ -57,6 +65,43 @@ struct PROJECTWARRIOR_API FWarriorStageWaveInfo
 
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	TArray<FWarriorStageWaveEnemyInfo> Enemies;
+};
+
+/** 난이도 하나(M9, ST1 difficulties). 선택 화면 버튼용. */
+USTRUCT(BlueprintType)
+struct PROJECTWARRIOR_API FWarriorDifficultyInfo
+{
+	GENERATED_BODY()
+
+	//난이도 번호. 0 = 이지(조절 없음)
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 Difficulty = 0;
+
+	//서버 name
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	FText DisplayName;
+};
+
+/** 스테이지의 난이도 배율 하나(M9, ST1 stages[].multipliers, 스테이지 덮어쓰기 반영). 안내 문구용. */
+USTRUCT(BlueprintType)
+struct PROJECTWARRIOR_API FWarriorStageDifficultyMultipliers
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 Difficulty = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	float EnemyCountMultiplier = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	float EnemyHealthMultiplier = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	float EnemyDamageMultiplier = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	float GoldAmountMultiplier = 1.f;
 };
 
 /** 스테이지 한 줄. */
@@ -101,9 +146,13 @@ struct PROJECTWARRIOR_API FWarriorStageListEntry
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	bool bCanEnter = false;
 
-	//웨이브 구성. 지금은 UE 웨이브 DataAsset에서 읽는다(UWarriorStageListSubsystem::BuildWaveInfo 한 곳)
+	//웨이브 구성. 서버 스테이지 목록(ST1) 값(UWarriorStageListSubsystem::BuildWaveInfo 한 곳)
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	TArray<FWarriorStageWaveInfo> Waves;
+
+	//이 스테이지의 난이도 배율(M9). 난이도 번호 순. M9 전 서버면 비어 있다
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	TArray<FWarriorStageDifficultyMultipliers> Multipliers;
 };
 
 /** 지역 한 칸과 그 안의 스테이지. */

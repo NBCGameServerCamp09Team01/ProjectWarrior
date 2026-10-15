@@ -43,6 +43,14 @@ struct PROJECTWARRIOR_API FWarriorWaveEnemySpawnData
 	/** 처치 시 골드 지급 확률(0~1). 웨이브 DropModifier.GoldDropChanceMultiplier가 곱해진다. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Warrior|Stage|Reward", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float GoldDropChance = 1.0f;
+
+	/** 난이도 체력 배율(M9, 서버 구성의 healthMultiplier). 스폰한 적의 최대·현재 체력에 곱한다. 로컬 웨이브는 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Warrior|Stage|Difficulty", meta = (ClampMin = "0.01"))
+	float HealthMultiplier = 1.0f;
+
+	/** 난이도 공격력 배율(M9, 서버 구성의 damageMultiplier). 스폰한 적의 공격력에 곱한다. 로컬 웨이브는 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Warrior|Stage|Difficulty", meta = (ClampMin = "0.01"))
+	float DamageMultiplier = 1.0f;
 };
 
 /** 스테이지 내 단일 웨이브의 편집용 데이터. */
@@ -98,6 +106,12 @@ struct PROJECTWARRIOR_API FWarriorPendingWaveSpawnRequest
 
 	UPROPERTY()
 	float GoldDropChance = 1.0f;
+
+	UPROPERTY()
+	float HealthMultiplier = 1.0f;
+
+	UPROPERTY()
+	float DamageMultiplier = 1.0f;
 };
 
 /** 스폰된 적 한 마리에 붙는 처치 보상 정보. */

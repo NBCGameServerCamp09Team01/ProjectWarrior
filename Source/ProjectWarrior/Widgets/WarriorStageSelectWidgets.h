@@ -41,7 +41,8 @@ class PROJECTWARRIOR_API UWarriorWaveEntryWidget : public UUserWidget
 public:
 	UWarriorWaveEntryWidget(const FObjectInitializer& ObjectInitializer);
 
-	void SetWave(const FWarriorStageWaveInfo& InWave);
+	//InDifficulty: 선택 화면에서 고른 난이도(M9). 그 난이도의 마리 수(ST1 counts)를 보인다
+	void SetWave(const FWarriorStageWaveInfo& InWave, int32 InDifficulty = 0);
 
 protected:
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -72,7 +73,10 @@ class PROJECTWARRIOR_API UWarriorStageEntryWidget : public UUserWidget
 public:
 	UWarriorStageEntryWidget(const FObjectInitializer& ObjectInitializer);
 
-	void SetStage(const FWarriorStageListEntry& InStage);
+	void SetStage(const FWarriorStageListEntry& InStage, int32 InDifficulty = 0);
+
+	//고른 난이도가 바뀌면(M9) 펼친 웨이브 줄의 마리 수를 다시 그린다
+	void SetDifficulty(int32 InDifficulty);
 
 	//입장 버튼. 인자는 StageId
 	FOnWarriorStageSelectIdClicked OnEnterClicked;
@@ -160,6 +164,9 @@ private:
 	bool bWavesExpanded = false;
 	bool bWavesBuilt = false;
 	bool bInteractionLocked = false;
+
+	//웨이브 줄에 보일 난이도(M9)
+	int32 Difficulty = 0;
 };
 
 /** 지역 칸 하나: 이름 + 스테이지마다 점(클리어한 수만큼 채움). */
@@ -238,6 +245,15 @@ public:
 	//입장 요청이 실패했을 때(프론트 컨트롤러가 부른다). 막았던 버튼을 풀고 목록을 다시 받는다
 	void HandleEnterFailed();
 
+	//난이도를 고른다(M9). 다음 입장의 판 시작 요청에 실리고(UWarriorStageLaunchSubsystem), 웨이브 미리보기 마리 수가 바뀐다.
+	//서버 목록에 없는 번호면 0(이지)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Stage")
+	void SetDifficulty(int32 InDifficulty);
+
+	//지금 고른 난이도. 게임을 켜 둔 동안 기억한다(처음 0 = 이지)
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
+	int32 GetDifficulty() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
 	FOnWarriorStageSelectPopupClosed OnClosed;
 
@@ -259,6 +275,17 @@ protected:
 
 	UFUNCTION()
 	void HandleRetryClicked();
+
+	//난이도 버튼: 다음 난이도로(이지 → 노말 → 하드 → 이지)
+	UFUNCTION()
+	void HandleDifficultyClicked();
+
+	//난이도 글자를 지금 값으로 맞추고 BP에 알린다
+	void UpdateDifficultyLabel();
+
+	//난이도가 바뀌었을 때(WBP가 버튼 모양을 바꾸는 데 씀)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Stage", meta = (DisplayName = "On Difficulty Changed"))
+	void BP_OnDifficultyChanged(int32 InDifficulty, const FText& InDisplayName);
 
 	void HandleRegionClicked(FName InRegionId);
 	void HandleStageEnterClicked(FName InStageId);
@@ -291,6 +318,17 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Retry;
+
+	//난이도 고르기(M9). WBP에 같은 이름으로 두면 붙는다. 없으면 난이도 0(이지)으로만 들어간다
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Difficulty;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_Difficulty;
+
+	//{0} = 난이도 이름(서버 ST1 difficulties[].name)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage|Text")
+	FText DifficultyLabelFormat;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
 	TSubclassOf<UWarriorRegionEntryWidget> RegionEntryClass;

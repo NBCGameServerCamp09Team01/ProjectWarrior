@@ -65,6 +65,7 @@ namespace WarriorWavePlan
 		}
 
 		OutPlan.WaveVersion = GetStringOrEmpty(InData, TEXT("waveVersion"));
+		OutPlan.Difficulty = FMath::Max(0, GetNumberOr<int32>(InData, TEXT("difficulty"), 0));
 
 		const TArray<TSharedPtr<FJsonValue>>* WaveValues = nullptr;
 		if (!InData->TryGetArrayField(TEXT("waves"), WaveValues))
@@ -108,6 +109,11 @@ namespace WarriorWavePlan
 				Enemy.SpawnGroup = ToNameOrNone(GetStringOrEmpty(EnemyObject, TEXT("spawnGroup")));
 				Enemy.GoldReward = GetNumberOr<int32>(EnemyObject, TEXT("goldReward"), 0);
 				Enemy.GoldDropChance = GetNumberOr<float>(EnemyObject, TEXT("goldDropChance"), 1.f);
+				//M9: 없으면(M9 전) 1. 0 이하가 와도 체력 0인 적이 생기지 않게 1
+				const float HealthMultiplier = GetNumberOr<float>(EnemyObject, TEXT("healthMultiplier"), 1.f);
+				const float DamageMultiplier = GetNumberOr<float>(EnemyObject, TEXT("damageMultiplier"), 1.f);
+				Enemy.HealthMultiplier = HealthMultiplier > 0.f ? HealthMultiplier : 1.f;
+				Enemy.DamageMultiplier = DamageMultiplier > 0.f ? DamageMultiplier : 1.f;
 			}
 		}
 	}
@@ -165,6 +171,8 @@ namespace WarriorWavePlan
 				Enemy.SpawnGroup = PlanEnemy.SpawnGroup;
 				Enemy.GoldReward = PlanEnemy.GoldReward;
 				Enemy.GoldDropChance = PlanEnemy.GoldDropChance;
+				Enemy.HealthMultiplier = PlanEnemy.HealthMultiplier;
+				Enemy.DamageMultiplier = PlanEnemy.DamageMultiplier;
 			}
 		}
 		return true;
