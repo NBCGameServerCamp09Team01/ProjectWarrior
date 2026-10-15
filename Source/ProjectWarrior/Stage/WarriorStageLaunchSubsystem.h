@@ -102,7 +102,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
 	int32 GetSelectedDifficulty() const { return SelectedDifficulty; }
 
-	//진행 중인 서버 플레이를 이어 가도록 스테이지를 고른다. 다음 스테이지 레벨의 BeginRun이 ConsumeResumeInfo로 한 번만 가져간다
+	//진행 중인 서버 플레이를 이어 가도록 스테이지를 고른다. 다음 스테이지 레벨의 BeginRun이 ConsumeResumeInfo로 한 번만 가져간다.
+	//난이도는 InResume.WavePlan(P2)의 값. 구성이 없는 디버그 이어하기만 화면 선택 난이도
 	void SelectStageForResume(FName InStageId, const FWarriorStageResumeInfo& InResume);
 
 	//InStageId의 이어하기 정보가 있으면 꺼내고 지운다(결과 화면의 "다시 하기"가 끝난 플레이 ID를 다시 쓰지 않게). 없거나 스테이지가 다르면 false
@@ -124,6 +125,9 @@ public:
 	static bool BuildLaunchInfoForLevel(const FString& InLevelPackageName, FWarriorStageLaunchInfo& OutInfo);
 
 private:
+	//SelectStage의 본체. 실행 정보의 난이도를 InDifficulty로 정한다(보통 선택은 화면 선택, 이어하기는 그 판의 값)
+	void SelectStageWithDifficulty(FName InStageId, int32 InDifficulty);
+
 	FWarriorStageLaunchInfo LaunchInfo;
 
 	//SelectStageForResume으로 정한 이어하기 정보. 다른 스테이지를 고르거나 선택을 지우면 함께 지운다

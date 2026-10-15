@@ -30,6 +30,11 @@ UWarriorStageLaunchSubsystem* UWarriorStageLaunchSubsystem::Get(const UObject* W
 
 void UWarriorStageLaunchSubsystem::SelectStage(FName InStageId)
 {
+	SelectStageWithDifficulty(InStageId, SelectedDifficulty);
+}
+
+void UWarriorStageLaunchSubsystem::SelectStageWithDifficulty(FName InStageId, int32 InDifficulty)
+{
 	//보통 선택은 새 플레이로 시작한다
 	PendingResume = FWarriorStageResumeInfo();
 
@@ -40,13 +45,13 @@ void UWarriorStageLaunchSubsystem::SelectStage(FName InStageId)
 	}
 
 	//같은 스테이지·같은 난이도면 그대로. 난이도만 바꾼 재입장은 아래에서 다시 만든다(M9)
-	if (LaunchInfo.StageId == InStageId && LaunchInfo.Difficulty == SelectedDifficulty)
+	if (LaunchInfo.StageId == InStageId && LaunchInfo.Difficulty == InDifficulty)
 	{
 		return;
 	}
 
 	const bool bFromCatalog = BuildLaunchInfo(InStageId, LaunchInfo);
-	LaunchInfo.Difficulty = SelectedDifficulty;
+	LaunchInfo.Difficulty = InDifficulty;
 	if (!bFromCatalog)
 	{
 		//임시: 목록에 없는 키도 그대로 쓴다(서버가 판 시작에서 STAGE_NOT_FOUND로 거절한다).
@@ -70,15 +75,18 @@ void UWarriorStageLaunchSubsystem::SetSelectedDifficulty(int32 InDifficulty)
 
 void UWarriorStageLaunchSubsystem::SelectStageForResume(FName InStageId, const FWarriorStageResumeInfo& InResume)
 {
-	SelectStage(InStageId);
+	//이어하기는 그 판의 난이도(P2 구성, 시작 때 서버가 고정)로 연다. 게임을 다시 켜면 화면 선택이 0으로 돌아가므로 그 값을 쓰지 않는다.
+	//서버 판 없는 디버그 이어하기(구성 없음)만 화면 선택을 쓴다. 화면 선택(SelectedDifficulty)은 바꾸지 않는다
+	const int32 ResumeDifficulty = InResume.WavePlan.IsSet() ? InResume.WavePlan.Difficulty : SelectedDifficulty;
+	SelectStageWithDifficulty(InStageId, ResumeDifficulty);
 	if (InStageId.IsNone())
 	{
 		return;
 	}
 
 	PendingResume = InResume;
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Stage %s will resume play %s from wave %d"),
-		*InStageId.ToString(), *PendingResume.StagePlayId, PendingResume.ResumeFromWave);
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Stage %s will resume play %s from wave %d (difficulty %d)"),
+		*InStageId.ToString(), *PendingResume.StagePlayId, PendingResume.ResumeFromWave, LaunchInfo.Difficulty);
 }
 
 bool UWarriorStageLaunchSubsystem::ConsumeResumeInfo(FName InStageId, FWarriorStageResumeInfo& OutResume)
