@@ -104,6 +104,19 @@ const FWarriorStageListEntry* UWarriorStageListSubsystem::FindStage(FName InStag
 	return nullptr;
 }
 
+bool UWarriorStageListSubsystem::HasDifficulty(int32 InDifficulty) const
+{
+	return Difficulties.ContainsByPredicate(
+		[InDifficulty](const FWarriorDifficultyInfo& Info) { return Info.Difficulty == InDifficulty; });
+}
+
+FText UWarriorStageListSubsystem::GetDifficultyDisplayName(int32 InDifficulty) const
+{
+	const FWarriorDifficultyInfo* Info = Difficulties.FindByPredicate(
+		[InDifficulty](const FWarriorDifficultyInfo& Entry) { return Entry.Difficulty == InDifficulty; });
+	return Info ? Info->DisplayName : FText::AsNumber(InDifficulty);
+}
+
 void UWarriorStageListSubsystem::RequestStageList()
 {
 	const int32 Serial = ++RequestSerial;

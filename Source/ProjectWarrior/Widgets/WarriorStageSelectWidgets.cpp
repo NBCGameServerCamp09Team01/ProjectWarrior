@@ -414,7 +414,7 @@ void UWarriorStageSelectPopupWidget::HandleStageRankingClicked(FName InStageId)
 	{
 		StageRankingCard->AddToViewport(StageRankingCardZOrder);
 	}
-	StageRankingCard->ShowStage(Stage->StageId, Stage->DisplayName, Stage->Order);
+	StageRankingCard->ShowStage(Stage->StageId, Stage->DisplayName, Stage->Order, GetDifficulty());
 	StageRankingCard->SetKeyboardFocus();
 }
 

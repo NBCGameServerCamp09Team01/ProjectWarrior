@@ -38,9 +38,10 @@ public:
 	virtual void Deinitialize() override;
 	//~ End USubsystem Interface
 
-	//보드의 첫 묶음과 내 줄을 받는다. 스테이지·지역 보드는 TargetId, 전체 총합·진행 보드는 TargetId 없이. 진행 보드는 기간 All만
+	//보드의 첫 묶음과 내 줄을 받는다. 스테이지·지역 보드는 TargetId, 전체 총합·진행 보드는 TargetId 없이. 진행 보드는 기간 All만.
+	//InDifficulty: 그 난이도의 보드(M9). 진행 보드는 난이도가 없어 무시한다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Ranking")
-	void RequestBoard(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit = 20);
+	void RequestBoard(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit = 20, int32 InDifficulty = 0);
 
 	//지금 보드의 다음 묶음. 더 없거나 받는 중이면 아무것도 하지 않는다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Ranking")

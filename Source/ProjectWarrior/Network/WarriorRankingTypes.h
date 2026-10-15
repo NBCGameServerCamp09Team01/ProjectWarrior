@@ -45,7 +45,7 @@ enum class EWarriorRankingFailure : uint8
 	Other
 };
 
-//보드 하나(대상 × 기간). 진행은 TargetId가 None
+//보드 하나(대상 × 기간 × 난이도). 진행은 TargetId가 None, 난이도 0
 USTRUCT(BlueprintType)
 struct PROJECTWARRIOR_API FWarriorRankingBoardKey
 {
@@ -60,9 +60,13 @@ struct PROJECTWARRIOR_API FWarriorRankingBoardKey
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Ranking")
 	EWarriorRankingPeriod Period = EWarriorRankingPeriod::All;
 
+	//쿼리 difficulty(ranking-api v1.1). 보드는 난이도마다 따로다. 진행 보드는 난이도가 없어 0
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Ranking")
+	int32 Difficulty = 0;
+
 	bool operator==(const FWarriorRankingBoardKey& Other) const
 	{
-		return Kind == Other.Kind && TargetId == Other.TargetId && Period == Other.Period;
+		return Kind == Other.Kind && TargetId == Other.TargetId && Period == Other.Period && Difficulty == Other.Difficulty;
 	}
 };
 
