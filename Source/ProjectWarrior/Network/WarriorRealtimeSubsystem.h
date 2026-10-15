@@ -56,7 +56,7 @@ public:
 	FOnWarriorRealtimeStateChanged OnStateChanged;
 
 protected:
-	//연결 경로. 주소는 인증 서브시스템의 BaseUrl을 ws로 바꿔 붙인다
+	//연결 경로. 주소는 인증 서브시스템의 지금 서버 주소(GetEffectiveBaseUrl)를 ws로 바꿔 붙인다
 	UPROPERTY(Config)
 	FString RealtimePath = TEXT("/realtime");
 
