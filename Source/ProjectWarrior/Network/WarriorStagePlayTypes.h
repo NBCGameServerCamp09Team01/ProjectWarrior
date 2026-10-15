@@ -17,7 +17,7 @@
 
 //~ Begin 시작 (POST /accounts/me/stage-plays)
 
-//시작 요청 본문. 난이도는 기본 0이라 보내지 않는다
+//시작 요청 본문
 USTRUCT()
 struct PROJECTWARRIOR_API FWarriorStagePlayStartRequestDto
 {
@@ -30,6 +30,10 @@ struct PROJECTWARRIOR_API FWarriorStagePlayStartRequestDto
 	//스테이지 키(소문자). 예: stage.01.01
 	UPROPERTY()
 	FString StageId;
+
+	//선택 화면에서 고른 난이도(M9, stage-play-api.md v1.4). 서버 difficulties.json에 없는 번호면 400
+	UPROPERTY()
+	int32 Difficulty = 0;
 };
 
 //스테이지 플레이 하나(시작·현황·조회·포기 응답의 data). 게임이 쓰지 않는 칸(accountId·시각)은 두지 않는다

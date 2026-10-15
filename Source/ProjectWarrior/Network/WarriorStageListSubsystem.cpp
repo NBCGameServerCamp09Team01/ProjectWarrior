@@ -237,6 +237,23 @@ bool UWarriorStageListSubsystem::ParseDefinitions(const FString& InBody)
 		}
 	}
 
+	//M9: 난이도 목록. 없으면(v1.4 전 서버) 비어 있다(선택 화면은 난이도 0만)
+	TArray<FWarriorDifficultyInfo> NewDifficulties;
+	const TArray<TSharedPtr<FJsonValue>>* DifficultyValues = nullptr;
+	if (Data->TryGetArrayField(TEXT("difficulties"), DifficultyValues))
+	{
+		for (const TSharedPtr<FJsonValue>& DifficultyValue : *DifficultyValues)
+		{
+			const TSharedPtr<FJsonObject> DifficultyObject = DifficultyValue.IsValid() ? DifficultyValue->AsObject() : nullptr;
+			if (DifficultyObject.IsValid())
+			{
+				FWarriorDifficultyInfo& Difficulty = NewDifficulties.AddDefaulted_GetRef();
+				Difficulty.Difficulty = GetIntOrZero(DifficultyObject, TEXT("difficulty"));
+				Difficulty.DisplayName = FText::FromString(GetStringOrEmpty(DifficultyObject, TEXT("name")));
+			}
+		}
+	}
+
 	TArray<FRegionDef> NewRegions;
 	for (const TSharedPtr<FJsonValue>& RegionValue : *RegionValues)
 	{
@@ -270,6 +287,7 @@ bool UWarriorStageListSubsystem::ParseDefinitions(const FString& InBody)
 				Stage.RequiresStageId = Requires.IsEmpty() ? NAME_None : FName(*Requires);
 				Stage.WaveCount = GetIntOrZero(StageObject, TEXT("waveCount"));
 				ParseWaves(StageObject, MonsterNames, Stage.Waves);
+				ParseMultipliers(StageObject, Stage.Multipliers);
 			}
 		}
 
@@ -278,6 +296,7 @@ bool UWarriorStageListSubsystem::ParseDefinitions(const FString& InBody)
 
 	NewRegions.Sort([](const FRegionDef& A, const FRegionDef& B) { return A.Order < B.Order; });
 	RegionDefs = MoveTemp(NewRegions);
+	Difficulties = MoveTemp(NewDifficulties);
 	return true;
 }
 
@@ -369,6 +388,7 @@ void UWarriorStageListSubsystem::RebuildRegions()
 			}
 
 			BuildWaveInfo(StageDef, Stage.Waves);
+			Stage.Multipliers = StageDef.Multipliers;
 		}
 
 		Region.bCanOpen = IsRegionOpen(Region);
@@ -463,7 +483,44 @@ void UWarriorStageListSubsystem::ParseWaves(const TSharedPtr<FJsonObject>& InSta
 			Enemy.DisplayName = FText::FromString(Name && !Name->IsEmpty() ? *Name : Enemy.EnemyKey);
 			Enemy.Count = GetIntOrZero(EnemyObject, TEXT("count"));
 			EnemyObject->TryGetBoolField(TEXT("boss"), Enemy.bBoss);
+
+			//M9: 난이도별 마리 수(서버 계산값). 없으면 Count만
+			const TArray<TSharedPtr<FJsonValue>>* CountValues = nullptr;
+			if (EnemyObject->TryGetArrayField(TEXT("counts"), CountValues))
+			{
+				for (const TSharedPtr<FJsonValue>& CountValue : *CountValues)
+				{
+					Enemy.Counts.Add(CountValue.IsValid() ? FMath::Max(0, static_cast<int32>(CountValue->AsNumber())) : 0);
+				}
+			}
 		}
+	}
+}
+
+void UWarriorStageListSubsystem::ParseMultipliers(const TSharedPtr<FJsonObject>& InStageObject, TArray<FWarriorStageDifficultyMultipliers>& OutMultipliers)
+{
+	OutMultipliers.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* MultiplierValues = nullptr;
+	if (!InStageObject.IsValid() || !InStageObject->TryGetArrayField(TEXT("multipliers"), MultiplierValues))
+	{
+		return;
+	}
+
+	for (const TSharedPtr<FJsonValue>& MultiplierValue : *MultiplierValues)
+	{
+		const TSharedPtr<FJsonObject> MultiplierObject = MultiplierValue.IsValid() ? MultiplierValue->AsObject() : nullptr;
+		if (!MultiplierObject.IsValid())
+		{
+			continue;
+		}
+
+		FWarriorStageDifficultyMultipliers& Multipliers = OutMultipliers.AddDefaulted_GetRef();
+		double Value = 0.0;
+		Multipliers.Difficulty = MultiplierObject->TryGetNumberField(TEXT("difficulty"), Value) ? static_cast<int32>(Value) : OutMultipliers.Num() - 1;
+		Multipliers.EnemyCountMultiplier = MultiplierObject->TryGetNumberField(TEXT("enemyCountMultiplier"), Value) ? static_cast<float>(Value) : 1.f;
+		Multipliers.EnemyHealthMultiplier = MultiplierObject->TryGetNumberField(TEXT("enemyHealthMultiplier"), Value) ? static_cast<float>(Value) : 1.f;
+		Multipliers.EnemyDamageMultiplier = MultiplierObject->TryGetNumberField(TEXT("enemyDamageMultiplier"), Value) ? static_cast<float>(Value) : 1.f;
+		Multipliers.GoldAmountMultiplier = MultiplierObject->TryGetNumberField(TEXT("goldAmountMultiplier"), Value) ? static_cast<float>(Value) : 1.f;
 	}
 }
 

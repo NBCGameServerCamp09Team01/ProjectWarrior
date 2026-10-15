@@ -110,7 +110,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
 	FName StageId;
 
-	//결과에 기록되는 난이도. 난이도별 적 스탯 차이는 아직 없다.
+	//결과에 기록되는 난이도(M9). 레벨 시작 때 선택 화면 값(실행 정보)으로, 서버 구성이 들어오면 그 판의 난이도(응답 difficulty)로 바뀐다.
+	//선택 화면을 거치지 않고 레벨을 열 때의 기본값으로만 이 칸을 쓴다. 적 능력치 배율은 서버 구성이 적 줄마다 준다
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage", meta = (ClampMin = "0"))
 	int32 Difficulty = 0;
 

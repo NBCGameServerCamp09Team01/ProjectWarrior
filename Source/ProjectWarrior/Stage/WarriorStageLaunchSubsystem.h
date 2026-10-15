@@ -33,6 +33,10 @@ struct PROJECTWARRIOR_API FWarriorStageLaunchInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
 	bool bFromCatalog = false;
 
+	//선택 화면에서 고른 난이도(M9, 0 = 이지). 판 시작 요청에 싣는다. 실제 판의 난이도는 서버 응답 값이다
+	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Stage")
+	int32 Difficulty = 0;
+
 	bool IsSet() const { return !StageId.IsNone(); }
 };
 
@@ -91,6 +95,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Stage")
 	void ClearSelection();
 
+	//선택 화면의 난이도(M9). 다음 SelectStage부터 실행 정보에 실린다. 게임을 켜 둔 동안 기억한다(처음 0 = 이지)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Stage")
+	void SetSelectedDifficulty(int32 InDifficulty);
+
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
+	int32 GetSelectedDifficulty() const { return SelectedDifficulty; }
+
 	//진행 중인 서버 플레이를 이어 가도록 스테이지를 고른다. 다음 스테이지 레벨의 BeginRun이 ConsumeResumeInfo로 한 번만 가져간다
 	void SelectStageForResume(FName InStageId, const FWarriorStageResumeInfo& InResume);
 
@@ -117,4 +128,7 @@ private:
 
 	//SelectStageForResume으로 정한 이어하기 정보. 다른 스테이지를 고르거나 선택을 지우면 함께 지운다
 	FWarriorStageResumeInfo PendingResume;
+
+	//선택 화면에서 마지막으로 고른 난이도(M9). GameInstance 서브시스템이라 레벨을 옮겨도 남는다
+	int32 SelectedDifficulty = 0;
 };

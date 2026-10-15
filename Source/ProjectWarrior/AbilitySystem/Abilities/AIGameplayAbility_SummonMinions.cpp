@@ -137,6 +137,16 @@ void UAIGameplayAbility_SummonMinions::SummonMinions()
 
 		SummonedMinions.Add(Minion);
 
+		//M9 난이도: 졸개는 웨이브 생성기를 거치지 않으므로 소환한 적(보스)의 배율을 그대로 받는다
+		if (AWarriorAICharacter* MinionCharacter = Cast<AWarriorAICharacter>(Minion))
+		{
+			if (const AWarriorAICharacter* SummonerCharacter = Cast<AWarriorAICharacter>(Summoner))
+			{
+				MinionCharacter->SetDifficultyScale(SummonerCharacter->GetDifficultyHealthMultiplier(),
+					SummonerCharacter->GetDifficultyDamageMultiplier());
+			}
+		}
+
 		if (!Minion->GetController())
 		{
 			Minion->SpawnDefaultController();

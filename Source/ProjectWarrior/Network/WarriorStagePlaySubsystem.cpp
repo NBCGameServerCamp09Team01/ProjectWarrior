@@ -59,7 +59,7 @@ void UWarriorStagePlaySubsystem::HandleSessionEnded(EWarriorSessionEndReason InR
 	ClearWavePlan();
 }
 
-void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume)
+void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorStageResumeInfo* InResume, int32 InDifficulty)
 {
 	//이전 플레이 ID로 결과를 내지 않도록 먼저 비운다
 	++StartSerial;
@@ -92,6 +92,7 @@ void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorS
 		return;
 	}
 
+	StartDifficulty = FMath::Max(0, InDifficulty);
 	SetWavePlanState(EWarriorWavePlanState::Waiting);
 	SendStart(InStageId.ToString().ToLower(), true);
 }
@@ -235,6 +236,7 @@ void UWarriorStagePlaySubsystem::SendStart(const FString& InStageId, bool bInRec
 	FWarriorStagePlayStartRequestDto RequestDto;
 	RequestDto.RequestId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower);
 	RequestDto.StageId = InStageId;
+	RequestDto.Difficulty = StartDifficulty;
 
 	FString RequestBody;
 	if (!FJsonObjectConverter::UStructToJsonObjectString(RequestDto, RequestBody, 0, 0, 0, nullptr, false))

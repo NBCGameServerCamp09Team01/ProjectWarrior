@@ -57,6 +57,10 @@ public:
 	//목록에서 스테이지 한 줄. 없으면 nullptr
 	const FWarriorStageListEntry* FindStage(FName InStageId) const;
 
+	//난이도 목록(M9, ST1 difficulties, 번호 순). M9 전 서버면 비어 있다(난이도 0만)
+	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
+	const TArray<FWarriorDifficultyInfo>& GetDifficulties() const { return Difficulties; }
+
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
 	FOnWarriorStageListUpdated OnStageListUpdated;
 
@@ -75,6 +79,8 @@ private:
 		int32 WaveCount = 0;
 		//웨이브 미리보기(M24, ST1 stages[].waves). 이름은 monsters에서 채워 둔다
 		TArray<FWarriorStageWaveInfo> Waves;
+		//난이도 배율(M9, ST1 stages[].multipliers)
+		TArray<FWarriorStageDifficultyMultipliers> Multipliers;
 	};
 
 	struct FRegionDef
@@ -116,6 +122,9 @@ private:
 	//ST1 stages[].waves를 읽는다. 몬스터 이름은 InMonsterNames(monsters[])에서, 없으면 키
 	static void ParseWaves(const TSharedPtr<FJsonObject>& InStageObject, const TMap<FString, FString>& InMonsterNames, TArray<FWarriorStageWaveInfo>& OutWaves);
 
+	//ST1 stages[].multipliers(M9). 없으면 비운다
+	static void ParseMultipliers(const TSharedPtr<FJsonObject>& InStageObject, TArray<FWarriorStageDifficultyMultipliers>& OutMultipliers);
+
 	UFUNCTION()
 	void HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage);
 
@@ -123,6 +132,9 @@ private:
 
 	TArray<FRegionDef> RegionDefs;
 	bool bHasDefinitions = false;
+
+	UPROPERTY(Transient)
+	TArray<FWarriorDifficultyInfo> Difficulties;
 
 	TMap<FName, FStageProgress> Progress;
 

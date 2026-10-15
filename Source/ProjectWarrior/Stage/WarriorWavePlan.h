@@ -11,6 +11,7 @@ class UWarriorMonsterCatalogDataAsset;
 
 /**
  * 서버 웨이브 구성(M24): 판 응답(P1~P4) data의 waveVersion·waves(루트 docs/contracts/stage-play-api.md v1.3 "웨이브 구성").
+ * M9(v1.4): 판의 difficulty와 적 줄의 healthMultiplier·damageMultiplier도 함께 읽는다. 마리 수·골드는 서버가 이미 반영했다.
  * 판 시작 때 서버가 고정한 값이고, 그 판은 끝까지 이 값으로 웨이브를 만든다(보통 시작은 P1, 이어하기는 로그인 때 받은 P2).
  * waves·spawnGroup은 null일 수 있어 FJsonObjectConverter로 읽지 않고 WarriorWavePlan::ReadFromResponse로 손으로 읽는다
  * (null을 FString·배열로 읽다 판 응답 전체를 못 읽는 일이 없게).
@@ -41,6 +42,13 @@ struct PROJECTWARRIOR_API FWarriorWavePlanEnemy
 
 	UPROPERTY()
 	float GoldDropChance = 1.f;
+
+	//난이도 체력·공격력 배율(M9). 없거나(M9 전 서버·구성) 0 이하면 1
+	UPROPERTY()
+	float HealthMultiplier = 1.f;
+
+	UPROPERTY()
+	float DamageMultiplier = 1.f;
 };
 
 //웨이브 하나(waves[])
@@ -76,9 +84,13 @@ struct PROJECTWARRIOR_API FWarriorStageWavePlan
 {
 	GENERATED_BODY()
 
-	//웨이브 정보 버전(예: w1-m1). 로그·버그 신고용
+	//웨이브 정보 버전(예: w2-m2-d1). 로그·버그 신고용
 	UPROPERTY()
 	FString WaveVersion;
+
+	//그 판의 난이도(data.difficulty, M9). 결과에 그대로 싣는다. 이어하기도 이 값(P2)이라 따로 넘기지 않는다
+	UPROPERTY()
+	int32 Difficulty = 0;
 
 	//웨이브 번호 순. 응답에 waves가 없거나 null이면 비어 있다(그 판은 시작하지 않음)
 	UPROPERTY()
