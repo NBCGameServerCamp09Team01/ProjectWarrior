@@ -22,6 +22,7 @@
 #include "ProjectWarrior/Controllers/WarriorStagePlayerController.h"
 #include "ProjectWarrior/Stage/WarriorStageSettings.h"
 #include "ProjectWarrior/Stage/WarriorPlayCheckpoint.h"
+#include "ProjectWarrior/Stats/WarriorStageStatsSubsystem.h"
 #include "TimerManager.h"
 
 
@@ -465,7 +466,6 @@ void AWarriorStageGameMode::FinishRun(bool bInCleared)
 	}
 	bRunFinished = true;
 
-	//EarnedGold·KillCount는 결과 통계 쪽에서 채운다.
 	FWarriorStageResult Result;
 	Result.RunId = RunId;
 	Result.StageId = GetResolvedStageId();
@@ -480,12 +480,23 @@ void AWarriorStageGameMode::FinishRun(bool bInCleared)
 		Result.TotalWaveCount = StageGameState->GetTotalWaveCount();
 	}
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Run finished. RunId %s, %s, Wave %d/%d, PlayTime %.1f s"),
+	//처치·번 골드는 판 통계에서 읽는다. 결과를 보내기 전에 채워야 서버 누적 통계(스킬 조건)에 들어간다.
+	//이어한 판은 체크포인트에서 복원한 값부터 이어서 센다. 통계가 없으면(통계 없는 레벨) 0으로 보낸다
+	if (const UWarriorStageStatsSubsystem* StageStats = UWarriorStageStatsSubsystem::Get(this))
+	{
+		const FWarriorStatBlock& Stats = StageStats->GetCurrentStageStats();
+		Result.KillCount = Stats.Attack.Kills;
+		Result.EarnedGold = Stats.Economy.GoldEarned;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Run finished. RunId %s, %s, Wave %d/%d, PlayTime %.1f s, Kills %d, GoldEarned %d"),
 		*Result.RunId.ToString(EGuidFormats::DigitsWithHyphens),
 		Result.bCleared ? TEXT("Cleared") : TEXT("Failed"),
 		Result.ReachedWave,
 		Result.TotalWaveCount,
-		Result.PlayTimeSeconds);
+		Result.PlayTimeSeconds,
+		Result.KillCount,
+		Result.EarnedGold);
 
 	//서버에 결과 제출(검사·보상·저장은 서버가 한다)
 	if (UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this)) { StagePlay->SubmitResult(Result); }
