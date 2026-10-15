@@ -75,7 +75,7 @@ struct FWarriorStagePermission
 };
 
 //스테이지 한 판의 결과. 결과 화면에 표시하고, 추후 웹 백엔드의 플레이 기록 저장에 쓴다.
-//항목은 기획이 정해지면 늘어난다. EarnedGold·KillCount는 수집 경로가 정해질 때까지 0으로 둔다.
+//항목은 기획이 정해지면 늘어난다. EarnedGold·KillCount는 GameMode가 판 통계(UWarriorStageStatsSubsystem)에서 채운다.
 USTRUCT(BlueprintType)
 struct FWarriorStageResult
 {
