@@ -10,6 +10,8 @@
 #include "Interfaces/IHttpResponse.h"
 #include "IWebSocket.h"
 #include "JsonObjectConverter.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "WebSocketsModule.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
@@ -48,6 +50,40 @@ UWarriorAuthSubsystem* UWarriorAuthSubsystem::Get(const UObject* WorldContextObj
 {
 	const UGameInstance* GameInstance = UGameplayStatics::GetGameInstance(WorldContextObject);
 	return GameInstance ? GameInstance->GetSubsystem<UWarriorAuthSubsystem>() : nullptr;
+}
+
+void UWarriorAuthSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	//서버 주소를 한 번 정한다. 1) 실행 인자 -ServerUrl=(시험용 — 에디터에서 띄운 Standalone·패키지 모두)
+	//2) 패키지 빌드면 PackagedBaseUrl(배포 서버) 3) BaseUrl(에디터 = 로컬). 비어 있는 값은 건너뛴다
+	FString Source = TEXT("editor");
+	FString Url = BaseUrl;
+#if !WITH_EDITOR
+	if (!PackagedBaseUrl.IsEmpty())
+	{
+		Url = PackagedBaseUrl;
+		Source = TEXT("packaged");
+	}
+#endif
+	FString ArgUrl;
+	if (FParse::Value(FCommandLine::Get(), TEXT("ServerUrl="), ArgUrl) && !ArgUrl.IsEmpty())
+	{
+		Url = ArgUrl;
+		Source = TEXT("arg");
+	}
+
+	//경로는 /auth/login처럼 /로 시작하므로 주소 끝의 /는 뗀다(// 방지)
+	Url.TrimStartAndEndInline();
+	while (Url.EndsWith(TEXT("/")))
+	{
+		Url.LeftChopInline(1);
+	}
+	EffectiveBaseUrl = Url;
+
+	//시험 때 어느 서버로 갔는지 한눈에 보이게 한 줄 남긴다(주소는 비밀이 아니다)
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Server url: %s (source: %s)"), *EffectiveBaseUrl, *Source);
 }
 
 void UWarriorAuthSubsystem::Deinitialize()
@@ -99,7 +135,7 @@ void UWarriorAuthSubsystem::NotifyUnauthorized(const FWarriorApiError& InError, 
 
 bool UWarriorAuthSubsystem::SendHttp(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32, const FString&)>&& OnDone, float InTimeoutSeconds)
 {
-	const FString Url = BaseUrl + InPath;
+	const FString Url = EffectiveBaseUrl + InPath;
 
 	//토큰 없이 보내면 서버가 401 AUTH_TOKEN_MISSING으로 거절할 뿐이므로 보내지 않는다
 	if (bWithAuth && AccessToken.IsEmpty())
@@ -201,7 +237,7 @@ void UWarriorAuthSubsystem::RequestSignup(const FString& InLoginId, const FStrin
 	bRequestInFlight = true;
 	//아이디·비밀번호·이메일 값과 요청 본문은 로그에 남기지 않는다(로그 파일은 디스크에 남는다)
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Signup requested. POST %s/auth/signup email=%s"),
-		*BaseUrl, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
+		*EffectiveBaseUrl, InEmail.IsEmpty() ? TEXT("(none)") : TEXT("(given)"));
 }
 
 void UWarriorAuthSubsystem::HandleSignupResponse(int32 Status, const FString& Body)
@@ -339,7 +375,7 @@ void UWarriorAuthSubsystem::RequestLogin(const FString& InLoginId, const FString
 
 	bRequestInFlight = true;
 	//아이디·비밀번호와 요청 본문은 로그에 남기지 않는다(로그 파일은 디스크에 남는다)
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login requested. POST %s/auth/login"), *BaseUrl);
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Login requested. POST %s/auth/login"), *EffectiveBaseUrl);
 }
 
 void UWarriorAuthSubsystem::HandleLoginResponse(const FString& InLoginId, int32 Status, const FString& Body)
@@ -620,7 +656,7 @@ void UWarriorAuthSubsystem::RequestLogout()
 		});
 
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Auth] Logout requested. POST %s/auth/logout started=%s"),
-		*BaseUrl, bStarted ? TEXT("true") : TEXT("false"));
+		*EffectiveBaseUrl, bStarted ? TEXT("true") : TEXT("false"));
 
 	//명세: 응답을 받든 못 받든 토큰을 지우고 타이틀로 간다. 그래서 응답을 기다리지 않는다
 	EndSession(EWarriorSessionEndReason::LoggedOut);
@@ -770,7 +806,7 @@ TSharedPtr<IWebSocket> UWarriorAuthSubsystem::CreateRealtimeSocket(const FString
 	}
 
 	//http(s)://host → ws(s)://host. 토큰은 주소가 아니라 헤더에만 싣는다(주소는 로그에 남을 수 있다)
-	FString Url = BaseUrl;
+	FString Url = EffectiveBaseUrl;
 	if (Url.StartsWith(TEXT("https://")))
 	{
 		Url = TEXT("wss://") + Url.RightChop(8);

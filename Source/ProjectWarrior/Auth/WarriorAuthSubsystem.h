@@ -30,8 +30,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorSessionEnded, EWarriorSes
  * - 실시간 연결(UWarriorRealtimeSubsystem)이 붙어 있는 동안은 그 연결의 Ping/Pong이 세션을 늘린다.
  *   bPauseHeartbeatWhileRealtimeConnected가 켜져 있으면 그동안 접속 점검을 멈춘다.
  *
- * 회원가입(POST {BaseUrl}/auth/signup)과 로그인(POST {BaseUrl}/auth/login)은 웹서버에 실제로 요청한다.
- * 서버 주소는 DefaultGame.ini의 [/Script/ProjectWarrior.WarriorAuthSubsystem] BaseUrl로 바꿀 수 있다.
+ * 회원가입(POST {서버 주소}/auth/signup)과 로그인(POST {서버 주소}/auth/login)은 웹서버에 실제로 요청한다.
+ * 서버 주소(GetEffectiveBaseUrl)는 시작할 때 한 번 정한다: 실행 인자 -ServerUrl= → (패키지 빌드면) PackagedBaseUrl → BaseUrl.
+ * 에디터(PIE·에디터에서 띄운 Standalone)는 BaseUrl(로컬), 패키지는 PackagedBaseUrl(배포 서버). 둘 다 DefaultGame.ini의
+ * [/Script/ProjectWarrior.WarriorAuthSubsystem]에 있다. BaseUrl을 배포 주소로 바꿔 커밋하면 팀원 에디터가 모두 배포 서버로 간다.
  * 액세스 토큰과 비밀번호는 어떤 로그에도 남기지 않는다.
  */
 UCLASS(Config = Game)
@@ -43,22 +45,28 @@ public:
 	static UWarriorAuthSubsystem* Get(const UObject* WorldContextObject);
 
 	//~ Begin USubsystem Interface.
+	//서버 주소를 정하고 로그로 남긴다([Auth] Server url: … (source: …))
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 	//~ End USubsystem Interface
 
-	//POST {BaseUrl}/auth/signup. 결과는 OnSignupCompleted로 알린다.
+	//지금 쓰는 서버 주소(끝에 / 없음). 시작할 때 한 번 정한다: 실행 인자 -ServerUrl= → (패키지 빌드면) PackagedBaseUrl → BaseUrl.
+	//요청·로그·WebSocket 주소와 디버그 명령 Server.Ping이 모두 이 값을 쓴다
+	const FString& GetEffectiveBaseUrl() const { return EffectiveBaseUrl; }
+
+	//POST {서버 주소}/auth/signup. 결과는 OnSignupCompleted로 알린다.
 	//가입만 하고 로그인은 하지 않는다(토큰을 주지 않으므로 이어서 로그인한다). 성공하면 가입했다는 것만 기억해 로그인 화면이 안내한다(아이디는 기억하지 않는다)
 	//InEmail은 선택이다. 비어 있으면 JSON에서 칸을 빼고 보낸다(명세: 비워 두거나 null)
 	//비밀번호 확인 칸은 화면에서만 비교하고 여기로 넘기지 않는다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestSignup(const FString& InLoginId, const FString& InPassword, const FString& InNickname, const FString& InEmail);
 
-	//POST {BaseUrl}/auth/login. 결과는 OnLoginCompleted로 알린다.
+	//POST {서버 주소}/auth/login. 결과는 OnLoginCompleted로 알린다.
 	//성공하면 토큰을 보관하고 메인화면 값을 계정 서브시스템에 적용(ApplyServerSnapshot)한 뒤 성공을 알린다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestLogin(const FString& InLoginId, const FString& InPassword);
 
-	//POST {BaseUrl}/auth/logout. 요청을 보낸 뒤 응답을 기다리지 않고 바로 로그인 상태를 끝낸다(OnSessionEnded, LoggedOut).
+	//POST {서버 주소}/auth/logout. 요청을 보낸 뒤 응답을 기다리지 않고 바로 로그인 상태를 끝낸다(OnSessionEnded, LoggedOut).
 	//명세: 응답을 받든 못 받든 토큰을 지우고 타이틀로 간다. 서버에 닿지 못해도 서버 세션은 수명이 지나면 사라진다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Auth")
 	void RequestLogout();
@@ -69,14 +77,14 @@ public:
 
 	//인증이 필요한 요청을 다른 서브시스템이 보낼 때 쓴다(예: 스테이지 목록·플레이 시작, 스탯 투자). InVerb는 GET·POST.
 	//한 번 보내고 끝이다(자동 재시도·보관 없음). 자동 재시도·보관이 필요하면 UWarriorApiSubsystem::Send를 쓴다.
-	//BaseUrl·토큰·제한 시간은 이 서브시스템 값을 그대로 쓰고, 토큰은 밖으로 내보내지 않는다.
+	//서버 주소(GetEffectiveBaseUrl)·토큰·제한 시간은 이 서브시스템 값을 그대로 쓰고, 토큰은 밖으로 내보내지 않는다.
 	//로그인하지 않았거나 요청을 시작하지 못하면 보내지 않고 false(OnDone은 부르지 않는다).
 	//401이면 보낼 때와 같은 세션일 때만 먼저 로그인 상태를 끝내고(OnSessionEnded), 그다음 OnDone을 부른다.
 	//OnDone(Status, Body)의 Status 0은 연결 실패. OnDone이 부른 쪽 객체를 잡으면 약한 참조로 잡는다(응답 전에 사라질 수 있다)
 	bool SendAuthorized(const FString& InVerb, const FString& InPath, const FString& InJsonBody, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone);
 
 	//~ Begin UWarriorApiSubsystem이 쓰는 함수. 토큰은 밖으로 내보내지 않는다
-	//HTTP 요청 한 번. InVerb {BaseUrl}{InPath}. 응답(또는 연결 실패)이 오면 OnDone(Status, Body). Status 0은 연결 실패.
+	//HTTP 요청 한 번. InVerb {서버 주소}{InPath}. 응답(또는 연결 실패)이 오면 OnDone(Status, Body). Status 0은 연결 실패.
 	//bWithAuth이면 Authorization 헤더를 붙인다(토큰이 없으면 보내지 않고 false). InTimeoutSeconds가 0 이하면 RequestTimeoutSeconds.
 	//재시도·401 처리는 하지 않는다(부른 쪽이 한다)
 	bool SendHttp(const FString& InVerb, const FString& InPath, const FString& InJsonBody, bool bWithAuth, TFunction<void(int32 /*Status*/, const FString& /*Body*/)>&& OnDone, float InTimeoutSeconds = 0.f);
@@ -133,7 +141,7 @@ public:
 	bool ConsumePendingSessionEnd(EWarriorSessionEndReason& OutReason, FText& OutMessage);
 
 	//~ Begin 실시간 연결(UWarriorRealtimeSubsystem)이 쓰는 함수. 토큰은 밖으로 내보내지 않는다
-	//{BaseUrl}{InPath}(http → ws, https → wss)로 Authorization 헤더를 붙인 WebSocket을 만든다(연결은 부른 쪽이 Connect).
+	//{서버 주소}{InPath}(http → ws, https → wss)로 Authorization 헤더를 붙인 WebSocket을 만든다(연결은 부른 쪽이 Connect).
 	//로그인하지 않았으면 nullptr
 	TSharedPtr<IWebSocket> CreateRealtimeSocket(const FString& InPath) const;
 
@@ -152,9 +160,15 @@ public:
 	//~ End 실시간 연결
 
 protected:
-	//웹서버 주소 (끝에 / 없이). 경로는 /auth/login처럼 붙인다
+	//에디터(PIE·에디터에서 띄운 Standalone)가 쓸 웹서버 주소(끝에 / 없이). 경로는 /auth/login처럼 붙인다.
+	//팀원 로컬 개발용이라 배포 주소로 바꿔 커밋하지 않는다. 시험할 때는 실행 인자 -ServerUrl=로 바꾼다
 	UPROPERTY(Config)
 	FString BaseUrl = TEXT("http://localhost:8080");
+
+	//패키지(에디터 밖) 빌드가 쓸 웹서버 주소(끝에 / 없이). 비어 있으면 BaseUrl을 쓴다.
+	//DefaultGame.ini에 배포 서버(로드 밸런서) 주소를 둔다 — http, 포트 없음
+	UPROPERTY(Config)
+	FString PackagedBaseUrl;
 
 	//요청 제한 시간(초). 넘으면 연결 실패(NETWORK_ERROR)로 처리한다
 	UPROPERTY(Config)
@@ -172,7 +186,7 @@ protected:
 	bool bPauseHeartbeatWhileRealtimeConnected = true;
 
 private:
-	//POST {BaseUrl}{InPath}를 보낸다. 응답(또는 연결 실패)이 오면 OnDone(Status, Body)를 부른다. Status 0은 연결 실패.
+	//POST {서버 주소}{InPath}를 보낸다. 응답(또는 연결 실패)이 오면 OnDone(Status, Body)를 부른다. Status 0은 연결 실패.
 	//InJsonBody가 비어 있으면 본문 없이 보낸다(접속 점검·로그아웃).
 	//bWithAuth이면 Authorization: Bearer <AccessToken>을 붙인다. 토큰이 없으면 보내지 않고 false.
 	//요청을 시작하지 못하면 false. 본문(비밀번호)과 토큰은 로그에 남기지 않는다
@@ -231,6 +245,9 @@ private:
 
 	//마지막으로 적용한 계정 스냅샷 번호. 이보다 작은 번호의 스냅샷은 오래된 값이므로 무시한다
 	int64 LastAppliedAccountVersion = 0;
+
+	//Initialize에서 정한 지금 서버 주소(끝에 / 없음). GetEffectiveBaseUrl이 돌려준다
+	FString EffectiveBaseUrl;
 
 	//인증 헤더에 붙일 토큰. 로그에 남기지 않는다
 	FString AccessToken;

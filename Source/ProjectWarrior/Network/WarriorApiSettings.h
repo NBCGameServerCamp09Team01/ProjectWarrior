@@ -11,7 +11,7 @@ class UWarriorNoticePopupWidget;
 /**
  * 프로젝트 설정 > Game > Warrior Api. 서버 요청 실패 처리(S5)의 값을 모은다. 값은 Config/DefaultGame.ini에 저장된다.
  * 재시도 횟수·간격을 코드에 숫자로 쓰지 않고 여기서 바꾼다(10/10 결정).
- * 서버 주소·요청 제한 시간은 UWarriorAuthSubsystem(BaseUrl, RequestTimeoutSeconds)에 있다.
+ * 서버 주소·요청 제한 시간은 UWarriorAuthSubsystem(BaseUrl·PackagedBaseUrl → GetEffectiveBaseUrl, RequestTimeoutSeconds)에 있다.
  */
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Warrior Api"))
 class PROJECTWARRIOR_API UWarriorApiSettings : public UDeveloperSettings
