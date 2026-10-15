@@ -110,6 +110,9 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Axe, "AI.Weapon.Axe");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Shield, "AI.Weapon.Shield");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Hitbox_Mouth, "AI.Weapon.Hitbox.Mouth");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Hitbox_ClawLeft, "AI.Weapon.Hitbox.ClawLeft");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Hitbox_ClawRight, "AI.Weapon.Hitbox.ClawRight");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Death_PoseReached, "AI.Event.Death.PoseReached");

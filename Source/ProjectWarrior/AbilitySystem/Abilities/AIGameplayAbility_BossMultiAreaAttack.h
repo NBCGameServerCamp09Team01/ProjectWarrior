@@ -50,9 +50,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "MultiAreaAttack")
 	bool bFaceTargetBeforeEachHit = false;
 
+	// 범위 판정·표시 대신 장착 무기(투명 히트박스)의 충돌로 판정. 몽타주의 ANS_ToggleWeaponCollision 구간에 닿은 대상에게 피해
+	// (잡몹 일반 공격처럼 피해야 할 범위 표시가 어울리지 않는 공격용)
+	UPROPERTY(EditDefaultsOnly, Category = "MultiAreaAttack")
+	bool bUseWeaponCollisionHit = false;
+
+	// 무기 충돌 판정에 쓸 무기(등록 태그). 발동 시 장착 무기로 바꿔서 노티파이가 이 무기의 충돌을 켜게 함 (왼발·오른발처럼 여러 개일 때). 비우면 현재 장착 무기
+	UPROPERTY(EditDefaultsOnly, Category = "MultiAreaAttack", meta = (Categories = "AI.Weapon", EditCondition = "bUseWeaponCollisionHit"))
+	FGameplayTag HitWeaponTag;
+
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+
 private:
 	UFUNCTION()
 	void HandleImpactEvent(FGameplayEventData Payload);
+
+	UFUNCTION()
+	void HandleWeaponHitEvent(FGameplayEventData Payload);
 
 	UFUNCTION()
 	void HandleMontageEnded();

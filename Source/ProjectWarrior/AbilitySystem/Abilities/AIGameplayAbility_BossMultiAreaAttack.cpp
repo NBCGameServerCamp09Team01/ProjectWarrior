@@ -6,6 +6,9 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Animation/AnimMontage.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "ProjectWarrior/Components/Combat/AICombatComponent.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
 
 UAIGameplayAbility_BossMultiAreaAttack::UAIGameplayAbility_BossMultiAreaAttack()
 {
@@ -35,21 +38,44 @@ void UAIGameplayAbility_BossMultiAreaAttack::ActivateAbility(const FGameplayAbil
 		return;
 	}
 
-	CurrentHitIndex = 0;
-	FindMontageEventTimes(AttackMontage, MontageImpactEventTag, ImpactTimes);
-
-	if (ImpactTimes.IsEmpty())
+	if (bUseWeaponCollisionHit)
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[BossMultiAreaAttack] %s: notify with %s not found in %s."),
-			*GetName(), *MontageImpactEventTag.ToString(), *AttackMontage->GetName());
+		// 표시·범위 판정 없이 무기 충돌(AICombatComponent가 보내는 Shared.Event.MeleeHit)로만 피해
+		if (HitWeaponTag.IsValid())
+		{
+			if (UAICombatComponent* CombatComponent = GetAICombatComponentFromActorInfo())
+			{
+				CombatComponent->CurrentEquippedWeaponTag = HitWeaponTag;
+			}
+		}
+
+		if (bFaceTargetOnStart)
+		{
+			FaceAreaTarget(nullptr);
+		}
+
+		UAbilityTask_WaitGameplayEvent* WeaponHitTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, WarriorGameplayTags::Shared_Event_MeleeHit, nullptr, false, true);
+		WeaponHitTask->EventReceived.AddDynamic(this, &ThisClass::HandleWeaponHitEvent);
+		WeaponHitTask->ReadyForActivation();
 	}
+	else
+	{
+		CurrentHitIndex = 0;
+		FindMontageEventTimes(AttackMontage, MontageImpactEventTag, ImpactTimes);
 
-	// 재생 전에 표시해야 루트 모션을 몽타주 처음부터 계산함
-	TelegraphHit(0, bFaceTargetOnStart);
+		if (ImpactTimes.IsEmpty())
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[BossMultiAreaAttack] %s: notify with %s not found in %s."),
+				*GetName(), *MontageImpactEventTag.ToString(), *AttackMontage->GetName());
+		}
 
-	UAbilityTask_WaitGameplayEvent* ImpactTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, MontageImpactEventTag, nullptr, false, true);
-	ImpactTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactEvent);
-	ImpactTask->ReadyForActivation();
+		// 재생 전에 표시해야 루트 모션을 몽타주 처음부터 계산함
+		TelegraphHit(0, bFaceTargetOnStart);
+
+		UAbilityTask_WaitGameplayEvent* ImpactTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, MontageImpactEventTag, nullptr, false, true);
+		ImpactTask->EventReceived.AddDynamic(this, &ThisClass::HandleImpactEvent);
+		ImpactTask->ReadyForActivation();
+	}
 
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage);
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageEnded);
@@ -57,6 +83,47 @@ void UAIGameplayAbility_BossMultiAreaAttack::ActivateAbility(const FGameplayAbil
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
 	MontageTask->ReadyForActivation();
+}
+
+void UAIGameplayAbility_BossMultiAreaAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+{
+	// 충돌 구간 중에 취소(피격·경직 등)되면 노티파이 끝이 오지 않을 수 있으므로 히트박스를 끔
+	if (bUseWeaponCollisionHit)
+	{
+		if (UAICombatComponent* CombatComponent = GetAICombatComponentFromActorInfo())
+		{
+			if (CombatComponent->GetCharacterCurrentEquippedWeapon())
+			{
+				CombatComponent->ToggleWeaponCollision(false);
+			}
+		}
+	}
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UAIGameplayAbility_BossMultiAreaAttack::HandleWeaponHitEvent(FGameplayEventData Payload)
+{
+	AActor* HitActor = const_cast<AActor*>(Payload.Target.Get());
+
+	if (!HitActor)
+	{
+		return;
+	}
+
+	if (DamageEffectClass && UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor))
+	{
+		NativeApplyEffectSpecHandleToTarget(HitActor, MakeAIDamageEffectSpecHandle(DamageEffectClass, DamageScalableFloat));
+	}
+
+	if (bSendHitReactEvent)
+	{
+		FGameplayEventData HitReactData;
+		HitReactData.Instigator = GetAvatarActorFromActorInfo();
+		HitReactData.Target = HitActor;
+
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitActor, ResolveHitReactEventTag(Payload), HitReactData);
+	}
 }
 
 void UAIGameplayAbility_BossMultiAreaAttack::HandleImpactEvent(FGameplayEventData Payload)
