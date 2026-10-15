@@ -88,6 +88,12 @@ namespace WarriorRankingApi
 	{
 		return InPeriod == EWarriorRankingPeriod::Weekly ? TEXT("weekly") : TEXT("all");
 	}
+
+	//"&difficulty=n". 진행 보드는 난이도 쿼리가 없다(명세 쿼리 표: RK1~4·RK7·RK8만)
+	FString DifficultyQuery(const FWarriorRankingBoardKey& InKey)
+	{
+		return InKey.Kind == EWarriorRankingBoardKind::Progress ? FString() : FString::Printf(TEXT("&difficulty=%d"), InKey.Difficulty);
+	}
 }
 
 UWarriorRankingSubsystem* UWarriorRankingSubsystem::Get(const UObject* WorldContextObject)
@@ -116,7 +122,7 @@ void UWarriorRankingSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-void UWarriorRankingSubsystem::RequestBoard(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit)
+void UWarriorRankingSubsystem::RequestBoard(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit, int32 InDifficulty)
 {
 	FWarriorRankingBoardKey Key;
 	Key.Kind = InKind;
@@ -125,8 +131,13 @@ void UWarriorRankingSubsystem::RequestBoard(EWarriorRankingBoardKind InKind, FNa
 	Key.TargetId = bHasTarget ? InTargetId : NAME_None;
 	//명세: limit 1~50
 	Limit = FMath::Clamp(InLimit, 1, 50);
-	//진행 보드는 전체 기간만(명세 RK5)
-	Key.Period = InKind == EWarriorRankingBoardKind::Progress ? EWarriorRankingPeriod::All : InPeriod;
+	//진행 보드는 전체 기간만(명세 RK5), 난이도도 없다
+	const bool bProgress = InKind == EWarriorRankingBoardKind::Progress;
+	Key.Period = bProgress ? EWarriorRankingPeriod::All : InPeriod;
+	Key.Difficulty = bProgress ? 0 : FMath::Max(0, InDifficulty);
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Ranking] Board requested. kind=%s target=%s period=%s difficulty=%d"),
+		*UEnum::GetValueAsString(Key.Kind), *Key.TargetId.ToString(), WarriorRankingApi::PeriodValue(Key.Period), Key.Difficulty);
 
 	const int32 Serial = ++BoardSerial;
 	BoardKey = Key;
@@ -246,6 +257,7 @@ FString UWarriorRankingSubsystem::BuildListPath(const FWarriorRankingBoardKey& I
 		Path += InKey.TargetId.ToString();
 	}
 	Path += FString::Printf(TEXT("?period=%s&limit=%d"), WarriorRankingApi::PeriodValue(InKey.Period), Limit);
+	Path += WarriorRankingApi::DifficultyQuery(InKey);
 	if (!InCursor.IsEmpty())
 	{
 		Path += TEXT("&cursor=") + FGenericPlatformHttp::UrlEncode(InCursor);
@@ -260,7 +272,7 @@ FString UWarriorRankingSubsystem::BuildMinePath(const FWarriorRankingBoardKey& I
 	{
 		Path += InKey.TargetId.ToString();
 	}
-	return Path + FString::Printf(TEXT("?period=%s"), WarriorRankingApi::PeriodValue(InKey.Period));
+	return Path + FString::Printf(TEXT("?period=%s"), WarriorRankingApi::PeriodValue(InKey.Period)) + WarriorRankingApi::DifficultyQuery(InKey);
 }
 
 void UWarriorRankingSubsystem::HandleListResponse(int32 InSerial, bool bInAppend, int32 Status, const FString& Body)
@@ -365,7 +377,7 @@ void UWarriorRankingSubsystem::FailBoard(int32 InSerial, int32 Status, const FSt
 	{
 		//서버가 준 커서가 더는 통하지 않음(주가 바뀜 등) → 알리지 않고 첫 묶음부터(명세 RANK_INVALID_CURSOR)
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Ranking] Cursor no longer valid. Reloading first page."));
-		RequestBoard(BoardKey.Kind, BoardKey.TargetId, BoardKey.Period, Limit);
+		RequestBoard(BoardKey.Kind, BoardKey.TargetId, BoardKey.Period, Limit, BoardKey.Difficulty);
 		return;
 	}
 

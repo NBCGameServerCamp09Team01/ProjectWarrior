@@ -12,6 +12,7 @@
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Network/WarriorRankingSubsystem.h"
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
+#include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "WarriorRanking"
 
@@ -237,7 +238,7 @@ void UWarriorRankingViewWidget::NativeTick(const FGeometry& MyGeometry, float In
 	UpdateRefreshButtons(false);
 }
 
-void UWarriorRankingViewWidget::RequestView(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit)
+void UWarriorRankingViewWidget::RequestView(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit, int32 InDifficulty)
 {
 	UWarriorRankingSubsystem* Ranking = UWarriorRankingSubsystem::Get(this);
 	if (!Ranking)
@@ -250,13 +251,15 @@ void UWarriorRankingViewWidget::RequestView(EWarriorRankingBoardKind InKind, FNa
 	ViewKey.Kind = InKind;
 	ViewKey.TargetId = (InKind == EWarriorRankingBoardKind::Stage || InKind == EWarriorRankingBoardKind::Region) ? InTargetId : NAME_None;
 	ViewKey.Period = InKind == EWarriorRankingBoardKind::Progress ? EWarriorRankingPeriod::All : InPeriod;
+	//서브시스템과 같은 규칙(진행 보드는 난이도 0). 다르면 IsMyBoard가 응답을 버린다
+	ViewKey.Difficulty = InKind == EWarriorRankingBoardKind::Progress ? 0 : FMath::Max(0, InDifficulty);
 	ViewLimit = InLimit;
 	AppendBlockedUntilSeconds = 0.0;
 	bHasView = true;
 
 	SetFailed(false);
 	SetLoading(true);
-	Ranking->RequestBoard(InKind, InTargetId, InPeriod, InLimit);
+	Ranking->RequestBoard(InKind, InTargetId, InPeriod, InLimit, ViewKey.Difficulty);
 }
 
 bool UWarriorRankingViewWidget::IsMyBoard() const
@@ -320,7 +323,7 @@ void UWarriorRankingViewWidget::HandleRefreshClicked()
 	{
 		return;
 	}
-	RequestView(ViewKey.Kind, ViewKey.TargetId, ViewKey.Period, ViewLimit);
+	RequestView(ViewKey.Kind, ViewKey.TargetId, ViewKey.Period, ViewLimit, ViewKey.Difficulty);
 	UpdateRefreshButtons(true);
 }
 
@@ -468,6 +471,7 @@ UWarriorRankingPopupWidget::UWarriorRankingPopupWidget(const FObjectInitializer&
 	//전체 총합 탭은 설명 문구 없음(10/12 Sang 결정). 비어 있으면 Text_Meta를 접는다
 	TotalMeta = FText::GetEmpty();
 	RegionMeta = LOCTEXT("RegionMeta", "지역 총합 = 그 지역 스테이지마다 내 최고 점수의 합 · 같으면 먼저 달성한 사람이 위");
+	DifficultyLabelFormat = LOCTEXT("DifficultyLabelFormat", "난이도: {0}");
 	//"더 보기" 버튼 대신 스크롤 자동 받기
 	bAllowMore = false;
 }
@@ -577,6 +581,10 @@ void UWarriorRankingPopupWidget::NativeOnInitialized()
 	{
 		ComboBox_Region->OnSelectionChanged.AddUniqueDynamic(this, &ThisClass::HandleRegionSelected);
 	}
+	if (Button_Difficulty)
+	{
+		Button_Difficulty->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleDifficultyClicked);
+	}
 	if (ListView_Rows)
 	{
 		ListView_Rows->OnListViewScrolled().AddUObject(this, &ThisClass::HandleListScrolled);
@@ -614,8 +622,48 @@ void UWarriorRankingPopupWidget::Open()
 	{
 		StageList->RequestStageList();
 	}
+	//난이도는 스테이지 선택에서 고른 값부터(방금 노말로 깼으면 노말 보드가 먼저 보이게)
+	const UWarriorStageLaunchSubsystem* LaunchSubsystem = UWarriorStageLaunchSubsystem::Get(this);
+	SetDifficulty(LaunchSubsystem ? LaunchSubsystem->GetSelectedDifficulty() : 0);
 	FillRegions();
 	RequestCurrent();
+}
+
+void UWarriorRankingPopupWidget::HandleDifficultyClicked()
+{
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const int32 Count = StageList ? StageList->GetDifficulties().Num() : 0;
+	if (Count <= 1)
+	{
+		return;
+	}
+	//화면에서 고른 난이도는 랭킹 팝업 안에서만 쓴다(스테이지 입장 난이도는 바꾸지 않음)
+	SetDifficulty((Difficulty + 1) % Count);
+	RequestCurrent();
+}
+
+void UWarriorRankingPopupWidget::SetDifficulty(int32 InDifficulty)
+{
+	//서버 목록(ST1 difficulties)에 있는 번호만. 목록을 아직 받는 중이면 그대로 두고 받은 뒤(HandleStageListUpdated) 다시 맞춘다.
+	//목록에 없는 번호(M9 전 서버 포함)면 0
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	if (StageList && StageList->HasStageList())
+	{
+		Difficulty = StageList->HasDifficulty(InDifficulty) ? InDifficulty : 0;
+	}
+	else
+	{
+		Difficulty = FMath::Max(0, InDifficulty);
+	}
+	UpdateDifficultyLabel();
+}
+
+void UWarriorRankingPopupWidget::UpdateDifficultyLabel()
+{
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const FText DisplayName = StageList ? StageList->GetDifficultyDisplayName(Difficulty) : FText::AsNumber(Difficulty);
+	WarriorRankingView::SetText(Text_Difficulty, FText::Format(DifficultyLabelFormat, DisplayName));
+	BP_OnDifficultySet(Difficulty, DisplayName);
 }
 
 void UWarriorRankingPopupWidget::HandleTotalTabClicked()
@@ -675,6 +723,14 @@ void UWarriorRankingPopupWidget::HandleStageListUpdated()
 {
 	const bool bHadRegion = !SelectedRegionId.IsNone();
 	FillRegions();
+	//팝업을 열 때 목록을 받는 중이었으면 이제 난이도 이름이 생긴다. 고른 번호가 목록에 없으면 0으로(그 보드를 다시 받음)
+	const int32 PreviousDifficulty = Difficulty;
+	SetDifficulty(PreviousDifficulty);
+	if (Difficulty != PreviousDifficulty && bHasView)
+	{
+		RequestCurrent();
+		return;
+	}
 	//지역 총합 탭을 지역 없이 열었으면 지금 받는다
 	if (!bTotalTab && !bHadRegion && !SelectedRegionId.IsNone())
 	{
@@ -734,11 +790,11 @@ void UWarriorRankingPopupWidget::RequestCurrent()
 
 	if (bTotalTab)
 	{
-		RequestView(EWarriorRankingBoardKind::Total, NAME_None, Period, PageSize);
+		RequestView(EWarriorRankingBoardKind::Total, NAME_None, Period, PageSize, Difficulty);
 	}
 	else if (!SelectedRegionId.IsNone())
 	{
-		RequestView(EWarriorRankingBoardKind::Region, SelectedRegionId, Period, PageSize);
+		RequestView(EWarriorRankingBoardKind::Region, SelectedRegionId, Period, PageSize, Difficulty);
 	}
 	else
 	{
@@ -752,17 +808,19 @@ void UWarriorRankingPopupWidget::RequestCurrent()
 UWarriorStageRankingCardWidget::UWarriorStageRankingCardWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	TitleFormat = LOCTEXT("StageTitleFormat", "스테이지 {0} · {1} 순위");
+	TitleFormat = LOCTEXT("StageTitleFormat", "스테이지 {0} · {1} 순위 ({2})");
 	EmptyText = LOCTEXT("StageEmptyText", "아직 아무도 클리어하지 않았습니다.");
 	NoRecordText = LOCTEXT("StageNoRecordText", "기록 없음 — 클리어하면 순위에 올라갑니다.");
 	bAllowMore = false;
 }
 
-void UWarriorStageRankingCardWidget::ShowStage(FName InStageId, const FText& InStageName, int32 InStageOrder)
+void UWarriorStageRankingCardWidget::ShowStage(FName InStageId, const FText& InStageName, int32 InStageOrder, int32 InDifficulty)
 {
-	WarriorRankingView::SetText(Text_Title, FText::Format(TitleFormat, InStageOrder, InStageName));
-	//위 몇 명만(더 보기 없음), 전체 기간만(도안 2.1판 Q3)
-	RequestView(EWarriorRankingBoardKind::Stage, InStageId, EWarriorRankingPeriod::All, TopCount);
+	const UWarriorStageListSubsystem* StageList = UWarriorStageListSubsystem::Get(this);
+	const FText DifficultyName = StageList ? StageList->GetDifficultyDisplayName(InDifficulty) : FText::AsNumber(InDifficulty);
+	WarriorRankingView::SetText(Text_Title, FText::Format(TitleFormat, InStageOrder, InStageName, DifficultyName));
+	//위 몇 명만(더 보기 없음), 전체 기간만(도안 2.1판 Q3), 스테이지 선택에서 고른 난이도의 보드(M9)
+	RequestView(EWarriorRankingBoardKind::Stage, InStageId, EWarriorRankingPeriod::All, TopCount, InDifficulty);
 	WarriorRankingView::SetShown(Button_More, false);
 }
 

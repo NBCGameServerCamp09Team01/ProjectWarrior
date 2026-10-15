@@ -153,8 +153,8 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	//~ End UUserWidget Interface
 
-	//지금 보는 보드를 처음부터 다시 받는다(InKind·InTargetId·InPeriod·InLimit을 기억)
-	void RequestView(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit);
+	//지금 보는 보드를 처음부터 다시 받는다(InKind·InTargetId·InPeriod·InLimit·InDifficulty를 기억)
+	void RequestView(EWarriorRankingBoardKind InKind, FName InTargetId, EWarriorRankingPeriod InPeriod, int32 InLimit, int32 InDifficulty = 0);
 
 	//요청 상태가 바뀔 때(불러오는 중·목록·실패·없음). 패널 보이기는 C++이 하고, 그 밖의 모양은 BP에서
 	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Ranking", meta = (DisplayName = "On View State Set"))
@@ -284,7 +284,7 @@ protected:
 	double AppendBlockedUntilSeconds = 0.0;
 };
 
-/** 메인메뉴 랭킹 팝업: [전체 총합][지역 총합], 전체·주간 */
+/** 메인메뉴 랭킹 팝업: [전체 총합][지역 총합], 전체·주간, 난이도(M9, 누를 때마다 다음 난이도) */
 UCLASS(Abstract)
 class PROJECTWARRIOR_API UWarriorRankingPopupWidget : public UWarriorRankingViewWidget
 {
@@ -293,7 +293,7 @@ class PROJECTWARRIOR_API UWarriorRankingPopupWidget : public UWarriorRankingView
 public:
 	UWarriorRankingPopupWidget(const FObjectInitializer& ObjectInitializer);
 
-	//팝업을 열 때마다(전체 총합·전체 기간부터)
+	//팝업을 열 때마다(전체 총합·전체 기간, 난이도는 스테이지 선택에서 고른 값부터)
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Ranking")
 	void Open();
 
@@ -326,8 +326,19 @@ protected:
 	UFUNCTION()
 	void HandleStageListUpdated();
 
+	UFUNCTION()
+	void HandleDifficultyClicked();
+
+	//난이도가 정해질 때(이름 = 서버 ST1 difficulties[].name). 선택 표시는 BP에서
+	UFUNCTION(BlueprintImplementableEvent, Category = "Warrior|Ranking", meta = (DisplayName = "On Difficulty Set"))
+	void BP_OnDifficultySet(int32 InDifficulty, const FText& InDisplayName);
+
 	void FillRegions();
 	void RequestCurrent();
+
+	//서버 난이도 목록에 있는 번호로 맞춘다(목록이 없으면 0)
+	void SetDifficulty(int32 InDifficulty);
+	void UpdateDifficultyLabel();
 
 	virtual void RebuildRows(bool bInFirstPage) override;
 
@@ -371,6 +382,17 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_PeriodWeekly;
 
+	//난이도(M9). 누를 때마다 다음 난이도(이지 → 노말 → 하드 → 이지). 진행 보드가 아니면 모든 탭에 쓴다
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Difficulty;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_Difficulty;
+
+	//{0} = 난이도 이름
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Ranking|Text")
+	FText DifficultyLabelFormat;
+
 	//점수 설명 한 줄. 지금 탭의 문구(TotalMeta·RegionMeta)가 비어 있으면 접힌다
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_Meta;
@@ -394,6 +416,7 @@ protected:
 private:
 	bool bTotalTab = true;
 	EWarriorRankingPeriod Period = EWarriorRankingPeriod::All;
+	int32 Difficulty = 0;
 	FName SelectedRegionId;
 
 	//콤보 항목 순서 = 지역 order 순
@@ -411,14 +434,14 @@ class PROJECTWARRIOR_API UWarriorStageRankingCardWidget : public UWarriorRanking
 public:
 	UWarriorStageRankingCardWidget(const FObjectInitializer& ObjectInitializer);
 
-	//그 스테이지 순위를 띄운다. InStageName은 제목에 쓴다
-	void ShowStage(FName InStageId, const FText& InStageName, int32 InStageOrder);
+	//그 스테이지 순위를 띄운다. InStageName은 제목에 쓴다. InDifficulty: 스테이지 선택에서 고른 난이도의 보드(M9)
+	void ShowStage(FName InStageId, const FText& InStageName, int32 InStageOrder, int32 InDifficulty = 0);
 
 protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_Title;
 
-	//{0} 스테이지 순서, {1} 스테이지 이름
+	//{0} 스테이지 순서, {1} 스테이지 이름, {2} 난이도 이름
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Ranking|Text")
 	FText TitleFormat;
 

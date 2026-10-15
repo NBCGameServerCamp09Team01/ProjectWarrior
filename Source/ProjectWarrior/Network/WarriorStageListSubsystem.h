@@ -61,6 +61,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Warrior|Stage")
 	const TArray<FWarriorDifficultyInfo>& GetDifficulties() const { return Difficulties; }
 
+	//서버 목록에 있는 난이도인가. 목록이 비어 있으면(M9 전 서버) false
+	bool HasDifficulty(int32 InDifficulty) const;
+
+	//난이도 화면 이름(서버 name). 목록에 없으면 번호
+	FText GetDifficultyDisplayName(int32 InDifficulty) const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Stage")
 	FOnWarriorStageListUpdated OnStageListUpdated;
 
