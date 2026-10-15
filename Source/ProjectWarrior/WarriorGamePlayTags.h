@@ -118,6 +118,10 @@ namespace WarriorGameplayTags
 	// 보스 무기. 도끼는 장착 무기(충돌 토글 대상), 방패는 장착 무기가 아님 (방패 공격은 범위 판정으로 처리)
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Axe);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Shield);
+	// 비인간형 몬스터의 투명 히트박스 (메시 없이 피격 판정만 담당하는 무기)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Hitbox_Mouth);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Hitbox_ClawLeft);
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Weapon_Hitbox_ClawRight);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AI_Event_Finisher);
 	// 사망 몽타주 노티파이 -> 사망/처형 어빌리티: 죽은 자세 도달 (Loop 구간 시작). 이 시점에 어빌리티 종료
