@@ -39,6 +39,11 @@ void UWarriorMainMenuWidget::NativeConstruct()
 		Button_Ranking->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRankingButtonClicked);
 	}
 
+	if (Button_Tutorial)
+	{
+		Button_Tutorial->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleTutorialButtonClicked);
+	}
+
 	if (Button_Logout)
 	{
 		Button_Logout->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLogoutButtonClicked);
@@ -71,6 +76,11 @@ void UWarriorMainMenuWidget::NativeDestruct()
 	if (Button_Ranking)
 	{
 		Button_Ranking->OnClicked.RemoveDynamic(this, &ThisClass::HandleRankingButtonClicked);
+	}
+
+	if (Button_Tutorial)
+	{
+		Button_Tutorial->OnClicked.RemoveDynamic(this, &ThisClass::HandleTutorialButtonClicked);
 	}
 
 	if (Button_Logout)
@@ -167,6 +177,22 @@ void UWarriorMainMenuWidget::RequestOpenRanking()
 void UWarriorMainMenuWidget::HandleRankingButtonClicked()
 {
 	RequestOpenRanking();
+}
+
+void UWarriorMainMenuWidget::RequestOpenTutorial()
+{
+	if (AWarriorFrontPlayerController* FrontPlayerController = GetOwningPlayer<AWarriorFrontPlayerController>())
+	{
+		FrontPlayerController->OpenTutorialSelect();
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] %s: owning player is not AWarriorFrontPlayerController. Tutorial is not opened."), *GetName());
+}
+
+void UWarriorMainMenuWidget::HandleTutorialButtonClicked()
+{
+	RequestOpenTutorial();
 }
 
 void UWarriorMainMenuWidget::HandleLogoutButtonClicked()

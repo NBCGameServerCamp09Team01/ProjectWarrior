@@ -18,6 +18,9 @@
 #include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
 #include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 #include "ProjectWarrior/Widgets/WarriorStageSelectWidgets.h"
+#include "ProjectWarrior/Widgets/WarriorTutorialChapterWidgets.h"
+#include "ProjectWarrior/GameModes/WarriorTutorialGameMode.h"
+#include "ProjectWarrior/Tutorial/DataAsset_TutorialSteps.h"
 
 #define LOCTEXT_NAMESPACE "WarriorFront"
 
@@ -32,6 +35,8 @@ namespace
 	const int32 StageSelectPopupZOrder = 20;
 	//메인메뉴 랭킹 팝업(스테이지 선택 팝업과 같은 층, 둘이 함께 뜨지 않음)
 	const int32 RankingPopupZOrder = 20;
+	//튜토리얼 장 고르기 팝업(같은 층, 다른 팝업과 함께 뜨지 않음)
+	const int32 TutorialChapterPopupZOrder = 20;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -387,6 +392,68 @@ void AWarriorFrontPlayerController::OpenRanking()
 	FocusTopWidget();
 }
 
+void AWarriorFrontPlayerController::OpenTutorialSelect()
+{
+	if (!TutorialChapterPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] TutorialChapterPopupClass is not set. Tutorial select is not opened."));
+		return;
+	}
+
+	if (!TutorialChapterPopup)
+	{
+		TutorialChapterPopup = CreateWidget<UWarriorTutorialChapterPopupWidget>(this, TutorialChapterPopupClass);
+		if (!TutorialChapterPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create tutorial chapter popup."));
+			return;
+		}
+
+		TutorialChapterPopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleTutorialSelectClosed);
+	}
+
+	if (!TutorialChapterPopup->IsInViewport())
+	{
+		TutorialChapterPopup->AddToViewport(TutorialChapterPopupZOrder);
+	}
+
+	TutorialChapterPopup->Open(TutorialSteps.LoadSynchronous());
+	//장 줄은 Open이 새로 만들므로 그 뒤에 버튼 소리를 넣는다(이미 소리가 있는 버튼은 건너뜀)
+	if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+	{
+		Sound->ApplyButtonSounds(TutorialChapterPopup);
+	}
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::EnterTutorial(int32 InChapterIndex)
+{
+	if (TutorialLevel.IsNull())
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] TutorialLevel is not set. Tutorial is not entered."));
+		return;
+	}
+
+	if (TutorialChapterPopup && TutorialChapterPopup->IsInViewport())
+	{
+		TutorialChapterPopup->RemoveFromParent();
+	}
+
+	//UI 전용 입력 설정은 레벨을 옮겨도 뷰포트에 남을 수 있으므로, 이동 전에 게임 입력으로 되돌린다(StartStage와 같음)
+	UWidgetBlueprintLibrary::SetInputMode_GameOnly(this);
+	bShowMouseCursor = false;
+
+	const FString Options = FString::Printf(TEXT("%s=%d"), AWarriorTutorialGameMode::ChapterOption, FMath::Max(InChapterIndex, 0));
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Front] Open tutorial level %s?%s"), *TutorialLevel.ToString(), *Options);
+
+	UGameplayStatics::OpenLevelBySoftObjectPtr(this, TutorialLevel, true, Options);
+}
+
+void AWarriorFrontPlayerController::HandleTutorialSelectClosed()
+{
+	FocusTopWidget();
+}
+
 void AWarriorFrontPlayerController::HandleRankingClosed()
 {
 	FocusTopWidget();
@@ -543,6 +610,10 @@ void AWarriorFrontPlayerController::FocusTopWidget()
 	else if (RankingPopup && RankingPopup->IsInViewport())
 	{
 		FocusWidget = RankingPopup;
+	}
+	else if (TutorialChapterPopup && TutorialChapterPopup->IsInViewport())
+	{
+		FocusWidget = TutorialChapterPopup;
 	}
 	else
 	{
