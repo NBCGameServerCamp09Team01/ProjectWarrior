@@ -16,6 +16,7 @@
 #include "ProjectWarrior/Network/WarriorStageListSubsystem.h"
 #include "ProjectWarrior/Stage/WarriorStageLaunchSubsystem.h"
 #include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
+#include "ProjectWarrior/Widgets/WarriorGuildWidgets.h"
 #include "ProjectWarrior/Widgets/WarriorRankingWidgets.h"
 #include "ProjectWarrior/Widgets/WarriorStageSelectWidgets.h"
 
@@ -32,6 +33,9 @@ namespace
 	const int32 StageSelectPopupZOrder = 20;
 	//메인메뉴 랭킹 팝업(스테이지 선택 팝업과 같은 층, 둘이 함께 뜨지 않음)
 	const int32 RankingPopupZOrder = 20;
+
+	//길드 팝업: 메인메뉴 위, 안내 팝업 아래(랭킹 팝업과 같은 층)
+	const int32 GuildPopupZOrder = 20;
 }
 
 void AWarriorFrontPlayerController::BeginPlay()
@@ -197,6 +201,12 @@ void AWarriorFrontPlayerController::ShowScreen(EWarriorFrontScreen InScreen)
 	if (StageSelectPopup && StageSelectPopup->IsInViewport())
 	{
 		StageSelectPopup->RemoveFromParent();
+	}
+
+	//길드 팝업도 메인메뉴 위에만. 로그아웃하면 길드 값이 비므로 함께 닫는다
+	if (GuildPopup && GuildPopup->IsInViewport())
+	{
+		GuildPopup->RemoveFromParent();
 	}
 
 	//이어하기 팝업과 입력 막기도 메인메뉴에서만. 다른 화면으로 가면 풀고 닫는다(메인메뉴로 돌아오면 ApplyPlayCheckpointState가 다시 맞춘다)
@@ -392,6 +402,45 @@ void AWarriorFrontPlayerController::HandleRankingClosed()
 	FocusTopWidget();
 }
 
+void AWarriorFrontPlayerController::OpenGuild()
+{
+	if (!GuildPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Front] GuildPopupClass is not set. Guild is not opened."));
+		return;
+	}
+
+	if (!GuildPopup)
+	{
+		GuildPopup = CreateWidget<UWarriorGuildPopupWidget>(this, GuildPopupClass);
+		if (!GuildPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Front] Failed to create guild popup."));
+			return;
+		}
+
+		GuildPopup->OnClosed.AddUniqueDynamic(this, &ThisClass::HandleGuildClosed);
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(GuildPopup);
+		}
+	}
+
+	if (!GuildPopup->IsInViewport())
+	{
+		GuildPopup->AddToViewport(GuildPopupZOrder);
+	}
+
+	GuildPopup->Open();
+	FocusTopWidget();
+}
+
+void AWarriorFrontPlayerController::HandleGuildClosed()
+{
+	FocusTopWidget();
+}
+
 void AWarriorFrontPlayerController::EnterStage(FName InStageId)
 {
 	//열린 스테이지만 들어간다. 판정은 서버 status(목록 서브시스템이 받은 값)
@@ -543,6 +592,10 @@ void AWarriorFrontPlayerController::FocusTopWidget()
 	else if (RankingPopup && RankingPopup->IsInViewport())
 	{
 		FocusWidget = RankingPopup;
+	}
+	else if (GuildPopup && GuildPopup->IsInViewport())
+	{
+		FocusWidget = GuildPopup;
 	}
 	else
 	{
