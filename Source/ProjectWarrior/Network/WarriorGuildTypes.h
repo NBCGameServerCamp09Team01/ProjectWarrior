@@ -81,7 +81,8 @@ struct PROJECTWARRIOR_API FWarriorGuildMember
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Guild")
 	FDateTime JoinedAt;
 
-	//지금 실시간 연결이 있나(서버 어느 대든). 끊긴 뒤 최대 150초까지 true로 남을 수 있다
+	//지금 실시간 연결이 있나(서버 어느 대든). G4로 받고, 실시간 PRESENCE_CHANGED로 바로 바뀐다.
+	//서버가 죽어 끊김 알림이 없으면 다음 G4까지(키 수명 150초 뒤) true로 남을 수 있다
 	UPROPERTY(BlueprintReadOnly, Category = "Warrior|Guild")
 	bool bOnline = false;
 };

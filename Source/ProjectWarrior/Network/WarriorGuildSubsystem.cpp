@@ -622,6 +622,12 @@ void UWarriorGuildSubsystem::NotifyRequestFailed(const FWarriorApiResult& InResu
 
 void UWarriorGuildSubsystem::HandleRealtimeMessage(const FString& InType, const FString& InId, const TSharedPtr<FJsonObject>& InData)
 {
+	if (InType == TEXT("PRESENCE_CHANGED"))
+	{
+		HandlePresenceChanged(InData);
+		return;
+	}
+
 	//길드 알림은 "다시 받으라"는 신호로만 쓴다(유실·순서 바뀜이 있을 수 있음). 화면 값은 G4가 기준
 	const bool bJoinRequestChanged = InType == TEXT("GUILD_JOIN_REQUESTED") || InType == TEXT("GUILD_MEMBER_JOINED");
 	if (bJoinRequestChanged
@@ -631,6 +637,37 @@ void UWarriorGuildSubsystem::HandleRealtimeMessage(const FString& InType, const 
 	{
 		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Guild] Realtime %s id=%s. Refreshing soon."), *InType, *InId);
 		ScheduleRealtimeRefresh(bJoinRequestChanged);
+	}
+}
+
+void UWarriorGuildSubsystem::HandlePresenceChanged(const TSharedPtr<FJsonObject>& InData)
+{
+	FString GuildId;
+	FString AccountId;
+	bool bOnline = false;
+	if (!ParsePresenceChanged(InData, GuildId, AccountId, bOnline))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Guild] PRESENCE_CHANGED could not be read."));
+		return;
+	}
+
+	//G4를 받기 전이거나 다른 길드의 늦은 알림이면 버린다. 길드가 바뀐 것은 GUILD_* 알림과 G4가 따로 맞춘다
+	if (!bMyGuildLoaded || GuildId != GetMyGuildId())
+	{
+		return;
+	}
+
+	bool bChanged = false;
+	if (!SetMemberOnline(MyGuild, AccountId, bOnline, bChanged))
+	{
+		//목록에 없는 사람(막 들어온 길드원 등): 목록이 옛것이므로 G4로 맞춘다
+		ScheduleRealtimeRefresh(false);
+		return;
+	}
+	if (bChanged)
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Guild] Member %s is now %s."), *AccountId, bOnline ? TEXT("online") : TEXT("offline"));
+		OnMyGuildUpdated.Broadcast();
 	}
 }
 
@@ -797,6 +834,37 @@ bool UWarriorGuildSubsystem::ParseJoinRequests(const FString& InBody, TArray<FWa
 	}
 
 	OutJoinRequests = ReadArray<FWarriorGuildJoinRequest>(Data, TEXT("joinRequests"), ReadJoinRequest);
+	return true;
+}
+
+bool UWarriorGuildSubsystem::ParsePresenceChanged(const TSharedPtr<FJsonObject>& InData, FString& OutGuildId, FString& OutAccountId, bool& bOutOnline)
+{
+	//값으로 바로 고치므로 칸이 빠진 메시지는 쓰지 않는다(GetBoolOrFalse처럼 없으면 false로 보면 잘못 끊김으로 보임).
+	//online은 JSON true·false만 받는다(TryGetBoolField는 문자열도 bool로 바꿔 읽음)
+	if (!InData.IsValid()
+		|| !InData->TryGetStringField(TEXT("guildId"), OutGuildId)
+		|| !InData->TryGetStringField(TEXT("accountId"), OutAccountId)
+		|| !InData->HasTypedField<EJson::Boolean>(TEXT("online")))
+	{
+		return false;
+	}
+	bOutOnline = InData->GetBoolField(TEXT("online"));
+	return !OutGuildId.IsEmpty() && !OutAccountId.IsEmpty();
+}
+
+bool UWarriorGuildSubsystem::SetMemberOnline(FWarriorMyGuild& InOutMyGuild, const FString& InAccountId, bool bInOnline, bool& bOutChanged)
+{
+	bOutChanged = false;
+	FWarriorGuildMember* Member = InOutMyGuild.Members.FindByPredicate([&InAccountId](const FWarriorGuildMember& InMember)
+	{
+		return InMember.AccountId == InAccountId;
+	});
+	if (!Member)
+	{
+		return false;
+	}
+	bOutChanged = Member->bOnline != bInOnline;
+	Member->bOnline = bInOnline;
 	return true;
 }
 

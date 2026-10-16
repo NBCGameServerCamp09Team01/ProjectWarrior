@@ -30,7 +30,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnWarriorGuildActionCompleted, EW
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorGuildRequestFailed, const FString&, ErrorCode, const FText&, Message);
 
 /**
- * 길드(M23 소셜)를 서버에서 받아 들고 있다. 명세: 루트 docs/contracts/guild-api.md v1, realtime-api.md v1.4 GUILD_*
+ * 길드(M23 소셜)를 서버에서 받아 들고 있다. 명세: 루트 docs/contracts/guild-api.md v1, realtime-api.md v1.4 GUILD_*·PRESENCE_CHANGED(Lv2)
  *
  * - 화면은 G4(내 길드) 하나로 다시 그린다(명세 "엔드포인트" 아래 규칙). 쓰기 응답은 "성공했다"는 확인으로만 쓰고, 성공하면 G4를 다시 받는다.
  *   G3 만들기만 응답이 G4 모양이라 바로 적용한다.
@@ -44,7 +44,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorGuildRequestFailed, const
  *
  * 연동 지점(다른 모듈):
  * - 채팅: GetMyGuildId·OnMyGuildChanged·HasLoadedMyGuild. 로그인 직후 G4 응답 전에는 HasLoadedMyGuild가 false다(그동안 "길드 없음"으로 보임).
- * - 실시간: UWarriorRealtimeSubsystem::OnMessage(U1)에서 GUILD_*만 본다. PRESENCE_CHANGED는 Lv2.
+ * - 실시간: UWarriorRealtimeSubsystem::OnMessage(U1)에서 GUILD_*와 PRESENCE_CHANGED를 본다.
+ *   GUILD_*는 G4를 다시 받는 신호로만 쓰고, PRESENCE_CHANGED는 값(누가 접속·끊김)이 다 들어 있어 길드원 목록을 바로 고친다.
  */
 UCLASS()
 class PROJECTWARRIOR_API UWarriorGuildSubsystem : public UGameInstanceSubsystem
@@ -137,6 +138,12 @@ public:
 	static bool ParseMyGuild(const FString& InBody, FWarriorMyGuild& OutMyGuild);
 	static bool ParseGuildList(const FString& InBody, TArray<FWarriorGuildSummary>& OutGuilds, FString& OutNextCursor);
 	static bool ParseJoinRequests(const FString& InBody, TArray<FWarriorGuildJoinRequest>& OutJoinRequests);
+
+	//실시간 PRESENCE_CHANGED의 data { guildId, accountId, online }. 칸이 하나라도 없으면 false
+	static bool ParsePresenceChanged(const TSharedPtr<FJsonObject>& InData, FString& OutGuildId, FString& OutAccountId, bool& bOutOnline);
+
+	//길드원 한 사람의 접속 표시를 바꾼다. 그 사람이 목록에 없으면 false(목록이 옛것), 값이 달라졌으면 bOutChanged true
+	static bool SetMemberOnline(FWarriorMyGuild& InOutMyGuild, const FString& InAccountId, bool bInOnline, bool& bOutChanged);
 	//~ End 응답 읽기
 
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Guild")
@@ -193,6 +200,7 @@ private:
 	//실시간 GUILD_* 알림 → 모아서 G4(필요하면 G7)
 	void HandleRealtimeMessage(const FString& InType, const FString& InId, const TSharedPtr<FJsonObject>& InData);
 	void ScheduleRealtimeRefresh(bool bInJoinRequests);
+	void HandlePresenceChanged(const TSharedPtr<FJsonObject>& InData);
 	bool HandleRealtimeRefreshTick(float InDeltaTime);
 
 	UFUNCTION()
