@@ -28,6 +28,11 @@ void UWarriorPauseMenuWidget::NativeConstruct()
 	{
 		Button_Exit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleExitClicked);
 	}
+
+	if (Button_SkipStep)
+	{
+		Button_SkipStep->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSkipClicked);
+	}
 }
 
 void UWarriorPauseMenuWidget::NativeDestruct()
@@ -40,6 +45,11 @@ void UWarriorPauseMenuWidget::NativeDestruct()
 	if (Button_Exit)
 	{
 		Button_Exit->OnClicked.RemoveDynamic(this, &ThisClass::HandleExitClicked);
+	}
+
+	if (Button_SkipStep)
+	{
+		Button_SkipStep->OnClicked.RemoveDynamic(this, &ThisClass::HandleSkipClicked);
 	}
 
 	Super::NativeDestruct();
@@ -81,6 +91,11 @@ void UWarriorPauseMenuWidget::SetLeaving(bool bInLeaving, const FText& InStatus)
 		Button_Exit->SetIsEnabled(!bInLeaving);
 	}
 
+	if (Button_SkipStep)
+	{
+		Button_SkipStep->SetIsEnabled(!bInLeaving);
+	}
+
 	if (Text_Status)
 	{
 		Text_Status->SetText(InStatus);
@@ -94,6 +109,25 @@ void UWarriorPauseMenuWidget::SetStageInfo(const FText& InText)
 	{
 		Text_StageInfo->SetText(InText);
 	}
+}
+
+void UWarriorPauseMenuWidget::SetSkipVisible(bool bInVisible)
+{
+	if (Button_SkipStep)
+	{
+		Button_SkipStep->SetVisibility(bInVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+}
+
+void UWarriorPauseMenuWidget::HandleSkipClicked()
+{
+	if (AWarriorStagePlayerController* StagePlayerController = GetOwningPlayer<AWarriorStagePlayerController>())
+	{
+		StagePlayerController->SkipFromPause();
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Pause] %s: owning player is not AWarriorStagePlayerController. Skip is ignored."), *GetName());
 }
 
 void UWarriorPauseMenuWidget::HandleResumeClicked()
