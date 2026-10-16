@@ -33,6 +33,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|AI")
 	void SetInitialTarget(AActor* InTarget);
 
+	// 행동을 멈춘다(튜토리얼 허수아비). 켜면 지금 BT를 멈추고 이동·시선을 풀며, 켜져 있는 동안 RunBehaviorTree를 무시한다.
+	// 빙의는 그대로라 ASC·피격 판정은 살아 있다. 기본은 꺼짐(본 게임은 부르지 않음)
+	void SetBehaviorSuppressed(bool bInSuppressed);
+
 	// 스트레이프로 대상 주위를 도는 방향. 1 = Yaw가 커지는 쪽(위에서 보면 시계 방향), -1 = 반대
 	UFUNCTION(BlueprintPure, Category = "Warrior|AI|Strafe")
 	int32 GetStrafeOrbitDirection() const { return StrafeOrbitDirection; }
@@ -79,6 +83,9 @@ private:
 
 	// BT 실행 전에 SetInitialTarget으로 받은 대상
 	TWeakObjectPtr<AActor> PendingInitialTarget;
+
+	// SetBehaviorSuppressed
+	bool bBehaviorSuppressed = false;
 
 	// 선호 스트레이프 반경 보정 범위 (±). BeginPlay에서 이 범위 안의 값을 무작위로 정함
 	UPROPERTY(EditDefaultsOnly, Category = "Strafe", meta = (ClampMin = "0.0", Units = "cm"))
