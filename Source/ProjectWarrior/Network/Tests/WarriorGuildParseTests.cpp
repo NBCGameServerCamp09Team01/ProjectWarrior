@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "ProjectWarrior/Network/WarriorErrorText.h"
+#include "ProjectWarrior/Network/WarriorGuildName.h"
 #include "ProjectWarrior/Network/WarriorGuildSubsystem.h"
 
 // 응답 본문은 루트 docs/contracts/examples/guild-*.json과 같은 모양이다(서버 없이 해석만 본다).
@@ -131,6 +132,41 @@ bool FWarriorGuildParseListTest::RunTest(const FString& Parameters)
 	const FWarriorErrorRule Rule = FWarriorErrorText::Resolve(Unknown, WarriorErrorContext::Guild);
 	TestEqual(TEXT("Prefix GUILD_ presentation"), Rule.Presentation, EWarriorErrorPresentation::Inline);
 	TestEqual(TEXT("Prefix GUILD_ action"), Rule.Action, EWarriorErrorAction::None);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorGuildNameTest, "ProjectWarrior.Network.M23.GuildName",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// 서버 GuildCreateRequest.NAME_PATTERN·GuildQueryService.NAME_PREFIX와 같은 판정인지 본다(서버 GuildSchemaTest·GuildQueryApiTest와 같은 예).
+// 실패하면 FWarriorGuildName의 글자 범위(한글 완성형 U+AC00~U+D7A3)·공백 규칙을 먼저 의심한다.
+bool FWarriorGuildNameTest::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Korean"), FWarriorGuildName::Check(TEXT("새벽기사단")).IsValid());
+	TestTrue(TEXT("English with one space"), FWarriorGuildName::Check(TEXT("Knight Order")).IsValid());
+	TestTrue(TEXT("Two letters"), FWarriorGuildName::Check(TEXT("ab")).IsValid());
+	TestTrue(TEXT("Twelve letters"), FWarriorGuildName::Check(TEXT("abcdefghijkl")).IsValid());
+
+	const FWarriorGuildNameCheck One = FWarriorGuildName::Check(TEXT("a"));
+	TestFalse(TEXT("One letter is too short"), One.bLengthOk);
+	TestFalse(TEXT("Thirteen letters"), FWarriorGuildName::Check(TEXT("abcdefghijklm")).bLengthOk);
+	TestFalse(TEXT("Empty"), FWarriorGuildName::Check(FString()).IsValid());
+
+	TestFalse(TEXT("Leading space"), FWarriorGuildName::Check(TEXT(" ab")).bSpacesOk);
+	TestFalse(TEXT("Trailing space"), FWarriorGuildName::Check(TEXT("ab ")).bSpacesOk);
+	TestFalse(TEXT("Double space"), FWarriorGuildName::Check(TEXT("a  b")).bSpacesOk);
+	TestTrue(TEXT("Double space keeps chars ok"), FWarriorGuildName::Check(TEXT("a  b")).bCharsOk);
+
+	TestFalse(TEXT("Jamo"), FWarriorGuildName::Check(TEXT("ㄱㄴ")).bCharsOk);
+	TestFalse(TEXT("Symbol"), FWarriorGuildName::Check(TEXT("ab!")).bCharsOk);
+	TestFalse(TEXT("Underscore"), FWarriorGuildName::Check(TEXT("a_b")).bCharsOk);
+
+	// 검색어: 1자부터, 첫 글자 공백 금지, 뒤 공백은 서버 정규식이 허용
+	TestTrue(TEXT("Prefix one letter"), FWarriorGuildName::IsValidSearchPrefix(TEXT("새")));
+	TestTrue(TEXT("Prefix trailing space"), FWarriorGuildName::IsValidSearchPrefix(TEXT("Knight ")));
+	TestFalse(TEXT("Prefix leading space"), FWarriorGuildName::IsValidSearchPrefix(TEXT(" a")));
+	TestFalse(TEXT("Prefix percent"), FWarriorGuildName::IsValidSearchPrefix(TEXT("a%")));
+	TestFalse(TEXT("Prefix too long"), FWarriorGuildName::IsValidSearchPrefix(TEXT("abcdefghijklm")));
 	return true;
 }
 

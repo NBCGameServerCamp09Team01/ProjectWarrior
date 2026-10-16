@@ -10,6 +10,7 @@
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
 #include "ProjectWarrior/Chat/WarriorChatSettings.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
+#include "ProjectWarrior/Network/WarriorGuildSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "WarriorMainMenu"
 
@@ -41,6 +42,11 @@ void UWarriorMainMenuWidget::NativeConstruct()
 		Button_Ranking->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleRankingButtonClicked);
 	}
 
+	if (Button_Guild)
+	{
+		Button_Guild->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleGuildButtonClicked);
+	}
+
 	if (Button_Logout)
 	{
 		Button_Logout->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLogoutButtonClicked);
@@ -56,6 +62,13 @@ void UWarriorMainMenuWidget::NativeConstruct()
 		Account->OnAccountChanged.AddUniqueDynamic(this, &ThisClass::HandleAccountChanged);
 	}
 	RefreshAccountSummary();
+
+	//받은 신청 수는 길드 알림(G4)이 올 때마다 바뀐다(M23 길드)
+	if (UWarriorGuildSubsystem* Guild = UWarriorGuildSubsystem::Get(this))
+	{
+		Guild->OnMyGuildUpdated.AddUniqueDynamic(this, &ThisClass::HandleMyGuildUpdated);
+	}
+	RefreshGuildBadge();
 
 	AddChatPanel();
 }
@@ -105,6 +118,16 @@ void UWarriorMainMenuWidget::NativeDestruct()
 	if (Button_Ranking)
 	{
 		Button_Ranking->OnClicked.RemoveDynamic(this, &ThisClass::HandleRankingButtonClicked);
+	}
+
+	if (Button_Guild)
+	{
+		Button_Guild->OnClicked.RemoveDynamic(this, &ThisClass::HandleGuildButtonClicked);
+	}
+
+	if (UWarriorGuildSubsystem* Guild = UWarriorGuildSubsystem::Get(this))
+	{
+		Guild->OnMyGuildUpdated.RemoveDynamic(this, &ThisClass::HandleMyGuildUpdated);
 	}
 
 	if (Button_Logout)
@@ -201,6 +224,40 @@ void UWarriorMainMenuWidget::RequestOpenRanking()
 void UWarriorMainMenuWidget::HandleRankingButtonClicked()
 {
 	RequestOpenRanking();
+}
+
+void UWarriorMainMenuWidget::RequestOpenGuild()
+{
+	if (AWarriorFrontPlayerController* FrontPlayerController = GetOwningPlayer<AWarriorFrontPlayerController>())
+	{
+		FrontPlayerController->OpenGuild();
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] %s: owning player is not AWarriorFrontPlayerController. Guild is not opened."), *GetName());
+}
+
+void UWarriorMainMenuWidget::HandleGuildButtonClicked()
+{
+	RequestOpenGuild();
+}
+
+void UWarriorMainMenuWidget::HandleMyGuildUpdated()
+{
+	RefreshGuildBadge();
+}
+
+void UWarriorMainMenuWidget::RefreshGuildBadge()
+{
+	if (!Text_GuildBadge)
+	{
+		return;
+	}
+
+	const UWarriorGuildSubsystem* Guild = UWarriorGuildSubsystem::Get(this);
+	const int32 Pending = Guild && Guild->IsLeader() ? Guild->GetMyGuild().PendingJoinRequestCount : 0;
+	Text_GuildBadge->SetText(FText::AsNumber(Pending));
+	Text_GuildBadge->SetVisibility(Pending > 0 ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 void UWarriorMainMenuWidget::HandleLogoutButtonClicked()
