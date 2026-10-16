@@ -54,6 +54,7 @@ void UWarriorStagePlaySubsystem::HandleSessionEnded(EWarriorSessionEndReason InR
 {
 	//다른 계정이 이 플레이 ID로 결과를 내지 않게 비운다. 늦게 온 시작 응답도 버리도록 번호를 올린다
 	++StartSerial;
+	bStartGivenUp = false;
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
 	ClearWavePlan();
@@ -63,6 +64,7 @@ void UWarriorStagePlaySubsystem::StartStagePlay(FName InStageId, const FWarriorS
 {
 	//이전 플레이 ID로 결과를 내지 않도록 먼저 비운다
 	++StartSerial;
+	bStartGivenUp = false;
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
 	ResultSubmitState = EWarriorResultSubmitState::None;
@@ -145,6 +147,11 @@ bool UWarriorStagePlaySubsystem::AbandonStagePlay(const FString& InStagePlayId, 
 		});
 }
 
+bool UWarriorStagePlaySubsystem::IsAbandonEnded(int32 InStatus, const FString& InErrorCode)
+{
+	return InStatus == 200 || InStatus == 404 || (InStatus == 409 && InErrorCode == TEXT("STAGE_PLAY_NOT_IN_PROGRESS"));
+}
+
 bool UWarriorStagePlaySubsystem::SaveCheckpoint(const FWarriorPlayCheckpoint& InCheckpoint, FCheckpointSaveCallback InCallback)
 {
 	UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this);
@@ -199,10 +206,20 @@ bool UWarriorStagePlaySubsystem::RequestCheckpoint(const FString& InStagePlayId,
 		});
 }
 
-void UWarriorStagePlaySubsystem::AbandonCurrentStagePlay()
+void UWarriorStagePlaySubsystem::AbandonCurrentStagePlay(FAbandonDoneCallback InOnDone)
 {
 	if (CurrentStagePlayId.IsEmpty())
 	{
+		//시작 응답(P1)을 기다리는 중이면 늦게 올 201을 포기하도록 표시한다(409 복구 사슬의 마지막 시작도 같은 응답 처리를 지난다)
+		if (WavePlanState == EWarriorWavePlanState::Waiting)
+		{
+			bStartGivenUp = true;
+			UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Left before the start response. The play will be abandoned when it arrives."));
+		}
+		if (InOnDone)
+		{
+			InOnDone(true);
+		}
 		return;
 	}
 
@@ -212,14 +229,24 @@ void UWarriorStagePlaySubsystem::AbandonCurrentStagePlay()
 	CurrentStagePlayId.Reset();
 	CurrentStagePlayExpiresAt = FDateTime();
 
-	const bool bStarted = AbandonStagePlay(StagePlayId, [StagePlayId](int32 Status, const FString& ErrorCode)
+	const bool bStarted = AbandonStagePlay(StagePlayId, [StagePlayId, InOnDone](int32 Status, const FString& ErrorCode)
 	{
-		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Abandon by leaving. stagePlayId=%s status=%d code=%s"), *StagePlayId, Status, *ErrorCode);
+		const bool bEnded = IsAbandonEnded(Status, ErrorCode);
+		UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Abandon by leaving. stagePlayId=%s status=%d code=%s ended=%s"),
+			*StagePlayId, Status, *ErrorCode, bEnded ? TEXT("true") : TEXT("false"));
+		if (InOnDone)
+		{
+			InOnDone(bEnded);
+		}
 	});
 
 	if (!bStarted)
 	{
 		UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Abandon by leaving not sent. stagePlayId=%s"), *StagePlayId);
+		if (InOnDone)
+		{
+			InOnDone(false);
+		}
 	}
 }
 
@@ -293,12 +320,15 @@ void UWarriorStagePlaySubsystem::HandleStartResponse(int32 InStartSerial, const 
 			return;
 		}
 
-		//M24: 구성을 기다리다 이미 포기한 판(기다림 한도를 넘김)이면 서버에 남지 않게 바로 포기한다
-		if (WavePlanState == EWarriorWavePlanState::Failed)
+		//M24: 구성을 기다리다 이미 포기한 판(기다림 한도를 넘김), 또는 응답 전에 사용자가 나간 판이면 서버에 남지 않게 바로 포기한다
+		if (WavePlanState == EWarriorWavePlanState::Failed || bStartGivenUp)
 		{
-			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start response came after the run was given up. Abandoning play %s."),
-				*ResponseDto.Data.StagePlayId);
-			AbandonStagePlay(ResponseDto.Data.StagePlayId, [](int32, const FString&) {});
+			const FString GivenUpPlayId = ResponseDto.Data.StagePlayId;
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[StagePlay] Start response came after the run was given up. Abandoning play %s."), *GivenUpPlayId);
+			AbandonStagePlay(GivenUpPlayId, [GivenUpPlayId](int32 Status, const FString& ErrorCode)
+			{
+				UE_LOG(LogProjectWarrior, Log, TEXT("[StagePlay] Late start abandoned. stagePlayId=%s status=%d code=%s"), *GivenUpPlayId, Status, *ErrorCode);
+			});
 			return;
 		}
 

@@ -71,6 +71,9 @@ namespace WarriorErrorTable
 			Make(TEXT("STAGE_WAVE_PLAN_TIMEOUT"),  LOCTEXT("StageWavePlanTimeout", "스테이지 정보를 받지 못했습니다.\n잠시 뒤 다시 시도해 주세요."), EShow::Popup, EAct::GoMainMenu),
 			Make(TEXT("STAGE_WAVE_PLAN_MISSING"),  LOCTEXT("StageWavePlanMissing", "이 버전에서 열 수 없는 스테이지입니다."), EShow::Popup, EAct::GoMainMenu, true),
 			Make(TEXT("STAGE_WAVE_MONSTER_UNKNOWN"), LOCTEXT("StageWaveMonsterUnknown", "이 버전에서 열 수 없는 스테이지입니다."), EShow::Popup, EAct::GoMainMenu),
+			//게임이 만드는 포기 실패(일시정지 → 나가기의 P4가 연결 실패·5xx 등). 메인메뉴 이동은 부른 쪽이 하므로 다음 행동은 없다.
+			//서버 코드(HTTP_5xx 등)에 맥락 줄을 다는 방식은 HTTP 상태 기본값(④)이 맥락보다 먼저 잡혀 이 문구가 나오지 않으므로 코드 하나로 둔다
+			Make(TEXT("STAGE_PLAY_ABANDON_FAILED"), LOCTEXT("StagePlayAbandonFailed", "진행 중인 스테이지를 포기하지 못했습니다.\n다음 로그인 때 다시 묻습니다."), EShow::Popup, EAct::None),
 
 			//~ 스테이지 플레이(stage-play-api.md)
 			Make(TEXT("STAGE_PLAY_NOT_FOUND"),   LOCTEXT("StagePlayNotFound", "스테이지 플레이 기록이 없어\n결과를 저장할 수 없습니다."), EShow::Popup, EAct::DiscardStored, true),
