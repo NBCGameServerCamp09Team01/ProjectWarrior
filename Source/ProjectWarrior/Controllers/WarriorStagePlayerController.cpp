@@ -6,17 +6,24 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/WarriorFunctionLibrary.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
 #include "ProjectWarrior/Audio/WarriorSoundTags.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Characters/WarriorPlayerCharacter.h"
+#include "ProjectWarrior/GameModes/WarriorStageGameMode.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
+#include "ProjectWarrior/Network/WarriorErrorPresenterSubsystem.h"
 #include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
+#include "ProjectWarrior/Shop/WarriorShopActor.h"
 #include "ProjectWarrior/Widgets/WarriorStageHUDWidget.h"
 #include "ProjectWarrior/Widgets/WarriorStageResultWidget.h"
 
@@ -144,6 +151,147 @@ void AWarriorStagePlayerController::ReturnToMainMenu()
 	UGameplayStatics::OpenLevelBySoftObjectPtr(this, MainMenuLevel);
 }
 
+//~ Begin 일시정지
+
+bool AWarriorStagePlayerController::CanOpenPause(FString& OutReason) const
+{
+	if (PauseState != EWarriorPauseState::Closed)
+	{
+		OutReason = TEXT("AlreadyOpen");
+		return false;
+	}
+
+	//판 상태: 초기화(판 시작 전)·끝 상태(결과를 이미 냄)는 막는다
+	const AWarriorStageGameState* StageGameState = BoundGameState.Get();
+	const EWarriorStageState StageState = StageGameState ? StageGameState->GetStageState() : EWarriorStageState::None;
+	switch (StageState)
+	{
+	case EWarriorStageState::None:
+	case EWarriorStageState::Initializing:
+	case EWarriorStageState::StageCleared:
+	case EWarriorStageState::StageFailed:
+		OutReason = FString::Printf(TEXT("State(%s)"), *UEnum::GetValueAsString(StageState));
+		return false;
+	default:
+		break;
+	}
+
+	//마지막 웨이브의 클리어 연출 뒤에는 결과를 낸다. 여기서 나가면 다 깬 판이 포기가 된다(계획서 EX-2)
+	if (StageState == EWarriorStageState::WaveCleared)
+	{
+		const AWarriorStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<AWarriorStageGameMode>();
+		if (StageGameMode && StageGameMode->IsCurrentWaveLast())
+		{
+			OutReason = TEXT("LastWaveCleared");
+			return false;
+		}
+	}
+
+	//사망(사망 ~ StageFailed 사이 포함)·블레이드 모드·전술 모드. 두 모드는 시간 배율을 바꾸고 입력을 따로 묶는다
+	if (APawn* ControlledPawn = GetPawn())
+	{
+		FGameplayTagContainer BlockingTags;
+		BlockingTags.AddTag(WarriorGameplayTags::Shared_Status_Death);
+		BlockingTags.AddTag(WarriorGameplayTags::Player_Status_BladeMode);
+		BlockingTags.AddTag(WarriorGameplayTags::Player_Status_TacticalMode);
+		if (UWarriorFunctionLibrary::NativeDoesActorHaveAnyTag(ControlledPawn, BlockingTags))
+		{
+			OutReason = TEXT("PlayerStatus(Death/BladeMode/TacticalMode)");
+			return false;
+		}
+
+		//인벤토리 휠은 닫을 때 시간 배율을 1.0·입력 모드를 게임으로 덮어쓴다
+		if (const AWarriorPlayerCharacter* PlayerCharacter = Cast<AWarriorPlayerCharacter>(ControlledPawn))
+		{
+			if (PlayerCharacter->IsInventoryWheelOpen())
+			{
+				OutReason = TEXT("InventoryWheel");
+				return false;
+			}
+		}
+	}
+
+	//상점은 닫을 때 입력 모드를 게임으로 덮어쓴다
+	for (TActorIterator<AWarriorShopActor> It(GetWorld()); It; ++It)
+	{
+		if (It->IsShopOpen())
+		{
+			OutReason = TEXT("Shop");
+			return false;
+		}
+	}
+
+	//오류 팝업이 떠 있으면 팝업이 먼저(ESC로 팝업의 선택을 대신하지 않는다)
+	if (const UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		if (Presenter->IsShowing())
+		{
+			OutReason = TEXT("ErrorPopup");
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool AWarriorStagePlayerController::TryOpenPause()
+{
+	FString Reason;
+	if (!CanOpenPause(Reason))
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Blocked. reason=%s"), *Reason);
+		return false;
+	}
+
+	if (!UGameplayStatics::SetGamePaused(this, true))
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Pause] SetGamePaused(true) failed."));
+		return false;
+	}
+
+	PauseState = EWarriorPauseState::Open;
+
+	//누른 채 연 이동 키를 뗀 것이 게임 입력에 전해지지 않아 계속하기 뒤 저절로 움직이지 않게 비운다(계획서 IN-1)
+	FlushPressedKeys();
+
+	//멈춘 시간은 플레이 시간에서 뺀다
+	if (AWarriorStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<AWarriorStageGameMode>())
+	{
+		StageGameMode->NotifyPauseStarted();
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Open. state=%s"),
+		BoundGameState.IsValid() ? *UEnum::GetValueAsString(BoundGameState->GetStageState()) : TEXT("None"));
+	return true;
+}
+
+void AWarriorStagePlayerController::ClosePause()
+{
+	if (PauseState == EWarriorPauseState::Closed)
+	{
+		return;
+	}
+
+	UGameplayStatics::SetGamePaused(this, false);
+	PauseState = EWarriorPauseState::Closed;
+	FlushPressedKeys();
+
+	if (AWarriorStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<AWarriorStageGameMode>())
+	{
+		StageGameMode->NotifyPauseEnded();
+	}
+
+	//열린 동안 판 상태가 바뀌었을 수 있으므로(웨이브 구성 도착 등) 지금 상태로 입력 모드까지 다시 맞춘다
+	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
+	{
+		ApplyStatePermission(StageGameState->GetStageState(), true);
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Close."));
+}
+
+//~ End 일시정지
+
 void AWarriorStagePlayerController::HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage)
 {
 	//종료 이유는 서브시스템에 남아 있으므로 꺼내지 않는다(프론트 컨트롤러가 BeginPlay에서 꺼내 화면과 팝업을 정한다)
@@ -230,7 +378,8 @@ void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InSt
 
 	//입력 모드·시점·커서는 인벤토리 휠(UInventoryWheelWidget)도 바꾼다.
 	//전환마다 덮으면 열려 있는 휠이 커서와 입력을 잃으므로, UI 입력 모드 값이 바뀔 때(결과 상태 진입·이탈)만 적용한다.
-	if (bForceInputMode || Permission.bUIInputMode != bAppliedUIInputMode)
+	//일시정지가 열린 동안(예: 웨이브 구성이 도착해 상태가 바뀜)에는 일시정지 화면의 입력을 지키고, 닫을 때(ClosePause) 맞춘다
+	if (PauseState == EWarriorPauseState::Closed && (bForceInputMode || Permission.bUIInputMode != bAppliedUIInputMode))
 	{
 		ResetIgnoreLookInput();
 		SetIgnoreLookInput(Permission.bUIInputMode);
@@ -248,10 +397,11 @@ void AWarriorStagePlayerController::ApplyStatePermission(EWarriorStageState InSt
 		bAppliedUIInputMode = Permission.bUIInputMode;
 	}
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Apply permission for %s. Move: %s, InputMode: %s"),
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Apply permission for %s. Move: %s, InputMode: %s%s"),
 		*UEnum::GetValueAsString(InState),
 		Permission.bCanMove ? TEXT("allowed") : TEXT("locked"),
-		Permission.bUIInputMode ? TEXT("UI") : TEXT("Game"));
+		Permission.bUIInputMode ? TEXT("UI") : TEXT("Game"),
+		PauseState == EWarriorPauseState::Closed ? TEXT("") : TEXT(" (not applied: pause open)"));
 }
 
 void AWarriorStagePlayerController::ShowResult(const FWarriorStageResult& InResult)

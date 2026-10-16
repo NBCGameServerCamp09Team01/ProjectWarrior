@@ -143,6 +143,9 @@ private:
 public:
 	FORCEINLINE UPlayerCombatComponent* GetPlayerCombatComponent() const { return PlayerCombatComponent; }
 
+	//인벤토리 휠이 열려 있는가(일시정지를 막을 때 쓴다)
+	bool IsInventoryWheelOpen() const;
+
 	void SetCurrentLockedActor(AActor* _Target) { CurrentLockedActor = _Target; }
 
 	UFUNCTION(BlueprintCallable)

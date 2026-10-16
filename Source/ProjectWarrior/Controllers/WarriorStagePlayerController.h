@@ -10,6 +10,15 @@
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 #include "WarriorStagePlayerController.generated.h"
 
+//일시정지 상태(계획서 4장). ConfirmingExit·Leaving은 나가기 화면이 붙을 때 쓴다
+enum class EWarriorPauseState : uint8
+{
+	Closed,			// 일시정지 아님
+	Open,			// 일시정지 화면이 열림(게임 멈춤)
+	ConfirmingExit,	// 나가기 확인 팝업
+	Leaving			// 포기(P4) 응답을 기다림
+};
+
 class AWarriorStageGameState;
 class SWidget;
 class UUserWidget;
@@ -48,6 +57,16 @@ public:
 	//MainMenuLevel로 이동한다 (결과 화면 "메인메뉴")
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Stage")
 	void ReturnToMainMenu();
+
+	//~ Begin 일시정지
+	//열 수 있으면 게임을 멈춘다(SetGamePaused). 열 수 없으면 이유를 로그로 남기고 false
+	bool TryOpenPause();
+
+	//일시정지를 닫고 게임을 이어 간다. 입력 모드·이동 잠금은 지금 판 상태에 맞게 다시 맞춘다
+	void ClosePause();
+
+	bool IsPauseOpen() const { return PauseState != EWarriorPauseState::Closed; }
+	//~ End 일시정지
 
 protected:
 	//~ Begin AActor Interface.
@@ -127,6 +146,12 @@ protected:
 	FText SavingResultText = NSLOCTEXT("WarriorStage", "SavingResult", "결과를 저장하는 중…");
 
 private:
+	//일시정지를 열 수 있는가. 판 상태(초기화·끝 상태·마지막 웨이브 클리어 연출), 사망·블레이드·전술 모드 태그,
+	//인벤토리 휠·상점·오류 팝업을 본다(계획서 4장 "일시정지를 열 수 있는 경우"). 막히면 OutReason에 이유
+	bool CanOpenPause(FString& OutReason) const;
+
+	EWarriorPauseState PauseState = EWarriorPauseState::Closed;
+
 	TWeakObjectPtr<AWarriorStageGameState> BoundGameState;
 
 	UPROPERTY(Transient)
