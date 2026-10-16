@@ -1,0 +1,200 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#include "WarriorTutorialZone.h"
+#include "Components/ArrowComponent.h"
+#include "Components/BoxComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/Controller.h"
+#include "TimerManager.h"
+#include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "ProjectWarrior/AbilitySystem/WarriorAbilitySystemComponent.h"
+#include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
+#include "ProjectWarrior/Characters/WarriorAICharacter.h"
+#include "ProjectWarrior/Controllers/WarriorAIController.h"
+
+AWarriorTutorialZone::AWarriorTutorialZone()
+{
+	PrimaryActorTick.bCanEverTick = false;
+
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
+	PlayerStartPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("PlayerStartPoint"));
+	PlayerStartPoint->SetupAttachment(SceneRoot);
+
+	GoalVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("GoalVolume"));
+	GoalVolume->SetupAttachment(SceneRoot);
+	GoalVolume->SetBoxExtent(FVector(100.f, 100.f, 100.f));
+	GoalVolume->SetCollisionProfileName(TEXT("Trigger"));
+	GoalVolume->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleGoalVolumeBeginOverlap);
+}
+
+void AWarriorTutorialZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	//레벨을 떠날 때는 월드가 적을 함께 치운다. 구역만 지워질 때(Destroyed)만 직접 치운다
+	if (EndPlayReason == EEndPlayReason::Destroyed)
+	{
+		DeactivateZone();
+	}
+	else if (UWorld* World = GetWorld())
+	{
+		for (FTimerHandle& Timer : RespawnTimers)
+		{
+			World->GetTimerManager().ClearTimer(Timer);
+		}
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void AWarriorTutorialZone::ActivateZone(APawn* InPlayerPawn)
+{
+	PlayerPawn = InPlayerPawn;
+	bZoneActive = true;
+
+	if (bTeleportPlayer && InPlayerPawn)
+	{
+		const FTransform StartTransform = PlayerStartPoint->GetComponentTransform();
+		InPlayerPawn->TeleportTo(StartTransform.GetLocation(), StartTransform.Rotator());
+		if (AController* PlayerController = InPlayerPawn->GetController())
+		{
+			PlayerController->SetControlRotation(StartTransform.Rotator());
+		}
+	}
+
+	SpawnedEnemies.SetNum(Enemies.Num());
+	RespawnTimers.SetNum(Enemies.Num());
+	for (int32 Index = 0; Index < Enemies.Num(); ++Index)
+	{
+		//같은 구역의 다음 단계면 살아 있는 상대를 그대로 쓴다
+		if (!SpawnedEnemies[Index].IsValid())
+		{
+			SpawnEnemy(Index);
+		}
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Tutorial] Zone %s activated. enemies=%d"), *ZoneId.ToString(), Enemies.Num());
+}
+
+void AWarriorTutorialZone::DeactivateZone()
+{
+	if (!bZoneActive && SpawnedEnemies.IsEmpty())
+	{
+		return;
+	}
+	bZoneActive = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		for (FTimerHandle& Timer : RespawnTimers)
+		{
+			World->GetTimerManager().ClearTimer(Timer);
+		}
+	}
+
+	for (const TWeakObjectPtr<AWarriorAICharacter>& Enemy : SpawnedEnemies)
+	{
+		if (AWarriorAICharacter* EnemyActor = Enemy.Get())
+		{
+			EnemyActor->OnCharacterDied.RemoveDynamic(this, &ThisClass::HandleEnemyDied);
+			EnemyActor->Destroy();
+		}
+	}
+	SpawnedEnemies.Reset();
+	RespawnTimers.Reset();
+}
+
+void AWarriorTutorialZone::SpawnEnemy(int32 InSpawnIndex)
+{
+	if (!bZoneActive || !Enemies.IsValidIndex(InSpawnIndex) || !Enemies[InSpawnIndex].EnemyClass)
+	{
+		return;
+	}
+
+	const FWarriorTutorialSpawn& Spawn = Enemies[InSpawnIndex];
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = this;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	const FTransform SpawnTransform = Spawn.RelativeTransform * GetActorTransform();
+	AWarriorAICharacter* Enemy = GetWorld()->SpawnActor<AWarriorAICharacter>(Spawn.EnemyClass, SpawnTransform, SpawnParameters);
+	if (!Enemy)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Tutorial] Zone %s failed to spawn %s."), *ZoneId.ToString(), *GetNameSafe(Spawn.EnemyClass));
+		return;
+	}
+
+	SpawnedEnemies[InSpawnIndex] = Enemy;
+	Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleEnemyDied);
+	if (Spawn.bHarmless)
+	{
+		MakeHarmless(Enemy);
+	}
+
+	//웨이브 스포너와 같이 플레이어를 첫 대상으로 준다(AWarriorWaveSpawner::AssignInitialTarget)
+	if (AWarriorAIController* AIController = Cast<AWarriorAIController>(Enemy->GetController()))
+	{
+		AIController->SetInitialTarget(PlayerPawn.Get());
+	}
+}
+
+void AWarriorTutorialZone::MakeHarmless(AWarriorAICharacter* InEnemy) const
+{
+	UWarriorAbilitySystemComponent* ASC = InEnemy ? InEnemy->GetWarriorAbilitySystemComponent() : nullptr;
+	if (!ASC)
+	{
+		return;
+	}
+
+	//시작 데이터(GE)가 AttackPower를 덮어쓴 뒤에 0으로 둔다. 로드가 끝나면 Initializing 태그가 빠진다(AWarriorAICharacter::InitEnemyStartUpData)
+	if (ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Initializing))
+	{
+		ASC->RegisterGameplayTagEvent(WarriorGameplayTags::Shared_Status_Initializing, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleEnemyInitialized, TWeakObjectPtr<AWarriorAICharacter>(InEnemy));
+		return;
+	}
+
+	ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute(), 0.f);
+}
+
+void AWarriorTutorialZone::HandleEnemyInitialized(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy) const
+{
+	if (InNewCount > 0)
+	{
+		return;
+	}
+
+	if (AWarriorAICharacter* Enemy = InEnemy.Get())
+	{
+		if (UWarriorAbilitySystemComponent* ASC = Enemy->GetWarriorAbilitySystemComponent())
+		{
+			ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute(), 0.f);
+		}
+	}
+}
+
+void AWarriorTutorialZone::HandleEnemyDied(AWarriorBaseCharacter* DeadCharacter)
+{
+	const int32 SpawnIndex = SpawnedEnemies.IndexOfByPredicate([DeadCharacter](const TWeakObjectPtr<AWarriorAICharacter>& Enemy)
+	{
+		return Enemy.Get() == DeadCharacter;
+	});
+	if (SpawnIndex == INDEX_NONE || !bZoneActive || !Enemies[SpawnIndex].bRespawnWhenDead)
+	{
+		return;
+	}
+
+	//죽은 몸은 적 쪽 사망 처리가 치운다. 자리를 비우고 새로 부른다
+	SpawnedEnemies[SpawnIndex].Reset();
+	GetWorld()->GetTimerManager().SetTimer(RespawnTimers[SpawnIndex],
+		FTimerDelegate::CreateUObject(this, &ThisClass::SpawnEnemy, SpawnIndex), FMath::Max(RespawnDelay, 0.01f), false);
+}
+
+void AWarriorTutorialZone::HandleGoalVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (bZoneActive && OtherActor && OtherActor == PlayerPawn.Get())
+	{
+		OnZoneReached.Broadcast(this);
+	}
+}
