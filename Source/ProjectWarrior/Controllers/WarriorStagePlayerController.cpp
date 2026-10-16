@@ -415,10 +415,13 @@ void AWarriorStagePlayerController::HidePauseMenu()
 	if (ExitConfirmPopup)
 	{
 		ExitConfirmPopup->OnChoice.RemoveDynamic(this, &ThisClass::HandleExitChoice);
-		ExitConfirmPopup->RemoveFromParent();
+		if (ExitConfirmPopup->IsInViewport())
+		{
+			ExitConfirmPopup->RemoveFromParent();
+		}
 	}
 
-	if (PauseMenuWidget)
+	if (PauseMenuWidget && PauseMenuWidget->IsInViewport())
 	{
 		PauseMenuWidget->RemoveFromParent();
 	}
@@ -427,7 +430,8 @@ void AWarriorStagePlayerController::HidePauseMenu()
 void AWarriorStagePlayerController::FocusPauseWidget()
 {
 	UUserWidget* FocusWidget = nullptr;
-	if (PauseState == EWarriorPauseState::ConfirmingExit && ExitConfirmPopup && ExitConfirmPopup->IsInViewport())
+	//확인 팝업(WBP_NoticePopup)이 포커스를 받지 못하면 일시정지 화면에 둔다. 그러면 ESC는 일시정지 화면이 받아 "취소"가 되고(HandlePauseBack), 팝업 버튼은 마우스로 누른다
+	if (PauseState == EWarriorPauseState::ConfirmingExit && ExitConfirmPopup && ExitConfirmPopup->IsInViewport() && ExitConfirmPopup->IsFocusable())
 	{
 		FocusWidget = ExitConfirmPopup;
 	}
@@ -450,7 +454,15 @@ void AWarriorStagePlayerController::HandlePauseBack()
 		ClosePause();
 		break;
 	case EWarriorPauseState::ConfirmingExit:
-		//확인 팝업에 포커스가 있으면 ESC는 팝업이 받는다. 일시정지 화면이 받았으면 팝업을 취소한 것으로 본다
+		//일시정지 화면이 ESC를 받았으면 확인 팝업을 취소한 것으로 본다. 버튼으로 고른 게 아니므로 팝업은 여기서 닫는다
+		if (ExitConfirmPopup)
+		{
+			ExitConfirmPopup->OnChoice.RemoveDynamic(this, &ThisClass::HandleExitChoice);
+			if (ExitConfirmPopup->IsInViewport())
+			{
+				ExitConfirmPopup->Close();
+			}
+		}
 		HandleExitChoice(false);
 		break;
 	default:
@@ -507,13 +519,10 @@ void AWarriorStagePlayerController::HandleExitChoice(bool bConfirmed)
 		return;
 	}
 
+	//버튼으로 골랐으면 팝업이 이 알림 뒤에 스스로 닫는다(UWarriorNoticePopupWidget::Close). 여기서 먼저 내리면 이중 제거 경고가 난다
 	if (ExitConfirmPopup)
 	{
 		ExitConfirmPopup->OnChoice.RemoveDynamic(this, &ThisClass::HandleExitChoice);
-		if (ExitConfirmPopup->IsInViewport())
-		{
-			ExitConfirmPopup->RemoveFromParent();
-		}
 	}
 
 	if (!bConfirmed)
