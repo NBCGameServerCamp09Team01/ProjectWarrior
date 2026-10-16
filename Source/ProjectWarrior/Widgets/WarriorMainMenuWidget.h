@@ -43,6 +43,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void RequestOpenRanking();
 
+	//길드 팝업을 연다. 소유 컨트롤러의 OpenGuild를 호출한다(M23 길드)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void RequestOpenGuild();
+
 protected:
 	//~ Begin UUserWidget Interface.
 	virtual void NativeConstruct() override;
@@ -66,6 +70,16 @@ protected:
 
 	UFUNCTION()
 	void HandleRankingButtonClicked();
+
+	UFUNCTION()
+	void HandleGuildButtonClicked();
+
+	//길드 서브시스템의 OnMyGuildUpdated에 연결. 받은 신청 수 배지를 다시 그린다
+	UFUNCTION()
+	void HandleMyGuildUpdated();
+
+	//길드장이고 받은 신청이 있을 때만 Text_GuildBadge에 수를 보인다(도안 Q2)
+	void RefreshGuildBadge();
 
 	//소유 컨트롤러의 Logout을 부른다. 화면 이동은 컨트롤러가 OnSessionEnded를 받아 한다
 	UFUNCTION()
@@ -93,6 +107,14 @@ protected:
 	//스킬과 로그아웃 사이(랭킹 M7)
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Ranking;
+
+	//랭킹과 로그아웃 사이(M23 길드, 도안 Q1)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Guild;
+
+	//[길드] 버튼 위 받은 신청 수. 0이거나 길드장이 아니면 숨긴다
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_GuildBadge;
 
 	//"OOO 영웅님, 환영합니다."
 	UPROPERTY(meta = (BindWidgetOptional))

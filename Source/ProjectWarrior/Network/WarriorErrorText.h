@@ -12,6 +12,8 @@ namespace WarriorErrorContext
 {
 	inline const FName Login = TEXT("Login");
 	inline const FName Signup = TEXT("Signup");
+	//길드 팝업(M23). 길드 요청은 모두 이 맥락으로 보낸다(UWarriorGuildSubsystem)
+	inline const FName Guild = TEXT("Guild");
 }
 
 /**
