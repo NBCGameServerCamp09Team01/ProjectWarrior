@@ -3,10 +3,12 @@
 
 #include "WarriorMainMenuWidget.h"
 #include "Components/Button.h"
+#include "Components/NamedSlot.h"
 #include "Components/TextBlock.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
 #include "ProjectWarrior/Auth/WarriorAuthSubsystem.h"
+#include "ProjectWarrior/Chat/WarriorChatSettings.h"
 #include "ProjectWarrior/Controllers/WarriorFrontPlayerController.h"
 
 #define LOCTEXT_NAMESPACE "WarriorMainMenu"
@@ -54,6 +56,38 @@ void UWarriorMainMenuWidget::NativeConstruct()
 		Account->OnAccountChanged.AddUniqueDynamic(this, &ThisClass::HandleAccountChanged);
 	}
 	RefreshAccountSummary();
+
+	AddChatPanel();
+}
+
+void UWarriorMainMenuWidget::AddChatPanel()
+{
+	//이미 넣었으면(화면을 다시 보일 때) 그대로 둔다. 채팅 내용은 채팅 서브시스템이 들고 있어 창을 다시 만들 필요가 없다
+	if (!Slot_Chat || Slot_Chat->GetContent())
+	{
+		return;
+	}
+
+	//클래스를 WBP_MainMenu가 아니라 설정(DefaultGame.ini)에서 읽어, 메인메뉴 에셋을 고치지 않고 채팅 창을 바꾼다(채팅 계획서 C-7)
+	const UWarriorChatSettings* Settings = UWarriorChatSettings::Get();
+	if (!Settings || Settings->ChatPanelClass.IsNull())
+	{
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Chat] No chat panel class. The main menu has no chat window."));
+		return;
+	}
+
+	UClass* PanelClass = Settings->ChatPanelClass.LoadSynchronous();
+	if (!PanelClass)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Chat] Chat panel class %s could not be loaded. The main menu has no chat window."),
+			*Settings->ChatPanelClass.ToString());
+		return;
+	}
+
+	if (UUserWidget* Panel = CreateWidget<UUserWidget>(GetOwningPlayer(), PanelClass))
+	{
+		Slot_Chat->SetContent(Panel);
+	}
 }
 
 void UWarriorMainMenuWidget::NativeDestruct()
