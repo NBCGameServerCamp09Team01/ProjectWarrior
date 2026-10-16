@@ -268,6 +268,12 @@ void UWarriorChatSubsystem::HandleRealtimeMessage(const FString& InType, const F
 	{
 		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Chat] Received %s messageId=%s from=%s"),
 			WarriorChat::ScopeName(Message.Scope), *Message.MessageId, *Message.SenderAccountId);
+		const UWarriorAuthSubsystem* Auth = GetGameInstance()->GetSubsystem<UWarriorAuthSubsystem>();
+		const bool bMine = Auth && Message.SenderAccountId == Auth->GetAccount().AccountId;
+		if (WarriorChatRules::IsUnreadArrival(bPanelOpen, ViewedScope, Message.Scope, bMine))
+		{
+			SetUnread(Message.Scope, true);
+		}
 		OnChatUpdated.Broadcast(Message.Scope);
 	}
 }
@@ -469,6 +475,12 @@ void UWarriorChatSubsystem::HandleHistoryResult(bool bOlder, int32 InSessionSeri
 		GuildHistoryCursor = NextCursor;
 	}
 	const int32 Added = WarriorChatRules::MergeHistory(GuildLines, NewestFirst, MaxLinesPerTab, bOlder);
+	//다시 붙어 채웠더니 놓친 줄이 있었다: 안 읽음(로그인 뒤 첫 묶음·위로 더 받기는 빼고)
+	if (!bOlder && bHadLines && Added > 0
+		&& WarriorChatRules::IsUnreadArrival(bPanelOpen, ViewedScope, EWarriorChatScope::Guild, false))
+	{
+		SetUnread(EWarriorChatScope::Guild, true);
+	}
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Chat] Guild history %s. received=%d added=%d more=%s"),
 		bOlder ? TEXT("older") : TEXT("latest"), NewestFirst.Num(), Added, HasOlderGuildHistory() ? TEXT("yes") : TEXT("no"));
 	OnChatUpdated.Broadcast(EWarriorChatScope::Guild);
@@ -520,6 +532,27 @@ void UWarriorChatSubsystem::ResetGuildTab()
 	//받는 중이던 내역은 옛 탭 것이다: 응답을 버리고 새로 받을 수 있게 한다
 	++GuildTabSerial;
 	bLoadingGuildHistory = false;
+	SetUnread(EWarriorChatScope::Guild, false);
+}
+
+void UWarriorChatSubsystem::SetViewedTab(EWarriorChatScope InScope, bool bInOpen)
+{
+	bPanelOpen = bInOpen;
+	ViewedScope = InScope;
+	if (bInOpen)
+	{
+		SetUnread(InScope, false);
+	}
+}
+
+void UWarriorChatSubsystem::SetUnread(EWarriorChatScope InScope, bool bInUnread)
+{
+	bool& bUnread = InScope == EWarriorChatScope::Guild ? bUnreadGuild : bUnreadGlobal;
+	if (bUnread != bInUnread)
+	{
+		bUnread = bInUnread;
+		OnUnreadChanged.Broadcast(InScope, bInUnread);
+	}
 }
 
 void UWarriorChatSubsystem::BlockSending(const FString& InCode, int32 InSeconds)
@@ -563,6 +596,7 @@ void UWarriorChatSubsystem::ClearAll()
 	GlobalLines.Reset();
 	MyGuildId.Reset();
 	ResetGuildTab();
+	SetUnread(EWarriorChatScope::Global, false);
 	SetGuildState(EWarriorChatGuildState::Unknown);
 	OnChatUpdated.Broadcast(EWarriorChatScope::Global);
 	OnChatUpdated.Broadcast(EWarriorChatScope::Guild);

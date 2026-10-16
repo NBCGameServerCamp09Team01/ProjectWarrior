@@ -167,6 +167,7 @@ void UWarriorChatPanelWidget::NativeConstruct()
 		Chat->OnSendStateChanged.AddUniqueDynamic(this, &ThisClass::HandleSendStateChanged);
 		Chat->OnSendRejected.AddUniqueDynamic(this, &ThisClass::HandleSendRejected);
 		Chat->OnGuildStateChanged.AddUniqueDynamic(this, &ThisClass::HandleGuildStateChanged);
+		Chat->OnUnreadChanged.AddUniqueDynamic(this, &ThisClass::HandleUnreadChanged);
 	}
 	SetNotice(FText::GetEmpty());
 	SelectTab(SelectedScope);
@@ -180,6 +181,9 @@ void UWarriorChatPanelWidget::NativeDestruct()
 		Chat->OnSendStateChanged.RemoveDynamic(this, &ThisClass::HandleSendStateChanged);
 		Chat->OnSendRejected.RemoveDynamic(this, &ThisClass::HandleSendRejected);
 		Chat->OnGuildStateChanged.RemoveDynamic(this, &ThisClass::HandleGuildStateChanged);
+		Chat->OnUnreadChanged.RemoveDynamic(this, &ThisClass::HandleUnreadChanged);
+		//창이 닫히면 어느 탭에 온 줄이든 안 읽음
+		Chat->SetViewedTab(SelectedScope, false);
 	}
 
 	Super::NativeDestruct();
@@ -204,10 +208,18 @@ void UWarriorChatPanelWidget::SelectTab(EWarriorChatScope InScope)
 	SetNotice(FText::GetEmpty());
 	Rebuild(true);
 	UpdateSendButton();
+	UpdateTabLook();
 	BP_OnTabSelected(InScope);
 
-	//창을 열 때 길드 내역 첫 묶음(chat-api.md "놓친 길드 채팅"). 길드 없음이면 묻지 않는다
+	//보는 탭을 알린다(그 탭의 안 읽음이 지워짐)
 	UWarriorChatSubsystem* Chat = UWarriorChatSubsystem::Get(this);
+	if (Chat)
+	{
+		Chat->SetViewedTab(InScope, true);
+	}
+	UpdateUnreadMarks();
+
+	//창을 열 때 길드 내역 첫 묶음(chat-api.md "놓친 길드 채팅"). 길드 없음이면 묻지 않는다
 	if (InScope == EWarriorChatScope::Guild && Chat && Chat->GetGuildState() != EWarriorChatGuildState::None
 		&& !Chat->IsLoadingGuildHistory())
 	{
@@ -327,6 +339,30 @@ void UWarriorChatPanelWidget::HandleGuildStateChanged(EWarriorChatGuildState InS
 {
 	UpdateEmptyText();
 	UpdateSendButton();
+}
+
+void UWarriorChatPanelWidget::HandleUnreadChanged(EWarriorChatScope InScope, bool bInUnread)
+{
+	UpdateUnreadMarks();
+}
+
+void UWarriorChatPanelWidget::UpdateUnreadMarks()
+{
+	const UWarriorChatSubsystem* Chat = UWarriorChatSubsystem::Get(this);
+	WarriorChatWidgets::SetShown(Widget_UnreadGlobal, Chat && Chat->HasUnread(EWarriorChatScope::Global));
+	WarriorChatWidgets::SetShown(Widget_UnreadGuild, Chat && Chat->HasUnread(EWarriorChatScope::Guild));
+}
+
+void UWarriorChatPanelWidget::UpdateTabLook()
+{
+	if (Button_TabGlobal)
+	{
+		Button_TabGlobal->SetRenderOpacity(SelectedScope == EWarriorChatScope::Global ? 1.f : UnselectedTabOpacity);
+	}
+	if (Button_TabGuild)
+	{
+		Button_TabGuild->SetRenderOpacity(SelectedScope == EWarriorChatScope::Guild ? 1.f : UnselectedTabOpacity);
+	}
 }
 
 void UWarriorChatPanelWidget::HandleListScrolled(float InItemOffset, float InDistanceRemaining)

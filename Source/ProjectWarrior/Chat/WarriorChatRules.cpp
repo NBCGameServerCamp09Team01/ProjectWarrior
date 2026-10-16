@@ -220,6 +220,11 @@ namespace WarriorChatRules
 		return Rows;
 	}
 
+	bool IsUnreadArrival(bool bInPanelOpen, EWarriorChatScope InViewedScope, EWarriorChatScope InArrivedScope, bool bInMine)
+	{
+		return !bInMine && !(bInPanelOpen && InViewedScope == InArrivedScope);
+	}
+
 	FString WeekdayKorean(const FDateTime& InDate)
 	{
 		//EDayOfWeek는 월요일이 0

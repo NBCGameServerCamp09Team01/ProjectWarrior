@@ -25,6 +25,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnWarriorChatSendRejected, EWarri
 //내 길드 상태가 바뀌었다(길드 탭 안내 "길드에 가입하면 …")
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorChatGuildStateChanged, EWarriorChatGuildState, State);
 
+//탭의 "안 읽음"이 바뀌었다(U-C4). 채팅 창 탭 옆 점
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorChatUnreadChanged, EWarriorChatScope, Scope, bool, bUnread);
+
 /**
  * 채팅(M23). 명세: 루트 docs/contracts/chat-api.md(CH1·CH2·CH3, "게임 처리 규칙"), realtime-api.md CHAT_MESSAGE
  *
@@ -35,6 +38,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorChatGuildStateChanged, EWa
  * - 받기: 실시간 OnMessage(U1)의 CHAT_MESSAGE만. 같은 messageId는 한 번(내 글은 응답과 실시간이 둘 다 옴), 내 길드가 아닌 길드 줄은 버린다.
  * - 길드 내역(CH3): 실시간 연결이 붙을 때(로그인 뒤·다시 붙음)와 길드가 바뀔 때 첫 묶음, 위로 끝까지 가면 LoadGuildHistory(true).
  * - 내 길드: U2(UWarriorGuildSubsystem::OnMyGuildChanged)가 SetMyGuildId를 부르기 전에는 서버 응답(CH2·CH3의 guildId, 403)으로 안다.
+ * - 안 읽음(U-C4): 남이 쓴 줄이 창이 닫혔거나 다른 탭을 볼 때 오면 그 탭에 점. 창이 SetViewedTab으로 지금 보는 탭을 알린다.
+ *   다시 붙어 채운 길드 내역에 새 줄이 있어도 점(로그인 뒤 첫 묶음은 빼고 — 3일 내역마다 점이 뜨지 않게).
  * - 로그인 상태가 끝나면 모두 비운다. 로그에 채팅 글은 남기지 않는다.
  */
 UCLASS(Config = Game)
@@ -92,6 +97,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Warrior|Chat")
 	int32 GetMaxTextLength() const { return MaxTextLength; }
 
+	//채팅 창이 지금 보는 탭(bInOpen = 창이 떠 있음). 보는 탭은 안 읽음을 지운다
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Chat")
+	void SetViewedTab(EWarriorChatScope InScope, bool bInOpen);
+
+	UFUNCTION(BlueprintPure, Category = "Warrior|Chat")
+	bool HasUnread(EWarriorChatScope Scope) const { return Scope == EWarriorChatScope::Guild ? bUnreadGuild : bUnreadGlobal; }
+
 	//내 길드가 바뀌었다(빈 값 = 길드 없음). 길드 탭을 비우고 길드가 있으면 첫 묶음을 받는다. U2 길드 서브시스템이 부른다
 	void SetMyGuildId(const FString& InGuildId);
 
@@ -106,6 +118,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Chat")
 	FOnWarriorChatGuildStateChanged OnGuildStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Warrior|Chat")
+	FOnWarriorChatUnreadChanged OnUnreadChanged;
 
 protected:
 	//탭마다 남기는 줄 수(C-6)
@@ -152,6 +167,8 @@ private:
 
 	void ClearAll();
 
+	void SetUnread(EWarriorChatScope InScope, bool bInUnread);
+
 	//이 요청의 내 줄 번호. 없으면 INDEX_NONE
 	static int32 FindPendingLine(const TArray<FWarriorChatLine>& InLines, const FString& InRequestId);
 
@@ -169,6 +186,12 @@ private:
 	//다음 "위로 더 받기"의 before. 빈 값이면 더 없음
 	FString GuildHistoryCursor;
 	bool bLoadingGuildHistory = false;
+
+	//안 읽음(U-C4)과 채팅 창이 보는 탭
+	bool bUnreadGlobal = false;
+	bool bUnreadGuild = false;
+	bool bPanelOpen = false;
+	EWarriorChatScope ViewedScope = EWarriorChatScope::Global;
 
 	//길드 탭을 비울 때마다 1 오른다. 비우기 전에 보낸 내역 요청의 응답은 버린다(옛 길드 줄이 섞이지 않게)
 	int32 GuildTabSerial = 0;

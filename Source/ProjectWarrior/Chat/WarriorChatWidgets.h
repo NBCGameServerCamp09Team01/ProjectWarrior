@@ -122,6 +122,8 @@ private:
  * - 길드 탭에서 맨 위까지 올리면 이전 묶음(CH3 before)을 받아 위에 붙이고, 보던 줄 위치를 지킨다.
  * - Enter = 보내기(입력 칸에 포커스가 있을 때). 입력은 코드 포인트 GetMaxTextLength()자까지만.
  * - 429 동안 보내기 버튼을 막고 남은 초를 보인다. 서버가 받지 않은 글(400·403·429)은 입력 칸에 되돌린다.
+ * - 안 읽음(U-C4): 보고 있지 않은 탭에 남의 새 줄이 오면 그 탭 옆 점(Widget_Unread*). 탭을 보면 지운다.
+ *   창이 떠 있는 동안 지금 탭을 서브시스템에 알린다(SetViewedTab). 고르지 않은 탭 버튼은 흐리게(UnselectedTabOpacity).
  */
 UCLASS(Abstract)
 class PROJECTWARRIOR_API UWarriorChatPanelWidget : public UUserWidget
@@ -185,6 +187,12 @@ protected:
 	UFUNCTION()
 	void HandleGuildStateChanged(EWarriorChatGuildState InState);
 
+	UFUNCTION()
+	void HandleUnreadChanged(EWarriorChatScope InScope, bool bInUnread);
+
+	void UpdateUnreadMarks();
+	void UpdateTabLook();
+
 	void HandleListScrolled(float InItemOffset, float InDistanceRemaining);
 
 	//지금 탭의 줄을 다시 그린다. 따라 내려가기·위에 붙인 뒤 위치 지키기를 여기서 한다
@@ -200,6 +208,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_TabGuild;
+
+	//탭 옆 안 읽음 점(U-C4). 안 읽었을 때만 보임
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> Widget_UnreadGlobal;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> Widget_UnreadGuild;
 
 	//항목 줄 = UWarriorChatLineWidget을 부모로 둔 WBP
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -238,6 +253,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Chat|Text")
 	FText TextInvalidText;
+
+	//고르지 않은 탭 버튼의 불투명도
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Chat|Look", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float UnselectedTabOpacity = 0.5f;
 
 	//맨 아래로 보는 남은 스크롤(0~1, 0 = 맨 아래). 이 아래면 새 줄을 따라 내려간다
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Chat|Scroll", meta = (ClampMin = "0.0", ClampMax = "1.0"))

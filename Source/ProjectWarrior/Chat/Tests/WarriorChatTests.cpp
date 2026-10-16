@@ -218,7 +218,7 @@ bool FWarriorChatErrorTextTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-// 채팅 창 계산(U-C2): 날짜선은 PC 날짜가 바뀌는 줄 위(첫 줄은 오늘이 아니면), 시간대 반영, 요일, 입력 글자 자르기.
+// 채팅 창 계산(U-C2·U-C4): 날짜선은 PC 날짜가 바뀌는 줄 위(첫 줄은 오늘이 아니면), 시간대 반영, 요일, 안 읽음, 입력 글자 자르기.
 // 실패하면 WarriorChatRules::BuildRows의 날짜 비교와 TruncateToCodePoints의 서로게이트 처리를 의심한다
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorChatPanelRulesTest, "ProjectWarrior.Chat.M23.PanelRules",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -260,6 +260,12 @@ bool FWarriorChatPanelRulesTest::RunTest(const FString& Parameters)
 	// 2026-10-16은 금요일
 	TestEqual(TEXT("Friday"), WeekdayKorean(FDateTime(2026, 10, 16)), FString(TEXT("금")));
 	TestEqual(TEXT("Sunday"), WeekdayKorean(FDateTime(2026, 10, 18)), FString(TEXT("일")));
+
+	// 안 읽음(U-C4): 남의 줄이 닫힌 창이나 다른 탭으로 오면 안 읽음, 보는 탭이나 내 줄이면 아님
+	TestTrue(TEXT("Panel closed"), IsUnreadArrival(false, EWarriorChatScope::Global, EWarriorChatScope::Global, false));
+	TestTrue(TEXT("Other tab"), IsUnreadArrival(true, EWarriorChatScope::Global, EWarriorChatScope::Guild, false));
+	TestFalse(TEXT("Viewing tab"), IsUnreadArrival(true, EWarriorChatScope::Guild, EWarriorChatScope::Guild, false));
+	TestFalse(TEXT("Mine"), IsUnreadArrival(false, EWarriorChatScope::Global, EWarriorChatScope::Guild, true));
 
 	// 입력 자르기: 이모지를 반으로 가르지 않는다
 	const FString Wave = TEXT("\U0001F44B");

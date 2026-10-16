@@ -58,6 +58,9 @@ namespace WarriorChatRules
 	 */
 	PROJECTWARRIOR_API TArray<FWarriorChatRow> BuildRows(const TArray<FWarriorChatLine>& InLines, FTimespan InUtcToLocal, FDateTime InLocalToday);
 
+	//새 줄이 "안 읽음"인가(U-C4): 남이 쓴 줄이고, 채팅 창이 닫혔거나 다른 탭을 보고 있을 때
+	PROJECTWARRIOR_API bool IsUnreadArrival(bool bInPanelOpen, EWarriorChatScope InViewedScope, EWarriorChatScope InArrivedScope, bool bInMine);
+
 	//요일 한 글자(일·월·화·수·목·금·토)
 	PROJECTWARRIOR_API FString WeekdayKorean(const FDateTime& InDate);
 }
