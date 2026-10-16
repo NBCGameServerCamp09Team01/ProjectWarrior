@@ -15,6 +15,7 @@
 #include "ProjectWarrior/AbilitySystem/WarriorAbilitySystemComponent.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
 #include "ProjectWarrior/Characters/WarriorAICharacter.h"
+#include "ProjectWarrior/Components/UI/PawnUIComponent.h"
 #include "ProjectWarrior/Controllers/WarriorAIController.h"
 
 AWarriorTutorialZone::AWarriorTutorialZone()
@@ -170,50 +171,81 @@ void AWarriorTutorialZone::SpawnEnemy(int32 InSpawnIndex)
 
 	SpawnedEnemies[InSpawnIndex] = Enemy;
 	Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleEnemyDied);
-	if (Spawn.bHarmless)
+	ApplySpawnSettings(Enemy, InSpawnIndex);
+
+	//상대가 받는 게임플레이 이벤트를 모두 듣는다(무너짐 등). 빈 필터 = 모든 이벤트. 상대가 사라지면 ASC와 함께 풀린다
+	if (UWarriorAbilitySystemComponent* ASC = Enemy->GetWarriorAbilitySystemComponent())
 	{
-		MakeHarmless(Enemy);
+		ASC->AddGameplayEventTagContainerDelegate(FGameplayTagContainer(),
+			FGameplayEventTagMulticastDelegate::FDelegate::CreateUObject(this, &ThisClass::HandleEnemyGameplayEvent));
 	}
 
-	//웨이브 스포너와 같이 플레이어를 첫 대상으로 준다(AWarriorWaveSpawner::AssignInitialTarget)
 	if (AWarriorAIController* AIController = Cast<AWarriorAIController>(Enemy->GetController()))
 	{
-		AIController->SetInitialTarget(PlayerPawn.Get());
+		if (Spawn.bStationary)
+		{
+			AIController->SetBehaviorSuppressed(true);
+		}
+		else
+		{
+			//웨이브 스포너와 같이 플레이어를 첫 대상으로 준다(AWarriorWaveSpawner::AssignInitialTarget)
+			AIController->SetInitialTarget(PlayerPawn.Get());
+		}
 	}
 }
 
-void AWarriorTutorialZone::MakeHarmless(AWarriorAICharacter* InEnemy) const
+void AWarriorTutorialZone::ApplySpawnSettings(AWarriorAICharacter* InEnemy, int32 InSpawnIndex) const
 {
 	UWarriorAbilitySystemComponent* ASC = InEnemy ? InEnemy->GetWarriorAbilitySystemComponent() : nullptr;
-	if (!ASC)
+	if (!ASC || !Enemies.IsValidIndex(InSpawnIndex))
 	{
 		return;
 	}
 
-	//시작 데이터(GE)가 AttackPower를 덮어쓴 뒤에 0으로 둔다. 로드가 끝나면 Initializing 태그가 빠진다(AWarriorAICharacter::InitEnemyStartUpData)
+	//시작 데이터(GE)가 AttackPower·체력을 덮어쓴 뒤에 바꾼다. 로드가 끝나면 Initializing 태그가 빠진다(AWarriorAICharacter::InitEnemyStartUpData)
 	if (ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Initializing))
 	{
 		ASC->RegisterGameplayTagEvent(WarriorGameplayTags::Shared_Status_Initializing, EGameplayTagEventType::NewOrRemoved)
-			.AddUObject(this, &ThisClass::HandleEnemyInitialized, TWeakObjectPtr<AWarriorAICharacter>(InEnemy));
+			.AddUObject(this, &ThisClass::HandleEnemyInitialized, TWeakObjectPtr<AWarriorAICharacter>(InEnemy), InSpawnIndex);
 		return;
 	}
 
-	ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute(), 0.f);
+	const FWarriorTutorialSpawn& Spawn = Enemies[InSpawnIndex];
+	if (Spawn.bHarmless)
+	{
+		ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute(), 0.f);
+	}
+	if (Spawn.HealthRatio < 1.f)
+	{
+		const float MaxHealth = ASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute());
+		ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute(), FMath::Max(MaxHealth * Spawn.HealthRatio, 1.f));
+		//체력바는 GE 실행 때만 갱신되므로 직접 알린다(UWarriorAttributeSet::PostGameplayEffectExecute)
+		if (UPawnUIComponent* PawnUIComponent = InEnemy->GetPawnUIComponent())
+		{
+			PawnUIComponent->OnCurrentHealthChanged.Broadcast(Spawn.HealthRatio);
+		}
+	}
+	if (Spawn.BalanceRatio < 1.f)
+	{
+		const float MaxBalance = ASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxBalanceAttribute());
+		ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentBalanceAttribute(), MaxBalance * Spawn.BalanceRatio);
+	}
 }
 
-void AWarriorTutorialZone::HandleEnemyInitialized(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy) const
+void AWarriorTutorialZone::HandleEnemyInitialized(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy, int32 InSpawnIndex) const
 {
 	if (InNewCount > 0)
 	{
 		return;
 	}
+	ApplySpawnSettings(InEnemy.Get(), InSpawnIndex);
+}
 
-	if (AWarriorAICharacter* Enemy = InEnemy.Get())
+void AWarriorTutorialZone::HandleEnemyGameplayEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload)
+{
+	if (bZoneActive)
 	{
-		if (UWarriorAbilitySystemComponent* ASC = Enemy->GetWarriorAbilitySystemComponent())
-		{
-			ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetAttackPowerAttribute(), 0.f);
-		}
+		OnEnemyEvent.Broadcast(this, InEventTag);
 	}
 }
 

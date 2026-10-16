@@ -80,6 +80,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial", meta = (ClampMin = "0.0", Units = "s"))
 	float StepDoneSeconds = 1.5f;
 
+	//완료 표시 뒤에도 이 어빌리티가 켜져 있으면 끝날 때까지 다음 단계로 넘어가지 않는다(처형 연출이 순간이동에 끊기지 않게)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial", meta = (Categories = "Player.Ability"))
+	FGameplayTagContainer WaitForAbilityTags;
+
 	//막힌 어빌리티 알림을 다시 보내기까지(초). 키를 누르고 있으면 매 프레임 실패가 온다
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial", meta = (ClampMin = "0.0", Units = "s"))
 	float BlockedNoticeInterval = 1.f;
@@ -91,6 +95,9 @@ private:
 	void AddStepProgress();
 	void CompleteStep();
 	void AdvanceStep();
+	//완료 표시가 끝났다. WaitForAbilityTags 어빌리티가 켜져 있으면 조금 뒤 다시 본다
+	void HandleStepDoneElapsed();
+	bool IsPlayerAbilityBusy() const;
 	void FinishTutorial();
 	void SetTutorialState(EWarriorTutorialState InState);
 
@@ -108,10 +115,11 @@ private:
 	//~ Begin 신호
 	void HandleAbilityActivated(UGameplayAbility* InAbility);
 	void HandleAbilityFailed(const UGameplayAbility* InAbility, const FGameplayTagContainer& InFailureTags);
-	void HandleGoalEvent(const FGameplayEventData* InPayload);
-	void HandleFailureEvent(const FGameplayEventData* InPayload);
+	void HandleGoalEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload);
+	void HandleFailureEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload);
 	void HandleGoalTagChanged(const FGameplayTag InTag, int32 InNewCount);
 	void HandleZoneReached(AWarriorTutorialZone* InZone);
+	void HandleZoneEnemyEvent(AWarriorTutorialZone* InZone, FGameplayTag InEventTag);
 	UFUNCTION()
 	void HandleInventoryChanged();
 	//~ End 신호
@@ -150,6 +158,7 @@ private:
 	FDelegateHandle GoalSignalHandle;
 	FDelegateHandle FailureSignalHandle;
 	FDelegateHandle ZoneReachedHandle;
+	FDelegateHandle ZoneEnemyEventHandle;
 	FGameplayTag BoundGoalTag;
 	FGameplayTag BoundFailureTag;
 	EWarriorTutorialGoal BoundGoal = EWarriorTutorialGoal::AbilityActivated;

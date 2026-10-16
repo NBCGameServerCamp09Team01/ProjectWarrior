@@ -13,6 +13,7 @@ class UArrowComponent;
 class UBoxComponent;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
+struct FGameplayEventData;
 
 //구역에 부르는 연습 상대 한 줄
 USTRUCT(BlueprintType)
@@ -32,12 +33,26 @@ struct PROJECTWARRIOR_API FWarriorTutorialSpawn
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial")
 	bool bHarmless = true;
 
+	//허수아비: 행동(BT)을 멈춰 움직이지도 공격하지도 않는다. 맞기·처형 판정은 그대로(공격 연습)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial")
+	bool bStationary = false;
+
+	//시작 체력 비율(1 = 가득). 처형 연습처럼 한 번에 쓰러질 상대를 둘 때 낮춘다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float HealthRatio = 1.f;
+
+	//시작 균형 비율(1 = 가득). 균형이 0이 되면 무너진다(Shared.Event.Stagger). 아주 낮추면 완벽한 패링 한 번에 무너진다
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial", meta = (ClampMin = "0.001", ClampMax = "1.0"))
+	float BalanceRatio = 1.f;
+
 	//죽으면 RespawnDelay 뒤 다시 부른다(처형·카운터 연습)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial")
 	bool bRespawnWhenDead = true;
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnWarriorTutorialZoneReached, class AWarriorTutorialZone*);
+//구역이 부른 연습 상대가 게임플레이 이벤트를 받았다(예: Shared.Event.Stagger)
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnWarriorTutorialZoneEnemyEvent, class AWarriorTutorialZone*, FGameplayTag);
 
 /**
  * 튜토리얼 레벨에 단계 구역마다 1개 둔다(계획서 4-1). 단계의 ZoneId와 같은 이름으로 찾는다.
@@ -67,6 +82,9 @@ public:
 
 	//구역이 켜진 동안 플레이어가 도착 볼륨에 들어왔다
 	FOnWarriorTutorialZoneReached OnZoneReached;
+
+	//구역이 켜진 동안 연습 상대가 게임플레이 이벤트를 받았다
+	FOnWarriorTutorialZoneEnemyEvent OnEnemyEvent;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -110,8 +128,10 @@ private:
 	void HandleEnemyDied(AWarriorBaseCharacter* DeadCharacter);
 
 	void SpawnEnemy(int32 InSpawnIndex);
-	void MakeHarmless(AWarriorAICharacter* InEnemy) const;
-	void HandleEnemyInitialized(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy) const;
+	//Enemies[InSpawnIndex]의 대미지 0·시작 체력·시작 균형을 넣는다. 시작 데이터가 아직이면 끝난 뒤에
+	void ApplySpawnSettings(AWarriorAICharacter* InEnemy, int32 InSpawnIndex) const;
+	void HandleEnemyInitialized(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy, int32 InSpawnIndex) const;
+	void HandleEnemyGameplayEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload);
 
 	//Enemies와 같은 순서. 부른 적(없으면 nullptr)
 	TArray<TWeakObjectPtr<AWarriorAICharacter>> SpawnedEnemies;

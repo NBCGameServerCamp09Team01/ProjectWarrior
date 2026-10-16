@@ -12,6 +12,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/Controllers/WarriorTutorialPlayerController.h"
 #include "ProjectWarrior/DataAssets/DataAsset_Item.h"
@@ -24,6 +25,7 @@ const TCHAR* AWarriorTutorialGameMode::ChapterOption = TEXT("Chapter");
 AWarriorTutorialGameMode::AWarriorTutorialGameMode()
 {
 	PlayerControllerClass = AWarriorTutorialPlayerController::StaticClass();
+	WaitForAbilityTags.AddTag(WarriorGameplayTags::Player_Ability_Finisher);
 
 	//InputUsed 단계의 입력을 읽는다. 일시정지 중에는 돌지 않는다
 	PrimaryActorTick.bCanEverTick = true;
@@ -180,7 +182,35 @@ void AWarriorTutorialGameMode::CompleteStep()
 	}
 
 	SetTutorialState(EWarriorTutorialState::StepDone);
-	GetWorldTimerManager().SetTimer(StepTimer, this, &ThisClass::AdvanceStep, FMath::Max(StepDoneSeconds, 0.01f), false);
+	GetWorldTimerManager().SetTimer(StepTimer, this, &ThisClass::HandleStepDoneElapsed, FMath::Max(StepDoneSeconds, 0.01f), false);
+}
+
+void AWarriorTutorialGameMode::HandleStepDoneElapsed()
+{
+	if (IsPlayerAbilityBusy())
+	{
+		GetWorldTimerManager().SetTimer(StepTimer, this, &ThisClass::HandleStepDoneElapsed, 0.25f, false);
+		return;
+	}
+	AdvanceStep();
+}
+
+bool AWarriorTutorialGameMode::IsPlayerAbilityBusy() const
+{
+	const UAbilitySystemComponent* ASC = PlayerASC.Get();
+	if (!ASC || WaitForAbilityTags.IsEmpty())
+	{
+		return false;
+	}
+
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.IsActive() && Spec.Ability && Spec.Ability->GetAssetTags().HasAny(WaitForAbilityTags))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 void AWarriorTutorialGameMode::AdvanceStep()
@@ -374,7 +404,9 @@ void AWarriorTutorialGameMode::BindStepSignals(const FWarriorTutorialStep& InSte
 	{
 	case EWarriorTutorialGoal::GameplayEvent:
 		BoundGoalTag = InStep.GoalTag;
-		GoalSignalHandle = ASC->GenericGameplayEventCallbacks.FindOrAdd(BoundGoalTag).AddUObject(this, &ThisClass::HandleGoalEvent);
+		//하위 태그 이벤트도 받는다(예: Player.Event.SwitchTarget → .Left/.Right). GenericGameplayEventCallbacks는 태그가 정확히 같을 때만 온다
+		GoalSignalHandle = ASC->AddGameplayEventTagContainerDelegate(FGameplayTagContainer(BoundGoalTag),
+			FGameplayEventTagMulticastDelegate::FDelegate::CreateUObject(this, &ThisClass::HandleGoalEvent));
 		break;
 
 	case EWarriorTutorialGoal::TagAdded:
@@ -387,6 +419,14 @@ void AWarriorTutorialGameMode::BindStepSignals(const FWarriorTutorialStep& InSte
 		{
 			ZoneReachedHandle = Zone->OnZoneReached.AddUObject(this, &ThisClass::HandleZoneReached);
 			Zone->SetGoalMarkerVisible(true);
+		}
+		break;
+
+	case EWarriorTutorialGoal::ZoneEnemyEvent:
+		BoundGoalTag = InStep.GoalTag;
+		if (AWarriorTutorialZone* Zone = Zones.FindRef(InStep.ZoneId))
+		{
+			ZoneEnemyEventHandle = Zone->OnEnemyEvent.AddUObject(this, &ThisClass::HandleZoneEnemyEvent);
 		}
 		break;
 
@@ -406,7 +446,8 @@ void AWarriorTutorialGameMode::BindStepSignals(const FWarriorTutorialStep& InSte
 	if (InStep.FailureEventTag.IsValid())
 	{
 		BoundFailureTag = InStep.FailureEventTag;
-		FailureSignalHandle = ASC->GenericGameplayEventCallbacks.FindOrAdd(BoundFailureTag).AddUObject(this, &ThisClass::HandleFailureEvent);
+		FailureSignalHandle = ASC->AddGameplayEventTagContainerDelegate(FGameplayTagContainer(BoundFailureTag),
+			FGameplayEventTagMulticastDelegate::FDelegate::CreateUObject(this, &ThisClass::HandleFailureEvent));
 	}
 }
 
@@ -419,10 +460,7 @@ void AWarriorTutorialGameMode::UnbindStepSignals()
 		{
 			if (BoundGoal == EWarriorTutorialGoal::GameplayEvent)
 			{
-				if (FGameplayEventMulticastDelegate* Delegate = ASC->GenericGameplayEventCallbacks.Find(BoundGoalTag))
-				{
-					Delegate->Remove(GoalSignalHandle);
-				}
+				ASC->RemoveGameplayEventTagContainerDelegate(FGameplayTagContainer(BoundGoalTag), GoalSignalHandle);
 			}
 			else if (BoundGoal == EWarriorTutorialGoal::TagAdded)
 			{
@@ -431,10 +469,7 @@ void AWarriorTutorialGameMode::UnbindStepSignals()
 		}
 		if (FailureSignalHandle.IsValid())
 		{
-			if (FGameplayEventMulticastDelegate* Delegate = ASC->GenericGameplayEventCallbacks.Find(BoundFailureTag))
-			{
-				Delegate->Remove(FailureSignalHandle);
-			}
+			ASC->RemoveGameplayEventTagContainerDelegate(FGameplayTagContainer(BoundFailureTag), FailureSignalHandle);
 		}
 	}
 
@@ -448,6 +483,18 @@ void AWarriorTutorialGameMode::UnbindStepSignals()
 				Pair.Value->SetGoalMarkerVisible(false);
 			}
 		}
+	}
+
+	if (ZoneEnemyEventHandle.IsValid())
+	{
+		for (const TPair<FName, TObjectPtr<AWarriorTutorialZone>>& Pair : Zones)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->OnEnemyEvent.Remove(ZoneEnemyEventHandle);
+			}
+		}
+		ZoneEnemyEventHandle.Reset();
 	}
 
 	if (bInventoryBound)
@@ -500,7 +547,7 @@ void AWarriorTutorialGameMode::HandleAbilityFailed(const UGameplayAbility* InAbi
 	OnAbilityBlocked.Broadcast();
 }
 
-void AWarriorTutorialGameMode::HandleGoalEvent(const FGameplayEventData* InPayload)
+void AWarriorTutorialGameMode::HandleGoalEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload)
 {
 	if (const FWarriorTutorialStep* Step = GetCurrentStep())
 	{
@@ -511,7 +558,7 @@ void AWarriorTutorialGameMode::HandleGoalEvent(const FGameplayEventData* InPaylo
 	}
 }
 
-void AWarriorTutorialGameMode::HandleFailureEvent(const FGameplayEventData* InPayload)
+void AWarriorTutorialGameMode::HandleFailureEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload)
 {
 	const FWarriorTutorialStep* Step = GetCurrentStep();
 	if (TutorialState != EWarriorTutorialState::StepActive || !Step)
@@ -540,6 +587,15 @@ void AWarriorTutorialGameMode::HandleGoalTagChanged(const FGameplayTag InTag, in
 				AddStepProgress();
 			}
 		}
+	}
+}
+
+void AWarriorTutorialGameMode::HandleZoneEnemyEvent(AWarriorTutorialZone* InZone, FGameplayTag InEventTag)
+{
+	//하위 태그도 센다(예: Shared.Event.Stagger.*)
+	if (BoundGoal == EWarriorTutorialGoal::ZoneEnemyEvent && BoundGoalTag.IsValid() && InEventTag.MatchesTag(BoundGoalTag))
+	{
+		AddStepProgress();
 	}
 }
 

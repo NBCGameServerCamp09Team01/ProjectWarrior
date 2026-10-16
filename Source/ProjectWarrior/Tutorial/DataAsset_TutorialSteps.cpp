@@ -72,7 +72,8 @@ EDataValidationResult UDataAsset_TutorialSteps::IsDataValid(FDataValidationConte
 
 			const bool bNeedsTag = Step.Goal == EWarriorTutorialGoal::AbilityActivated
 				|| Step.Goal == EWarriorTutorialGoal::GameplayEvent
-				|| Step.Goal == EWarriorTutorialGoal::TagAdded;
+				|| Step.Goal == EWarriorTutorialGoal::TagAdded
+				|| Step.Goal == EWarriorTutorialGoal::ZoneEnemyEvent;
 			if (bNeedsTag && !Step.GoalTag.IsValid())
 			{
 				Context.AddError(FText::Format(LOCTEXT("NoGoalTag", "{0}: 완료 신호에 GoalTag가 필요합니다."), StepName));
@@ -83,9 +84,9 @@ EDataValidationResult UDataAsset_TutorialSteps::IsDataValid(FDataValidationConte
 				Context.AddError(FText::Format(LOCTEXT("NoKeyAction", "{0}: InputUsed에는 KeyAction이 필요합니다."), StepName));
 				Result = EDataValidationResult::Invalid;
 			}
-			if (Step.Goal == EWarriorTutorialGoal::ReachZone && Step.ZoneId.IsNone())
+			if ((Step.Goal == EWarriorTutorialGoal::ReachZone || Step.Goal == EWarriorTutorialGoal::ZoneEnemyEvent) && Step.ZoneId.IsNone())
 			{
-				Context.AddError(FText::Format(LOCTEXT("NoZone", "{0}: ReachZone에는 ZoneId가 필요합니다."), StepName));
+				Context.AddError(FText::Format(LOCTEXT("NoZone", "{0}: ReachZone·ZoneEnemyEvent에는 ZoneId가 필요합니다."), StepName));
 				Result = EDataValidationResult::Invalid;
 			}
 			if (Step.Goal == EWarriorTutorialGoal::ItemUsed && Step.GrantItems.IsEmpty())

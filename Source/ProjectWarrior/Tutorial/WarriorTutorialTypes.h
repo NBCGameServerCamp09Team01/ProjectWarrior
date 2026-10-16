@@ -35,7 +35,9 @@ enum class EWarriorTutorialGoal : uint8
 	//KeyAction 입력이 RequiredInputSeconds만큼 들어옴. 0이면 한 번 누르면 끝(설명 카드의 "계속")
 	InputUsed,
 	//이 단계에서 준 아이템을 씀(인벤토리에서 개수가 줄어듦)
-	ItemUsed
+	ItemUsed,
+	//단계 구역(ZoneId)의 연습 상대가 GoalTag 게임플레이 이벤트를 받음(하위 태그 포함). 예: Shared.Event.Stagger = 균형이 무너짐
+	ZoneEnemyEvent
 };
 
 //단계 시작 때 주는 아이템
@@ -76,9 +78,9 @@ struct PROJECTWARRIOR_API FWarriorTutorialStep
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial")
 	EWarriorTutorialGoal Goal = EWarriorTutorialGoal::AbilityActivated;
 
-	//AbilityActivated·GameplayEvent·TagAdded가 쓰는 태그
+	//AbilityActivated·GameplayEvent·TagAdded·ZoneEnemyEvent가 쓰는 태그
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial",
-		meta = (EditCondition = "Goal == EWarriorTutorialGoal::AbilityActivated || Goal == EWarriorTutorialGoal::GameplayEvent || Goal == EWarriorTutorialGoal::TagAdded"))
+		meta = (EditCondition = "Goal == EWarriorTutorialGoal::AbilityActivated || Goal == EWarriorTutorialGoal::GameplayEvent || Goal == EWarriorTutorialGoal::TagAdded || Goal == EWarriorTutorialGoal::ZoneEnemyEvent"))
 	FGameplayTag GoalTag;
 
 	//신호가 올 때 플레이어가 함께 갖고 있어야 하는 태그(예: 패링 = Successful.Block + Player.Status.Blocking.Perfect). 비우면 보지 않는다
