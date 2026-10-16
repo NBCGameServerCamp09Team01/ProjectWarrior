@@ -42,6 +42,10 @@ public:
 	float GetWaveClearedTime() const { return WaveClearedTime; }
 	float GetRestTime() const { return RestTime; }
 
+	//일시정지가 열리고 닫힐 때 컨트롤러가 알린다. 열려 있던 시간은 플레이 시간에서 뺀다(같은 쪽을 두 번 알려도 한 번만 센다)
+	void NotifyPauseStarted();
+	void NotifyPauseEnded();
+
 	//현재 웨이브 인덱스(0부터). 첫 웨이브 시작 전에는 INDEX_NONE
 	int32 GetCurrentWaveIndex() const { return CurrentWaveIndex; }
 
@@ -188,11 +192,18 @@ private:
 
 	FGuid RunId;
 
-	//BeginRun 시점의 실제 시간(초). 플레이 시간 계산에 쓴다.
+	//BeginRun 시점의 벽시계(FPlatformTime::Seconds, 초). 플레이 시간 계산에 쓴다.
+	//월드의 실제 시간(GetRealTimeSeconds)은 프레임마다 delta를 쌓아, 로드가 끝난 프레임에 시작을 잡으면 다음 첫 틱에 로딩 시간이 통째로 들어간다.
 	//체크포인트에서 이어 가면 그때까지의 플레이 시간만큼 앞으로 당긴다(이어한 판의 시간 = 체크포인트 시간 + 이어한 뒤, M22)
-	double RunStartRealTime = 0.0;
+	double RunStartWallTime = 0.0;
 
-	//이번 판의 플레이 시간(초). 결과 제출과 체크포인트에 같은 값을 쓴다
+	//이번 판에서 일시정지로 멈춰 있던 시간의 합(초). 닫힌 일시정지만 더한다
+	double PausedWallSeconds = 0.0;
+
+	//지금 열려 있는 일시정지가 시작된 벽시계. 열려 있지 않으면 음수
+	double PauseStartWallTime = -1.0;
+
+	//이번 판의 플레이 시간(초) = 벽시계 경과 − 일시정지 시간. 결과 제출과 체크포인트에 같은 값을 쓴다
 	float GetRunPlayTimeSeconds() const;
 
 	bool bRunFinished = false;

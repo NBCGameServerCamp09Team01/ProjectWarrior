@@ -386,7 +386,9 @@ void AWarriorStageGameMode::BeginRun()
 	//지금은 여기서 RunId를 만든다. GameInstance가 들어오면 그쪽의 한 판 시작 함수에서 발급받고,
 	//서버 연동 뒤에는 서버가 발급한 값을 쓴다. 호출 위치는 그대로다.
 	RunId = FGuid::NewGuid();
-	RunStartRealTime = GetWorld()->GetRealTimeSeconds();
+	RunStartWallTime = FPlatformTime::Seconds();
+	PausedWallSeconds = 0.0;
+	PauseStartWallTime = -1.0;
 	bRunFinished = false;
 
 	if (AWarriorStageGameState* StageGameState = GetGameState<AWarriorStageGameState>())
@@ -446,7 +448,7 @@ bool AWarriorStageGameMode::ApplyResumeCheckpoint(const FWarriorPlayCheckpoint& 
 	}
 
 	//이어한 판의 플레이 시간 = 체크포인트까지의 시간 + 이어한 뒤 시간(결정 F1). BeginRun이 정한 시작 시각을 그만큼 당긴다
-	RunStartRealTime = GetWorld()->GetRealTimeSeconds() - FMath::Max(0.f, InCheckpoint.ElapsedSeconds);
+	RunStartWallTime = FPlatformTime::Seconds() - FMath::Max(0.f, InCheckpoint.ElapsedSeconds);
 
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Resuming from checkpoint. Cleared wave %d/%d, next wave %d starts after rest. Play time continues from %.1f s."),
 		InCheckpoint.ClearedWave, TotalWaveCount, InCheckpoint.ClearedWave + 1, InCheckpoint.ElapsedSeconds);
@@ -455,7 +457,35 @@ bool AWarriorStageGameMode::ApplyResumeCheckpoint(const FWarriorPlayCheckpoint& 
 
 float AWarriorStageGameMode::GetRunPlayTimeSeconds() const
 {
-	return static_cast<float>(GetWorld()->GetRealTimeSeconds() - RunStartRealTime);
+	const double Now = FPlatformTime::Seconds();
+	double Paused = PausedWallSeconds;
+	if (PauseStartWallTime >= 0.0)
+	{
+		//일시정지가 열린 채로 재면(예: 열린 동안 체크포인트) 지금까지 멈춘 시간도 뺀다
+		Paused += Now - PauseStartWallTime;
+	}
+	return static_cast<float>(FMath::Max(0.0, Now - RunStartWallTime - Paused));
+}
+
+void AWarriorStageGameMode::NotifyPauseStarted()
+{
+	if (PauseStartWallTime >= 0.0)
+	{
+		return;
+	}
+	PauseStartWallTime = FPlatformTime::Seconds();
+}
+
+void AWarriorStageGameMode::NotifyPauseEnded()
+{
+	if (PauseStartWallTime < 0.0)
+	{
+		return;
+	}
+	const double Paused = FPlatformTime::Seconds() - PauseStartWallTime;
+	PausedWallSeconds += Paused;
+	PauseStartWallTime = -1.0;
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Pause ended. Paused %.1f s (total %.1f s), excluded from play time."), Paused, PausedWallSeconds);
 }
 
 void AWarriorStageGameMode::FinishRun(bool bInCleared)
