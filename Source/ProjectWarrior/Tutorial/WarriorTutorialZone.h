@@ -11,6 +11,8 @@ class AWarriorAICharacter;
 class AWarriorBaseCharacter;
 class UArrowComponent;
 class UBoxComponent;
+class UMaterialInstanceDynamic;
+class UStaticMeshComponent;
 
 //구역에 부르는 연습 상대 한 줄
 USTRUCT(BlueprintType)
@@ -60,6 +62,9 @@ public:
 
 	bool IsZoneActive() const { return bZoneActive; }
 
+	//도착 지점 표시(GoalMarker)를 보이거나 숨긴다. 크기는 도착 볼륨(GoalVolume)을 따른다. 지점 도착 단계 동안만 켠다
+	void SetGoalMarkerVisible(bool bInVisible);
+
 	//구역이 켜진 동안 플레이어가 도착 볼륨에 들어왔다
 	FOnWarriorTutorialZoneReached OnZoneReached;
 
@@ -89,6 +94,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Warrior|Tutorial")
 	TObjectPtr<UBoxComponent> GoalVolume;
 
+	//도착 지점의 바닥 원판. 평소에는 게임에서 숨긴다(에디터에서는 보임)
+	UPROPERTY(VisibleAnywhere, Category = "Warrior|Tutorial")
+	TObjectPtr<UStaticMeshComponent> GoalMarker;
+
+	UPROPERTY(EditAnywhere, Category = "Warrior|Tutorial")
+	FLinearColor GoalMarkerColor = FLinearColor(1.f, 0.62f, 0.12f, 1.f);
+
 private:
 	UFUNCTION()
 	void HandleGoalVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
@@ -106,4 +118,7 @@ private:
 	TArray<FTimerHandle> RespawnTimers;
 	TWeakObjectPtr<APawn> PlayerPawn;
 	bool bZoneActive = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> GoalMarkerMaterial;
 };

@@ -4,6 +4,7 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "InputCoreTypes.h"
 #include "Engine/World.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/Audio/WarriorSoundSubsystem.h"
@@ -140,11 +141,25 @@ FText AWarriorTutorialPlayerController::GetKeyText(const FWarriorTutorialStep& I
 	{
 		if (const UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 		{
-			//무기를 든 뒤에 붙는 컨텍스트의 키는 그 전에는 비어 있을 수 있다 → 대체 문구
-			const TArray<FKey> Keys = InputSubsystem->QueryKeysMappedToAction(InStep.KeyAction);
-			if (!Keys.IsEmpty())
+			//무기를 든 뒤에 붙는 컨텍스트의 키는 그 전에는 비어 있을 수 있다 → 대체 문구.
+			//여러 키가 묶인 입력(이동 WASD 등)은 모두 보이고, 패드 키와 같은 이름은 뺀다.
+			//축(마우스 XY 등)은 이름이 키로 읽히지 않으므로 빼고, 남은 키가 없으면 대체 문구("마우스")를 쓴다
+			TArray<FString> KeyNames;
+			for (const FKey& Key : InputSubsystem->QueryKeysMappedToAction(InStep.KeyAction))
 			{
-				return Keys[0].GetDisplayName();
+				if (Key.IsGamepadKey() || Key.IsAxis1D() || Key.IsAxis2D() || Key.IsAxis3D())
+				{
+					continue;
+				}
+				KeyNames.AddUnique(Key.GetDisplayName().ToString());
+				if (KeyNames.Num() >= MaxKeysShown)
+				{
+					break;
+				}
+			}
+			if (!KeyNames.IsEmpty())
+			{
+				return FText::FromString(FString::Join(KeyNames, *KeySeparator));
 			}
 		}
 	}

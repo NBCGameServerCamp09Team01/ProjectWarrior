@@ -3,6 +3,10 @@
 #include "WarriorTutorialZone.h"
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "TimerManager.h"
@@ -28,6 +32,45 @@ AWarriorTutorialZone::AWarriorTutorialZone()
 	GoalVolume->SetBoxExtent(FVector(100.f, 100.f, 100.f));
 	GoalVolume->SetCollisionProfileName(TEXT("Trigger"));
 	GoalVolume->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleGoalVolumeBeginOverlap);
+
+	//엔진 기본 원기둥을 얇게 눌러 바닥 원판으로 쓴다. 색은 기본 머티리얼의 Color 파라미터
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderFinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterialFinder(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+
+	GoalMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GoalMarker"));
+	GoalMarker->SetupAttachment(GoalVolume);
+	GoalMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GoalMarker->SetCastShadow(false);
+	GoalMarker->SetHiddenInGame(true);
+	if (CylinderFinder.Succeeded())
+	{
+		GoalMarker->SetStaticMesh(CylinderFinder.Object);
+	}
+	if (ShapeMaterialFinder.Succeeded())
+	{
+		GoalMarker->SetMaterial(0, ShapeMaterialFinder.Object);
+	}
+}
+
+void AWarriorTutorialZone::SetGoalMarkerVisible(bool bInVisible)
+{
+	if (bInVisible)
+	{
+		//원기둥은 지름·높이 100cm. 도착 볼륨 바닥에 2cm 두께로 깐다
+		const FVector Extent = GoalVolume->GetUnscaledBoxExtent();
+		GoalMarker->SetRelativeLocation(FVector(0.f, 0.f, -Extent.Z + 1.f));
+		GoalMarker->SetRelativeScale3D(FVector(Extent.X / 50.f, Extent.Y / 50.f, 0.02f));
+
+		if (!GoalMarkerMaterial)
+		{
+			GoalMarkerMaterial = GoalMarker->CreateAndSetMaterialInstanceDynamic(0);
+		}
+		if (GoalMarkerMaterial)
+		{
+			GoalMarkerMaterial->SetVectorParameterValue(TEXT("Color"), GoalMarkerColor);
+		}
+	}
+	GoalMarker->SetHiddenInGame(!bInVisible);
 }
 
 void AWarriorTutorialZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -83,6 +126,7 @@ void AWarriorTutorialZone::DeactivateZone()
 		return;
 	}
 	bZoneActive = false;
+	SetGoalMarkerVisible(false);
 
 	if (UWorld* World = GetWorld())
 	{

@@ -51,6 +51,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial")
 	FText PauseTutorialInfoFormat = NSLOCTEXT("WarriorTutorial", "PauseInfo", "튜토리얼 {0}장 {1}");
 
+	//한 입력에 키가 여러 개면 이만큼까지 이어서 보인다(이동 W/A/S/D)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial", meta = (ClampMin = "1"))
+	int32 MaxKeysShown = 4;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial")
+	FString KeySeparator = TEXT("/");
+
 private:
 	AWarriorTutorialGameMode* GetTutorialGameMode() const;
 
@@ -62,7 +69,7 @@ private:
 	//진행 상태에 맞는 입력 모드(완료 화면이면 UI, 아니면 게임). 일시정지 중에는 바꾸지 않는다
 	void ApplyTutorialInputMode();
 
-	//{Key}에 넣을 글자: KeyAction에 지금 매핑된 첫 키, 없으면 FallbackKeyText
+	//{Key}에 넣을 글자: KeyAction에 지금 매핑된 키(패드 제외, 여러 개면 KeySeparator로 이음), 없으면 FallbackKeyText
 	FText GetKeyText(const FWarriorTutorialStep& InStep) const;
 
 	UPROPERTY(Transient)

@@ -386,6 +386,7 @@ void AWarriorTutorialGameMode::BindStepSignals(const FWarriorTutorialStep& InSte
 		if (AWarriorTutorialZone* Zone = Zones.FindRef(InStep.ZoneId))
 		{
 			ZoneReachedHandle = Zone->OnZoneReached.AddUObject(this, &ThisClass::HandleZoneReached);
+			Zone->SetGoalMarkerVisible(true);
 		}
 		break;
 
@@ -444,6 +445,7 @@ void AWarriorTutorialGameMode::UnbindStepSignals()
 			if (Pair.Value)
 			{
 				Pair.Value->OnZoneReached.Remove(ZoneReachedHandle);
+				Pair.Value->SetGoalMarkerVisible(false);
 			}
 		}
 	}
