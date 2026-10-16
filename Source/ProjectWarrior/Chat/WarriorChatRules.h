@@ -7,12 +7,25 @@
 
 class FJsonObject;
 
+//채팅 창 목록의 한 칸: 날짜선 또는 채팅 줄(Lines의 번호)
+struct FWarriorChatRow
+{
+	bool bDateLine = false;
+	//날짜선이면 그 날짜(PC 시간대)
+	FDateTime LocalDate;
+	//채팅 줄이면 Lines 안 번호, 날짜선이면 INDEX_NONE
+	int32 LineIndex = INDEX_NONE;
+};
+
 /**
  * 채팅 규칙 중 화면·서버와 상관없는 계산(자동 시험 대상). 명세: 루트 docs/contracts/chat-api.md "규칙"·"게임 처리 규칙"
- * UWarriorChatSubsystem이 부른다.
+ * UWarriorChatSubsystem과 채팅 창(WarriorChatWidgets)이 부른다.
  */
 namespace WarriorChatRules
 {
+	//입력 칸: 코드 포인트 InMaxLength자까지만 남긴다(서로게이트 쌍을 가르지 않음)
+	PROJECTWARRIOR_API FString TruncateToCodePoints(const FString& InText, int32 InMaxLength);
+
 	//글자 수를 코드 포인트로 센다. FString은 UTF-16이라 서로게이트 쌍(이모지 등)을 한 글자로 센다
 	PROJECTWARRIOR_API int32 CountCodePoints(const FString& InText);
 
@@ -38,4 +51,13 @@ namespace WarriorChatRules
 	 */
 	PROJECTWARRIOR_API int32 MergeHistory(TArray<FWarriorChatLine>& InOutLines, const TArray<FWarriorChatMessage>& InNewestFirst,
 		int32 InMaxLines, bool bOlder);
+
+	/**
+	 * 채팅 창 목록을 만든다(chat-api.md "채팅 한 줄" sentAt: PC 시간대로 HH:MM, 날짜가 바뀌는 줄 위에 날짜선).
+	 * 날짜선: 앞 줄과 PC 날짜가 다른 줄 위. 첫 줄은 오늘이 아니면 위에 날짜선. InUtcToLocal = FDateTime::Now() − UtcNow()
+	 */
+	PROJECTWARRIOR_API TArray<FWarriorChatRow> BuildRows(const TArray<FWarriorChatLine>& InLines, FTimespan InUtcToLocal, FDateTime InLocalToday);
+
+	//요일 한 글자(일·월·화·수·목·금·토)
+	PROJECTWARRIOR_API FString WeekdayKorean(const FDateTime& InDate);
 }

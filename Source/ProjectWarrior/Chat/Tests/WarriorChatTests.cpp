@@ -218,4 +218,56 @@ bool FWarriorChatErrorTextTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// 채팅 창 계산(U-C2): 날짜선은 PC 날짜가 바뀌는 줄 위(첫 줄은 오늘이 아니면), 시간대 반영, 요일, 입력 글자 자르기.
+// 실패하면 WarriorChatRules::BuildRows의 날짜 비교와 TruncateToCodePoints의 서로게이트 처리를 의심한다
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorChatPanelRulesTest, "ProjectWarrior.Chat.M23.PanelRules",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWarriorChatPanelRulesTest::RunTest(const FString& Parameters)
+{
+	using namespace WarriorChatRules;
+
+	auto LineAt = [](const FDateTime& InUtc)
+	{
+		FWarriorChatLine Line;
+		Line.Message.SentAt = InUtc;
+		return Line;
+	};
+	// UTC 10/15 14:59 = 한국(+9) 10/15 23:59, UTC 10/15 15:01 = 한국 10/16 00:01
+	const FTimespan Korea = FTimespan::FromHours(9);
+	const TArray<FWarriorChatLine> Lines = {
+		LineAt(FDateTime(2026, 10, 15, 14, 0, 0)),
+		LineAt(FDateTime(2026, 10, 15, 14, 59, 0)),
+		LineAt(FDateTime(2026, 10, 15, 15, 1, 0)),
+		LineAt(FDateTime(2026, 10, 15, 15, 2, 0)) };
+
+	// 오늘이 10/16이면: 첫 줄(10/15) 위 날짜선, 자정을 넘긴 줄(10/16) 위 날짜선
+	const TArray<FWarriorChatRow> Rows = BuildRows(Lines, Korea, FDateTime(2026, 10, 16, 9, 0, 0));
+	TestEqual(TEXT("Rows"), Rows.Num(), 6);
+	TestTrue(TEXT("Date line first"), Rows[0].bDateLine);
+	TestEqual(TEXT("First date"), Rows[0].LocalDate, FDateTime(2026, 10, 15));
+	TestEqual(TEXT("Line 0"), Rows[1].LineIndex, 0);
+	TestEqual(TEXT("Line 1 same day"), Rows[2].LineIndex, 1);
+	TestTrue(TEXT("Date line at midnight"), Rows[3].bDateLine);
+	TestEqual(TEXT("Second date"), Rows[3].LocalDate, FDateTime(2026, 10, 16));
+	TestEqual(TEXT("Line 3"), Rows[5].LineIndex, 3);
+
+	// 모두 오늘이면 날짜선 없음
+	const TArray<FWarriorChatLine> Today = { LineAt(FDateTime(2026, 10, 16, 1, 0, 0)), LineAt(FDateTime(2026, 10, 16, 2, 0, 0)) };
+	TestEqual(TEXT("No date line today"), BuildRows(Today, Korea, FDateTime(2026, 10, 16, 12, 0, 0)).Num(), 2);
+	TestEqual(TEXT("Empty"), BuildRows({}, Korea, FDateTime(2026, 10, 16)).Num(), 0);
+
+	// 2026-10-16은 금요일
+	TestEqual(TEXT("Friday"), WeekdayKorean(FDateTime(2026, 10, 16)), FString(TEXT("금")));
+	TestEqual(TEXT("Sunday"), WeekdayKorean(FDateTime(2026, 10, 18)), FString(TEXT("일")));
+
+	// 입력 자르기: 이모지를 반으로 가르지 않는다
+	const FString Wave = TEXT("\U0001F44B");
+	TestEqual(TEXT("Under limit kept"), TruncateToCodePoints(TEXT("abc"), 5), FString(TEXT("abc")));
+	TestEqual(TEXT("Cut to 2"), TruncateToCodePoints(TEXT("abc"), 2), FString(TEXT("ab")));
+	TestEqual(TEXT("Emoji kept whole"), TruncateToCodePoints(TEXT("a") + Wave + TEXT("b"), 2), FString(TEXT("a")) + Wave);
+	TestEqual(TEXT("Emoji count after cut"), CountCodePoints(TruncateToCodePoints(Wave + Wave + Wave, 2)), 2);
+	return true;
+}
+
 #endif

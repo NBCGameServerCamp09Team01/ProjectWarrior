@@ -16,8 +16,6 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
-#define LOCTEXT_NAMESPACE "WarriorChat"
-
 namespace WarriorChat
 {
 	const FString MessageType = TEXT("CHAT_MESSAGE");
@@ -592,4 +590,3 @@ int32 UWarriorChatSubsystem::CurrentSessionSerial() const
 	return Auth ? Auth->GetSessionSerial() : 0;
 }
 
-#undef LOCTEXT_NAMESPACE

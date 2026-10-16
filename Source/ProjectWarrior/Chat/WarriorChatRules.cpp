@@ -34,6 +34,25 @@ namespace WarriorChatRules
 		}
 	}
 
+	FString TruncateToCodePoints(const FString& InText, int32 InMaxLength)
+	{
+		int32 Count = 0;
+		const int32 Len = InText.Len();
+		for (int32 Index = 0; Index < Len; ++Index)
+		{
+			if (Count == InMaxLength)
+			{
+				return InText.Left(Index);
+			}
+			if (IsHighSurrogate(InText[Index]) && Index + 1 < Len && IsLowSurrogate(InText[Index + 1]))
+			{
+				++Index;
+			}
+			++Count;
+		}
+		return InText;
+	}
+
 	int32 CountCodePoints(const FString& InText)
 	{
 		int32 Count = 0;
@@ -175,5 +194,36 @@ namespace WarriorChatRules
 			InOutLines.RemoveAt(0, Over);
 		}
 		return AddedCount;
+	}
+
+	TArray<FWarriorChatRow> BuildRows(const TArray<FWarriorChatLine>& InLines, FTimespan InUtcToLocal, FDateTime InLocalToday)
+	{
+		TArray<FWarriorChatRow> Rows;
+		Rows.Reserve(InLines.Num() + 2);
+		FDateTime PreviousDate;
+		for (int32 Index = 0; Index < InLines.Num(); ++Index)
+		{
+			const FDateTime LocalDate = (InLines[Index].Message.SentAt + InUtcToLocal).GetDate();
+			const bool bNewDate = Index == 0 ? LocalDate != InLocalToday.GetDate() : LocalDate != PreviousDate;
+			if (bNewDate)
+			{
+				FWarriorChatRow DateRow;
+				DateRow.bDateLine = true;
+				DateRow.LocalDate = LocalDate;
+				Rows.Add(DateRow);
+			}
+			FWarriorChatRow LineRow;
+			LineRow.LineIndex = Index;
+			Rows.Add(LineRow);
+			PreviousDate = LocalDate;
+		}
+		return Rows;
+	}
+
+	FString WeekdayKorean(const FDateTime& InDate)
+	{
+		//EDayOfWeek는 월요일이 0
+		static const TCHAR* const Names[] = { TEXT("월"), TEXT("화"), TEXT("수"), TEXT("목"), TEXT("금"), TEXT("토"), TEXT("일") };
+		return Names[static_cast<int32>(InDate.GetDayOfWeek())];
 	}
 }
