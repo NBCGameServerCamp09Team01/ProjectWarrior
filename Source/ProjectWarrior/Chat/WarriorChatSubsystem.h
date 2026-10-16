@@ -37,7 +37,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWarriorChatUnreadChanged, EWarri
  *   429는 자동으로 다시 보내지 않고 retryAfterSeconds 동안 보내기를 막는다. 400·403은 줄을 지우고 OnSendRejected.
  * - 받기: 실시간 OnMessage(U1)의 CHAT_MESSAGE만. 같은 messageId는 한 번(내 글은 응답과 실시간이 둘 다 옴), 내 길드가 아닌 길드 줄은 버린다.
  * - 길드 내역(CH3): 실시간 연결이 붙을 때(로그인 뒤·다시 붙음)와 길드가 바뀔 때 첫 묶음, 위로 끝까지 가면 LoadGuildHistory(true).
- * - 내 길드: U2(UWarriorGuildSubsystem::OnMyGuildChanged)가 SetMyGuildId를 부르기 전에는 서버 응답(CH2·CH3의 guildId, 403)으로 안다.
+ * - 내 길드: UWarriorGuildSubsystem::OnMyGuildChanged(로그인 직후 G4·실시간 GUILD_*)를 받아 SetMyGuildId. G4 응답 전에는 서버 응답(CH2·CH3의 guildId, 403)으로 안다.
  * - 안 읽음(U-C4): 남이 쓴 줄이 창이 닫혔거나 다른 탭을 볼 때 오면 그 탭에 점. 창이 SetViewedTab으로 지금 보는 탭을 알린다.
  *   다시 붙어 채운 길드 내역에 새 줄이 있어도 점(로그인 뒤 첫 묶음은 빼고 — 3일 내역마다 점이 뜨지 않게).
  * - 로그인 상태가 끝나면 모두 비운다. 로그에 채팅 글은 남기지 않는다.
@@ -145,6 +145,10 @@ private:
 
 	UFUNCTION()
 	void HandleSessionEnded(EWarriorSessionEndReason Reason, const FText& Message);
+
+	//길드 서브시스템이 내 길드가 바뀌었다고 알림(빈 값 = 길드 없음)
+	UFUNCTION()
+	void HandleMyGuildChanged(const FString& OldGuildId, const FString& NewGuildId);
 
 	//CH1·CH2 요청을 보낸다. 시작하지 못하면 false
 	bool SendLine(EWarriorChatScope InScope, const FString& InRequestId, const FString& InText);

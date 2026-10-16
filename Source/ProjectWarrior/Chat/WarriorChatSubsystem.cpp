@@ -12,6 +12,7 @@
 #include "ProjectWarrior/Chat/WarriorChatRules.h"
 #include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorErrorText.h"
+#include "ProjectWarrior/Network/WarriorGuildSubsystem.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -81,6 +82,11 @@ void UWarriorChatSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		RealtimeMessageHandle = Realtime->OnMessage.AddUObject(this, &ThisClass::HandleRealtimeMessage);
 		Realtime->OnStateChanged.AddUniqueDynamic(this, &ThisClass::HandleRealtimeStateChanged);
 	}
+	//내 길드의 원본은 길드 서브시스템(G4). 길드 서브시스템은 채팅에 기대지 않는다(순환 없음)
+	if (UWarriorGuildSubsystem* Guild = Collection.InitializeDependency<UWarriorGuildSubsystem>())
+	{
+		Guild->OnMyGuildChanged.AddUniqueDynamic(this, &ThisClass::HandleMyGuildChanged);
+	}
 }
 
 void UWarriorChatSubsystem::Deinitialize()
@@ -95,6 +101,10 @@ void UWarriorChatSubsystem::Deinitialize()
 	if (UWarriorAuthSubsystem* Auth = GetGameInstance()->GetSubsystem<UWarriorAuthSubsystem>())
 	{
 		Auth->OnSessionEnded.RemoveDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+	if (UWarriorGuildSubsystem* Guild = GetGameInstance()->GetSubsystem<UWarriorGuildSubsystem>())
+	{
+		Guild->OnMyGuildChanged.RemoveDynamic(this, &ThisClass::HandleMyGuildChanged);
 	}
 	RealtimeMessageHandle.Reset();
 
@@ -309,6 +319,17 @@ void UWarriorChatSubsystem::HandleRealtimeStateChanged(EWarriorRealtimeState InS
 void UWarriorChatSubsystem::HandleSessionEnded(EWarriorSessionEndReason Reason, const FText& Message)
 {
 	ClearAll();
+}
+
+void UWarriorChatSubsystem::HandleMyGuildChanged(const FString& OldGuildId, const FString& NewGuildId)
+{
+	//로그인이 끝나며 오는 "길드 없음"은 ClearAll이 맡는다(다음 로그인을 모름 상태로 시작)
+	const UWarriorAuthSubsystem* Auth = GetGameInstance()->GetSubsystem<UWarriorAuthSubsystem>();
+	if (!Auth || !Auth->IsLoggedIn())
+	{
+		return;
+	}
+	SetMyGuildId(NewGuildId);
 }
 
 bool UWarriorChatSubsystem::SendLine(EWarriorChatScope InScope, const FString& InRequestId, const FString& InText)
