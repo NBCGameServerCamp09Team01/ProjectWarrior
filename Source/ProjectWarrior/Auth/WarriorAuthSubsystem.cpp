@@ -948,3 +948,5 @@ FText UWarriorAuthSubsystem::ValidateEmail(const FString& InEmail)
 
 	return bShapeOk ? FText::GetEmpty() : LOCTEXT("EmailInvalid", "이메일 형식이 맞지 않습니다. 비워 두어도 됩니다.");
 }
+
+#undef LOCTEXT_NAMESPACE
