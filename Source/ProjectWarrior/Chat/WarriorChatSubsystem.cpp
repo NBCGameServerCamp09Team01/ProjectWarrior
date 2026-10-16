@@ -28,6 +28,23 @@ namespace WarriorChat
 		return InScope == EWarriorChatScope::Guild ? TEXT("guild") : TEXT("global");
 	}
 
+	//서버가 매긴 내 줄에서 내 닉네임을 찾는다(최근 것부터). 없으면 빈 값
+	FString FindNickname(const TArray<FWarriorChatLine>& InGlobal, const TArray<FWarriorChatLine>& InGuild, const FString& InAccountId)
+	{
+		for (const TArray<FWarriorChatLine>* Lines : { &InGlobal, &InGuild })
+		{
+			for (int32 Index = Lines->Num() - 1; Index >= 0; --Index)
+			{
+				const FWarriorChatLine& Line = (*Lines)[Index];
+				if (Line.State == EWarriorChatLineState::Sent && Line.Message.SenderAccountId == InAccountId && !Line.Message.SenderNickname.IsEmpty())
+				{
+					return Line.Message.SenderNickname;
+				}
+			}
+		}
+		return FString();
+	}
+
 	//성공 응답 본문에서 data 객체를 꺼낸다
 	TSharedPtr<FJsonObject> ReadData(const FString& InBody)
 	{
@@ -116,7 +133,9 @@ EWarriorChatSendResult UWarriorChatSubsystem::SendMessage(EWarriorChatScope Scop
 	Line.Message.Scope = Scope;
 	Line.Message.GuildId = Scope == EWarriorChatScope::Guild ? MyGuildId : FString();
 	Line.Message.SenderAccountId = Auth->GetAccount().AccountId;
-	Line.Message.SenderNickname = Auth->GetAccount().Nickname;
+	//로그인 응답에는 닉네임이 없다(WarriorAuthSubsystem.cpp "로그인 응답에는 loginId·nickname이 없으므로"). 서버가 매긴 내 줄에서 찾는다
+	Line.Message.SenderNickname = !Auth->GetAccount().Nickname.IsEmpty() ? Auth->GetAccount().Nickname
+		: WarriorChat::FindNickname(GlobalLines, GuildLines, Auth->GetAccount().AccountId);
 	Line.Message.Text = Trimmed;
 	Line.Message.SentAt = FDateTime::UtcNow();
 	WarriorChatRules::AppendLine(LinesOf(Scope), Line, MaxLinesPerTab);
@@ -363,15 +382,16 @@ void UWarriorChatSubsystem::HandleSendResult(EWarriorChatScope InScope, const FS
 			OnChatUpdated.Broadcast(InScope);
 			return;
 		}
-		if (WarriorChatRules::HasMessage(Lines, Message.MessageId))
+		//실시간 사본이 먼저 왔으면 그 사본을 지우고 내 줄 자리(보낸 순서)를 지킨다
+		const int32 CopyIndex = Lines.IndexOfByPredicate([&Message](const FWarriorChatLine& Each)
 		{
-			//실시간 사본이 먼저 왔다: 내 임시 줄만 지운다
-			Lines.RemoveAt(Index);
-		}
-		else
+			return Each.State == EWarriorChatLineState::Sent && Each.Message.MessageId == Message.MessageId;
+		});
+		Lines[Index].Message = Message;
+		Lines[Index].State = EWarriorChatLineState::Sent;
+		if (CopyIndex != INDEX_NONE)
 		{
-			Lines[Index].Message = Message;
-			Lines[Index].State = EWarriorChatLineState::Sent;
+			Lines.RemoveAt(CopyIndex);
 		}
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Chat] Sent %s messageId=%s requestId=%s"),
 			WarriorChat::ScopeName(InScope), *Message.MessageId, *InRequestId);
@@ -527,7 +547,8 @@ void UWarriorChatSubsystem::SetGuildState(EWarriorChatGuildState InState)
 
 void UWarriorChatSubsystem::ResetGuildTab()
 {
-	GuildLines.Reset();
+	//보내는 중인 내 줄은 남긴다: 그 요청의 결과(성공·403 등)가 줄을 찾아 마무리해야 한다(동시에 보낸 CH3의 403이 먼저 와도)
+	GuildLines.RemoveAll([](const FWarriorChatLine& Line) { return Line.State != EWarriorChatLineState::Sending; });
 	GuildHistoryCursor.Reset();
 	//받는 중이던 내역은 옛 탭 것이다: 응답을 버리고 새로 받을 수 있게 한다
 	++GuildTabSerial;
@@ -596,6 +617,8 @@ void UWarriorChatSubsystem::ClearAll()
 	GlobalLines.Reset();
 	MyGuildId.Reset();
 	ResetGuildTab();
+	//로그인이 끝나면 보내는 중인 줄도 버린다(지난 세션의 결과는 세션 번호로 버려짐)
+	GuildLines.Reset();
 	SetUnread(EWarriorChatScope::Global, false);
 	SetGuildState(EWarriorChatGuildState::Unknown);
 	OnChatUpdated.Broadcast(EWarriorChatScope::Global);
