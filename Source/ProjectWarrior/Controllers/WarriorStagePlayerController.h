@@ -21,6 +21,8 @@ enum class EWarriorPauseState : uint8
 
 class AWarriorStageGameState;
 class SWidget;
+class UInputAction;
+class UInputMappingContext;
 class UUserWidget;
 class UWarriorNoticePopupWidget;
 class UWarriorPauseMenuWidget;
@@ -81,6 +83,11 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	//~ End AActor Interface
+
+	//~ Begin APlayerController Interface.
+	//일시정지 키(PauseAction)를 묶는다. 열린 동안의 ESC는 일시정지 화면 위젯이 직접 받는다(UI 입력 모드)
+	virtual void SetupInputComponent() override;
+	//~ End APlayerController Interface
 
 	//GameState의 OnStageStateChanged에 연결
 	UFUNCTION()
@@ -176,6 +183,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
 	FText LeavingText = NSLOCTEXT("WarriorPause", "Leaving", "스테이지를 포기하는 중…");
 
+	//일시정지를 여는 입력(IA_Pause, ESC). 스테이지 컨트롤러에서만 묶으므로 메인메뉴에는 없다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	TObjectPtr<UInputAction> PauseAction;
+
+	//PauseAction을 매핑한 컨텍스트(IMC_Pause). 캐릭터의 기본 컨텍스트와 따로 둔다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	TObjectPtr<UInputMappingContext> PauseMappingContext;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	int32 PauseMappingPriority = 1;
+
 	//일시정지 화면의 스테이지 정보 줄. {0} 지금 웨이브, {1} 전체 웨이브
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
 	FText PauseStageInfoFormat = NSLOCTEXT("WarriorPause", "StageInfo", "웨이브 {0} / {1}");
@@ -185,6 +203,9 @@ private:
 	//일시정지를 열 수 있는가. 판 상태(초기화·끝 상태·마지막 웨이브 클리어 연출), 사망·블레이드·전술 모드 태그,
 	//인벤토리 휠·상점·오류 팝업을 본다(계획서 4장 "일시정지를 열 수 있는 경우"). 막히면 OutReason에 이유
 	bool CanOpenPause(FString& OutReason) const;
+
+	//일시정지 키. 닫혀 있으면 연다(열린 동안은 게임 입력이 오지 않는다)
+	void HandlePauseInput();
 
 	//일시정지 화면을 띄우고 UI 입력 모드로 포커스를 준다. 클래스가 없으면 아무것도 하지 않는다
 	void ShowPauseMenu();

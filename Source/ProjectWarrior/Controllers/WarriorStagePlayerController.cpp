@@ -4,6 +4,11 @@
 #include "WarriorStagePlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -59,6 +64,19 @@ void AWarriorStagePlayerController::BeginPlay()
 	if (UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this))
 	{
 		Auth->OnSessionEnded.AddUniqueDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+
+	//일시정지 키 컨텍스트. 캐릭터의 기본 컨텍스트(DA_InputConfig)와 따로 둔다
+	if (PauseMappingContext)
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+		{
+			InputSubsystem->AddMappingContext(PauseMappingContext, PauseMappingPriority);
+		}
+	}
+	else
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] PauseMappingContext is not set. The pause key is not bound (use Warrior.Stage.Pause)."));
 	}
 
 	AWarriorStageGameState* StageGameState = GetWorld()->GetGameState<AWarriorStageGameState>();
@@ -130,6 +148,15 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 		Presenter->OnPopupClosed.RemoveDynamic(this, &ThisClass::HandleErrorPopupClosed);
 	}
 
+	//입력 서브시스템은 로컬 플레이어와 함께 레벨보다 오래 산다. 메인메뉴에 일시정지 컨텍스트를 남기지 않는다
+	if (PauseMappingContext && IsLocalController())
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+		{
+			InputSubsystem->RemoveMappingContext(PauseMappingContext);
+		}
+	}
+
 	GetWorldTimerManager().ClearTimer(ResultRevealTimer);
 	UnbindResultSubmit();
 	HideSavingNotice();
@@ -162,6 +189,29 @@ void AWarriorStagePlayerController::ReturnToMainMenu()
 }
 
 //~ Begin 일시정지
+
+void AWarriorStagePlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (!PauseAction)
+	{
+		return;
+	}
+
+	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		EnhancedInput->BindAction(PauseAction, ETriggerEvent::Started, this, &ThisClass::HandlePauseInput);
+	}
+}
+
+void AWarriorStagePlayerController::HandlePauseInput()
+{
+	if (!IsPauseOpen())
+	{
+		TryOpenPause();
+	}
+}
 
 bool AWarriorStagePlayerController::CanOpenPause(FString& OutReason) const
 {
