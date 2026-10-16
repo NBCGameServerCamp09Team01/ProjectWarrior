@@ -21,9 +21,13 @@
 #include "ProjectWarrior/Characters/WarriorPlayerCharacter.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameMode.h"
 #include "ProjectWarrior/GameModes/WarriorStageGameState.h"
+#include "ProjectWarrior/Network/WarriorApiSubsystem.h"
 #include "ProjectWarrior/Network/WarriorErrorPresenterSubsystem.h"
+#include "ProjectWarrior/Network/WarriorErrorText.h"
 #include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
 #include "ProjectWarrior/Shop/WarriorShopActor.h"
+#include "ProjectWarrior/Widgets/WarriorNoticePopupWidget.h"
+#include "ProjectWarrior/Widgets/WarriorPauseMenuWidget.h"
 #include "ProjectWarrior/Widgets/WarriorStageHUDWidget.h"
 #include "ProjectWarrior/Widgets/WarriorStageResultWidget.h"
 
@@ -33,6 +37,8 @@ namespace
 	const int32 StageHUDZOrder = 0;
 	const int32 StageResultZOrder = 30;
 	const int32 SavingNoticeZOrder = 40;
+	const int32 PauseMenuZOrder = 50;
+	const int32 ExitConfirmZOrder = 60;
 }
 
 void AWarriorStagePlayerController::BeginPlay()
@@ -118,6 +124,10 @@ void AWarriorStagePlayerController::EndPlay(const EEndPlayReason::Type EndPlayRe
 	if (UWarriorAuthSubsystem* Auth = UWarriorAuthSubsystem::Get(this))
 	{
 		Auth->OnSessionEnded.RemoveDynamic(this, &ThisClass::HandleSessionEnded);
+	}
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.RemoveDynamic(this, &ThisClass::HandleErrorPopupClosed);
 	}
 
 	GetWorldTimerManager().ClearTimer(ResultRevealTimer);
@@ -260,6 +270,8 @@ bool AWarriorStagePlayerController::TryOpenPause()
 		StageGameMode->NotifyPauseStarted();
 	}
 
+	ShowPauseMenu();
+
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Open. state=%s"),
 		BoundGameState.IsValid() ? *UEnum::GetValueAsString(BoundGameState->GetStageState()) : TEXT("None"));
 	return true;
@@ -272,6 +284,14 @@ void AWarriorStagePlayerController::ClosePause()
 		return;
 	}
 
+	//보낸 포기(P4)는 되돌릴 수 없다. 답이 오면 메인메뉴로 간다
+	if (PauseState == EWarriorPauseState::Leaving)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Close ignored while leaving."));
+		return;
+	}
+
+	HidePauseMenu();
 	UGameplayStatics::SetGamePaused(this, false);
 	PauseState = EWarriorPauseState::Closed;
 	FlushPressedKeys();
@@ -290,6 +310,247 @@ void AWarriorStagePlayerController::ClosePause()
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Close."));
 }
 
+void AWarriorStagePlayerController::ShowPauseMenu()
+{
+	if (!PauseMenuWidgetClass)
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] PauseMenuWidgetClass is not set. Paused without a screen."));
+		return;
+	}
+
+	if (!PauseMenuWidget)
+	{
+		PauseMenuWidget = CreateWidget<UWarriorPauseMenuWidget>(this, PauseMenuWidgetClass);
+		if (!PauseMenuWidget)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Pause] Failed to create the pause menu widget."));
+			return;
+		}
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(PauseMenuWidget);
+		}
+	}
+
+	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
+	{
+		PauseMenuWidget->SetStageInfo(FText::Format(PauseStageInfoFormat,
+			FText::AsNumber(StageGameState->GetWaveNumber()), FText::AsNumber(StageGameState->GetTotalWaveCount())));
+	}
+	PauseMenuWidget->SetLeaving(false);
+
+	if (!PauseMenuWidget->IsInViewport())
+	{
+		PauseMenuWidget->AddToViewport(PauseMenuZOrder);
+	}
+
+	//열린 동안 오류 팝업이 떴다 닫히면 포커스를 되찾는다
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.AddUniqueDynamic(this, &ThisClass::HandleErrorPopupClosed);
+	}
+
+	bShowMouseCursor = true;
+	FocusPauseWidget();
+}
+
+void AWarriorStagePlayerController::HidePauseMenu()
+{
+	if (UWarriorErrorPresenterSubsystem* Presenter = UWarriorErrorPresenterSubsystem::Get(this))
+	{
+		Presenter->OnPopupClosed.RemoveDynamic(this, &ThisClass::HandleErrorPopupClosed);
+	}
+
+	if (ExitConfirmPopup)
+	{
+		ExitConfirmPopup->OnChoice.RemoveDynamic(this, &ThisClass::HandleExitChoice);
+		ExitConfirmPopup->RemoveFromParent();
+	}
+
+	if (PauseMenuWidget)
+	{
+		PauseMenuWidget->RemoveFromParent();
+	}
+}
+
+void AWarriorStagePlayerController::FocusPauseWidget()
+{
+	UUserWidget* FocusWidget = nullptr;
+	if (PauseState == EWarriorPauseState::ConfirmingExit && ExitConfirmPopup && ExitConfirmPopup->IsInViewport())
+	{
+		FocusWidget = ExitConfirmPopup;
+	}
+	else if (PauseMenuWidget && PauseMenuWidget->IsInViewport())
+	{
+		FocusWidget = PauseMenuWidget;
+	}
+
+	if (FocusWidget)
+	{
+		UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(this, FocusWidget);
+	}
+}
+
+void AWarriorStagePlayerController::HandlePauseBack()
+{
+	switch (PauseState)
+	{
+	case EWarriorPauseState::Open:
+		ClosePause();
+		break;
+	case EWarriorPauseState::ConfirmingExit:
+		//확인 팝업에 포커스가 있으면 ESC는 팝업이 받는다. 일시정지 화면이 받았으면 팝업을 취소한 것으로 본다
+		HandleExitChoice(false);
+		break;
+	default:
+		break;
+	}
+}
+
+void AWarriorStagePlayerController::RequestExitFromPause()
+{
+	if (PauseState != EWarriorPauseState::Open)
+	{
+		return;
+	}
+
+	if (!ExitConfirmPopupClass)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Pause] ExitConfirmPopupClass is not set. Leaving without confirmation."));
+		BeginLeaving();
+		return;
+	}
+
+	if (!ExitConfirmPopup)
+	{
+		ExitConfirmPopup = CreateWidget<UWarriorNoticePopupWidget>(this, ExitConfirmPopupClass);
+		if (!ExitConfirmPopup)
+		{
+			UE_LOG(LogProjectWarrior, Error, TEXT("[Pause] Failed to create the exit confirm popup."));
+			return;
+		}
+
+		if (UWarriorSoundSubsystem* Sound = UWarriorSoundSubsystem::Get(this))
+		{
+			Sound->ApplyButtonSounds(ExitConfirmPopup);
+		}
+	}
+
+	ExitConfirmPopup->SetMessage(ExitConfirmText);
+	ExitConfirmPopup->SetButtons(ExitConfirmButtonText, ExitCancelButtonText);
+	ExitConfirmPopup->OnChoice.AddUniqueDynamic(this, &ThisClass::HandleExitChoice);
+	if (!ExitConfirmPopup->IsInViewport())
+	{
+		ExitConfirmPopup->AddToViewport(ExitConfirmZOrder);
+	}
+
+	PauseState = EWarriorPauseState::ConfirmingExit;
+	FocusPauseWidget();
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Exit requested. Waiting for confirmation."));
+}
+
+void AWarriorStagePlayerController::HandleExitChoice(bool bConfirmed)
+{
+	if (PauseState != EWarriorPauseState::ConfirmingExit)
+	{
+		return;
+	}
+
+	if (ExitConfirmPopup)
+	{
+		ExitConfirmPopup->OnChoice.RemoveDynamic(this, &ThisClass::HandleExitChoice);
+		if (ExitConfirmPopup->IsInViewport())
+		{
+			ExitConfirmPopup->RemoveFromParent();
+		}
+	}
+
+	if (!bConfirmed)
+	{
+		PauseState = EWarriorPauseState::Open;
+		FocusPauseWidget();
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Exit canceled."));
+		return;
+	}
+
+	BeginLeaving();
+}
+
+void AWarriorStagePlayerController::BeginLeaving()
+{
+	PauseState = EWarriorPauseState::Leaving;
+	if (PauseMenuWidget)
+	{
+		PauseMenuWidget->SetLeaving(true, LeavingText);
+	}
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Leaving. Abandoning the play."));
+
+	UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this);
+	if (!StagePlay)
+	{
+		HandleAbandonFinished(true);
+		return;
+	}
+
+	//답이 오기 전에 레벨이 바뀔 수 있으므로(세션 끝 등) 약한 참조로 잡는다. 포기할 판이 없으면 이 안에서 바로 온다
+	StagePlay->AbandonCurrentStagePlay([WeakThis = TWeakObjectPtr<ThisClass>(this)](bool bEnded)
+	{
+		if (ThisClass* StrongThis = WeakThis.Get())
+		{
+			StrongThis->HandleAbandonFinished(bEnded);
+		}
+	});
+}
+
+void AWarriorStagePlayerController::HandleAbandonFinished(bool bEnded)
+{
+	//세션 끝 등으로 이미 다른 길을 탔으면 무시한다
+	if (PauseState != EWarriorPauseState::Leaving)
+	{
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Leave finished. ended=%s"), bEnded ? TEXT("true") : TEXT("false"));
+
+	//포기했는지 모르면 안내한다. 팝업은 레벨이 바뀌어도 메인메뉴에 다시 뜬다(UWarriorErrorPresenterSubsystem)
+	if (!bEnded)
+	{
+		if (UWarriorApiSubsystem* Api = UWarriorApiSubsystem::Get(this))
+		{
+			FWarriorApiResult Result;
+			Result.bOk = false;
+			Result.Error.Code = TEXT("STAGE_PLAY_ABANDON_FAILED");
+			Result.Rule = FWarriorErrorText::Resolve(Result.Error);
+			Api->PresentError(Result);
+		}
+	}
+
+	//메인메뉴 레벨이 지정되지 않았으면 갇히지 않게 일시정지 화면으로 돌아간다(계획서 EX-3)
+	if (MainMenuLevel.IsNull())
+	{
+		UE_LOG(LogProjectWarrior, Error, TEXT("[Pause] MainMenuLevel is not set. Staying paused."));
+		PauseState = EWarriorPauseState::Open;
+		if (PauseMenuWidget)
+		{
+			PauseMenuWidget->SetLeaving(false);
+		}
+		FocusPauseWidget();
+		return;
+	}
+
+	ReturnToMainMenu();
+}
+
+void AWarriorStagePlayerController::HandleErrorPopupClosed()
+{
+	if (PauseState == EWarriorPauseState::Open || PauseState == EWarriorPauseState::ConfirmingExit)
+	{
+		bShowMouseCursor = true;
+		FocusPauseWidget();
+	}
+}
+
 //~ End 일시정지
 
 void AWarriorStagePlayerController::HandleSessionEnded(EWarriorSessionEndReason InReason, const FText& InMessage)
@@ -298,6 +559,8 @@ void AWarriorStagePlayerController::HandleSessionEnded(EWarriorSessionEndReason 
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Stage] Session ended (%s). Returning to the main menu level."),
 		*UEnum::GetValueAsString(InReason));
 
+	//일시정지 중이었어도 P4는 보내지 않는다(세션 종료는 다음 로그인 때 묻는다). 늦게 온 포기 답이 메인메뉴로 한 번 더 보내지 않게 닫힌 것으로 둔다
+	PauseState = EWarriorPauseState::Closed;
 	ReturnToMainMenu();
 }
 
