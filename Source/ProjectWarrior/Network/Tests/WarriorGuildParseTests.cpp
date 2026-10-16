@@ -1,6 +1,9 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "ProjectWarrior/Network/WarriorErrorText.h"
 #include "ProjectWarrior/Network/WarriorGuildName.h"
 #include "ProjectWarrior/Network/WarriorGuildSubsystem.h"
@@ -167,6 +170,64 @@ bool FWarriorGuildNameTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Prefix leading space"), FWarriorGuildName::IsValidSearchPrefix(TEXT(" a")));
 	TestFalse(TEXT("Prefix percent"), FWarriorGuildName::IsValidSearchPrefix(TEXT("a%")));
 	TestFalse(TEXT("Prefix too long"), FWarriorGuildName::IsValidSearchPrefix(TEXT("abcdefghijklm")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorGuildParsePresenceTest, "ProjectWarrior.Network.M23.GuildParsePresence",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWarriorGuildParsePresenceTest::RunTest(const FString& Parameters)
+{
+	// 실시간 PRESENCE_CHANGED data(realtime-api.md "메시지 종류"). 실패하면 ParsePresenceChanged의 칸 이름·SetMemberOnline의 찾기를 먼저 의심한다
+	auto ReadObject = [](const TCHAR* InJson)
+	{
+		TSharedPtr<FJsonObject> Object;
+		FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(InJson), Object);
+		return Object;
+	};
+
+	FString GuildId;
+	FString AccountId;
+	bool bOnline = false;
+	if (TestTrue(TEXT("Presence parsed"), UWarriorGuildSubsystem::ParsePresenceChanged(
+		ReadObject(TEXT(R"({"guildId":"7","accountId":"57","online":true})")), GuildId, AccountId, bOnline)))
+	{
+		TestEqual(TEXT("Guild id"), GuildId, FString(TEXT("7")));
+		TestEqual(TEXT("Account id"), AccountId, FString(TEXT("57")));
+		TestTrue(TEXT("Online"), bOnline);
+	}
+
+	// 칸이 빠졌거나 모양이 틀리면 쓰지 않는다(online이 없을 때 끊김으로 보지 않음)
+	TestFalse(TEXT("No online"), UWarriorGuildSubsystem::ParsePresenceChanged(
+		ReadObject(TEXT(R"({"guildId":"7","accountId":"57"})")), GuildId, AccountId, bOnline));
+	TestFalse(TEXT("No account"), UWarriorGuildSubsystem::ParsePresenceChanged(
+		ReadObject(TEXT(R"({"guildId":"7","online":false})")), GuildId, AccountId, bOnline));
+	TestFalse(TEXT("Online not bool"), UWarriorGuildSubsystem::ParsePresenceChanged(
+		ReadObject(TEXT(R"({"guildId":"7","accountId":"57","online":"yes"})")), GuildId, AccountId, bOnline));
+	TestFalse(TEXT("No data"), UWarriorGuildSubsystem::ParsePresenceChanged(nullptr, GuildId, AccountId, bOnline));
+
+	// 목록의 그 사람만 바뀐다. 같은 값이면 바뀜 없음, 목록에 없으면 false(G4로 맞춤)
+	FWarriorMyGuild MyGuild;
+	MyGuild.bHasGuild = true;
+	MyGuild.Guild.GuildId = TEXT("7");
+	FWarriorGuildMember Leader;
+	Leader.AccountId = TEXT("12");
+	Leader.bOnline = true;
+	FWarriorGuildMember Member;
+	Member.AccountId = TEXT("57");
+	MyGuild.Members = { Leader, Member };
+
+	bool bChanged = false;
+	TestTrue(TEXT("Member found"), UWarriorGuildSubsystem::SetMemberOnline(MyGuild, TEXT("57"), true, bChanged));
+	TestTrue(TEXT("Member changed"), bChanged);
+	TestTrue(TEXT("Member now online"), MyGuild.Members[1].bOnline);
+	TestTrue(TEXT("Leader untouched"), MyGuild.Members[0].bOnline);
+
+	TestTrue(TEXT("Same value found"), UWarriorGuildSubsystem::SetMemberOnline(MyGuild, TEXT("57"), true, bChanged));
+	TestFalse(TEXT("Same value not changed"), bChanged);
+
+	TestFalse(TEXT("Unknown member"), UWarriorGuildSubsystem::SetMemberOnline(MyGuild, TEXT("99"), false, bChanged));
+	TestFalse(TEXT("Unknown member not changed"), bChanged);
 	return true;
 }
 
