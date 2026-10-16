@@ -508,6 +508,13 @@ void UWarriorGuildSubsystem::HandleActionResponse(EWarriorGuildAction InAction, 
 		return;
 	}
 
+	//401: 공통 처리가 이 콜백 뒤에 로그인 상태를 끝내고, 컨트롤러가 안내를 한 번 띄운다. 여기서 실패를 알리면 길드 화면이 같은 안내를 또 띄운다
+	if (InResult.HttpStatus == 401)
+	{
+		UE_LOG(LogProjectWarrior, Warning, TEXT("[Guild] %s ended by 401. The session is ending."), WarriorGuildApi::ActionName(InAction));
+		return;
+	}
+
 	const bool bTouchesJoinRequests = InAction == EWarriorGuildAction::Approve || InAction == EWarriorGuildAction::Reject;
 
 	if (InResult.bOk)

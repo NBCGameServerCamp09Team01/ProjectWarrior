@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/IUserObjectListEntry.h"
 #include "Blueprint/UserWidget.h"
+#include "Styling/SlateTypes.h"
 #include "ProjectWarrior/Network/WarriorGuildTypes.h"
 #include "WarriorGuildWidgets.generated.h"
 
@@ -461,6 +462,9 @@ protected:
 	//소속의 첫 탭
 	EWarriorGuildTab GetFirstTab() const;
 
+	//탭 버튼(없으면 nullptr)
+	UButton* GetTabButton(EWarriorGuildTab InTab) const;
+
 	//탭을 고른다(쓸 수 없는 탭이면 첫 탭). 그 탭에 필요한 목록을 처음이면 받는다
 	void SelectTab(EWarriorGuildTab InTab);
 
@@ -671,4 +675,8 @@ private:
 	EWarriorGuildAction ConfirmAction = EWarriorGuildAction::Leave;
 
 	double LastLoadMoreSeconds = 0.0;
+
+	//탭 버튼 넷의 WBP 스타일(EWarriorGuildTab 순서). 고른 탭 강조 뒤 되돌릴 때 쓴다
+	UPROPERTY(Transient)
+	TArray<FButtonStyle> TabDefaultStyles;
 };

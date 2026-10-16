@@ -495,6 +495,14 @@ void UWarriorGuildPopupWidget::NativeOnInitialized()
 		ListView_Guilds->OnListViewScrolled().AddUObject(this, &ThisClass::HandleGuildListScrolled);
 	}
 	WarriorGuildView::SetText(Text_Error, LoadFailedText);
+
+	//탭 버튼의 WBP 스타일을 기억해 둔다. 고른 탭만 강조 모양(Hovered)으로 바꾸고, 나머지는 이 스타일로 되돌린다
+	TabDefaultStyles.Reset();
+	for (int32 Index = 0; Index < 4; ++Index)
+	{
+		const UButton* TabButton = GetTabButton(static_cast<EWarriorGuildTab>(Index));
+		TabDefaultStyles.Add(TabButton ? TabButton->GetStyle() : FButtonStyle());
+	}
 }
 
 void UWarriorGuildPopupWidget::NativeConstruct()
@@ -606,6 +614,17 @@ void UWarriorGuildPopupWidget::SelectTab(EWarriorGuildTab InTab)
 	BP_OnTabSet(CurrentTab);
 }
 
+UButton* UWarriorGuildPopupWidget::GetTabButton(EWarriorGuildTab InTab) const
+{
+	switch (InTab)
+	{
+	case EWarriorGuildTab::Find:			return Button_TabFind;
+	case EWarriorGuildTab::MyRequests:		return Button_TabMyRequests;
+	case EWarriorGuildTab::Members:			return Button_TabMembers;
+	default:								return Button_TabJoinRequests;
+	}
+}
+
 //~ End 탭
 
 //~ Begin 그리기
@@ -645,6 +664,20 @@ void UWarriorGuildPopupWidget::RenderTabs()
 	WarriorGuildView::SetText(Text_MyRequestCount, FText::Format(MyRequestCountFormat, MyGuild.MyJoinRequests.Num(), MaxPendingRequests));
 	WarriorGuildView::SetText(Text_JoinRequestBadge, FText::AsNumber(MyGuild.PendingJoinRequestCount));
 	WarriorGuildView::ShowPanel(Text_JoinRequestBadge, MyGuild.PendingJoinRequestCount > 0);
+
+	//고른 탭은 강조 모양(랭킹 도안의 선택 테두리와 같은 Hovered 스타일)
+	for (int32 Index = 0; Index < TabDefaultStyles.Num(); ++Index)
+	{
+		if (UButton* TabButton = GetTabButton(static_cast<EWarriorGuildTab>(Index)))
+		{
+			FButtonStyle Style = TabDefaultStyles[Index];
+			if (Index == static_cast<int32>(CurrentTab))
+			{
+				Style.Normal = Style.Hovered;
+			}
+			TabButton->SetStyle(Style);
+		}
+	}
 
 	WarriorGuildView::ShowPanel(Widget_SearchRow, bLoaded && CurrentTab == EWarriorGuildTab::Find);
 	if (Switcher_Tabs)
@@ -832,8 +865,9 @@ void UWarriorGuildPopupWidget::HandleJoinRequestsUpdated()
 
 void UWarriorGuildPopupWidget::HandleActionCompleted(EWarriorGuildAction InAction, bool bInSuccess, const FString& InErrorCode, const FText& InMessage)
 {
-	//만들기 대화상자가 떠 있으면 만들기 결과는 대화상자가 보인다
-	const bool bDialogHandles = InAction == EWarriorGuildAction::Create && CreateDialog && CreateDialog->IsOpen();
+	//만들기는 대화상자만 보내고 결과도 대화상자가 보인다. 대화상자가 먼저 알림을 받아(자식이 먼저 구독) 공용 팝업을 띄우고 닫을 수 있으므로,
+	//"열려 있나"로 가르면 같은 오류를 팝업이 한 번 더 띄운다
+	const bool bDialogHandles = InAction == EWarriorGuildAction::Create && CreateDialog;
 
 	if (bInSuccess)
 	{
