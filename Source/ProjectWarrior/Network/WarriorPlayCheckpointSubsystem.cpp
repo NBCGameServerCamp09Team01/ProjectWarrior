@@ -325,7 +325,7 @@ void UWarriorPlayCheckpointSubsystem::Abandon(TFunction<void(bool bEnded)> InOnD
 		[WeakThis = TWeakObjectPtr<ThisClass>(this), SentCheckSerial, StagePlayId, InOnDone](int32 Status, const FString& ErrorCode)
 		{
 			//200 포기함, 404 없음, 409 이미 끝남(결과·만료): 모두 서버에 진행 중 플레이가 더는 없다
-			const bool bEnded = Status == 200 || Status == 404 || (Status == 409 && ErrorCode == TEXT("STAGE_PLAY_NOT_IN_PROGRESS"));
+			const bool bEnded = UWarriorStagePlaySubsystem::IsAbandonEnded(Status, ErrorCode);
 			UE_LOG(LogProjectWarrior, Log, TEXT("[PlayCheckpoint] Abandon play %s. status=%d code=%s ended=%s"),
 				*StagePlayId, Status, *ErrorCode, bEnded ? TEXT("true") : TEXT("false"));
 

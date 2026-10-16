@@ -10,9 +10,22 @@
 #include "ProjectWarrior/Stage/WarriorStageTypes.h"
 #include "WarriorStagePlayerController.generated.h"
 
+//일시정지 상태(계획서 4장). ConfirmingExit·Leaving은 나가기 화면이 붙을 때 쓴다
+enum class EWarriorPauseState : uint8
+{
+	Closed,			// 일시정지 아님
+	Open,			// 일시정지 화면이 열림(게임 멈춤)
+	ConfirmingExit,	// 나가기 확인 팝업
+	Leaving			// 포기(P4) 응답을 기다림
+};
+
 class AWarriorStageGameState;
 class SWidget;
+class UInputAction;
+class UInputMappingContext;
 class UUserWidget;
+class UWarriorNoticePopupWidget;
+class UWarriorPauseMenuWidget;
 class UWarriorStageHUDWidget;
 class UWarriorStageResultWidget;
 
@@ -49,11 +62,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Stage")
 	void ReturnToMainMenu();
 
+	//~ Begin 일시정지
+	//열 수 있으면 게임을 멈춘다(SetGamePaused). 열 수 없으면 이유를 로그로 남기고 false
+	bool TryOpenPause();
+
+	//일시정지를 닫고 게임을 이어 간다. 입력 모드·이동 잠금은 지금 판 상태에 맞게 다시 맞춘다. 나가는 중(Leaving)에는 닫지 않는다
+	void ClosePause();
+
+	//"나가기" 버튼. 확인 팝업(ExitConfirmPopupClass)을 띄운다. 팝업 클래스가 없으면 확인 없이 바로 나간다
+	void RequestExitFromPause();
+
+	//일시정지 화면의 ESC. 열림이면 닫고, 나가는 중이면 무시한다
+	void HandlePauseBack();
+
+	bool IsPauseOpen() const { return PauseState != EWarriorPauseState::Closed; }
+	//~ End 일시정지
+
 protected:
 	//~ Begin AActor Interface.
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	//~ End AActor Interface
+
+	//~ Begin APlayerController Interface.
+	//일시정지 키(PauseAction)를 묶는다. 열린 동안의 ESC는 일시정지 화면 위젯이 직접 받는다(UI 입력 모드)
+	virtual void SetupInputComponent() override;
+	//~ End APlayerController Interface
 
 	//GameState의 OnStageStateChanged에 연결
 	UFUNCTION()
@@ -126,7 +160,84 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Stage")
 	FText SavingResultText = NSLOCTEXT("WarriorStage", "SavingResult", "결과를 저장하는 중…");
 
+	//~ Begin 일시정지 화면(BP_StagePlayerController에서 지정)
+	//일시정지 화면(WBP_PauseMenu). 없으면 화면 없이 게임만 멈춘다(시험용 콘솔 명령)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	TSubclassOf<UWarriorPauseMenuWidget> PauseMenuWidgetClass;
+
+	//나가기 확인 팝업(WBP_NoticePopup). 없으면 확인 없이 나간다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	TSubclassOf<UWarriorNoticePopupWidget> ExitConfirmPopupClass;
+
+	//나가기 확인 문구. 잃는 것(보상·진행·이어하기)을 분명히 적는다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	FText ExitConfirmText = NSLOCTEXT("WarriorPause", "ExitConfirm", "스테이지를 포기하고 메인메뉴로 나갈까요?\n이번 판의 보상과 진행은 저장되지 않고\n이어 할 수도 없습니다.");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	FText ExitConfirmButtonText = NSLOCTEXT("WarriorPause", "ExitConfirmButton", "나가기");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	FText ExitCancelButtonText = NSLOCTEXT("WarriorPause", "ExitCancelButton", "취소");
+
+	//포기 요청(P4)의 답을 기다리는 동안 일시정지 화면에 보이는 문구
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	FText LeavingText = NSLOCTEXT("WarriorPause", "Leaving", "스테이지를 포기하는 중…");
+
+	//일시정지를 여는 입력(IA_Pause, ESC). 스테이지 컨트롤러에서만 묶으므로 메인메뉴에는 없다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	TObjectPtr<UInputAction> PauseAction;
+
+	//PauseAction을 매핑한 컨텍스트(IMC_Pause). 캐릭터의 기본 컨텍스트와 따로 둔다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	TObjectPtr<UInputMappingContext> PauseMappingContext;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	int32 PauseMappingPriority = 1;
+
+	//일시정지 화면의 스테이지 정보 줄. {0} 지금 웨이브, {1} 전체 웨이브
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
+	FText PauseStageInfoFormat = NSLOCTEXT("WarriorPause", "StageInfo", "웨이브 {0} / {1}");
+	//~ End 일시정지 화면
+
 private:
+	//일시정지를 열 수 있는가. 판 상태(초기화·끝 상태·마지막 웨이브 클리어 연출), 사망·블레이드·전술 모드 태그,
+	//인벤토리 휠·상점·오류 팝업을 본다(계획서 4장 "일시정지를 열 수 있는 경우"). 막히면 OutReason에 이유
+	bool CanOpenPause(FString& OutReason) const;
+
+	//일시정지 키. 닫혀 있으면 연다(열린 동안은 게임 입력이 오지 않는다)
+	void HandlePauseInput();
+
+	//일시정지 화면을 띄우고 UI 입력 모드로 포커스를 준다. 클래스가 없으면 아무것도 하지 않는다
+	void ShowPauseMenu();
+
+	//일시정지 화면·확인 팝업을 내린다
+	void HidePauseMenu();
+
+	//지금 일시정지 상태에 맞는 위젯(확인 팝업 > 일시정지 화면)에 포커스를 준다
+	void FocusPauseWidget();
+
+	//확인 팝업의 답
+	UFUNCTION()
+	void HandleExitChoice(bool bConfirmed);
+
+	//포기(P4)를 보내고 답을 기다린다(Leaving)
+	void BeginLeaving();
+
+	//포기의 끝. 실패면 안내 팝업을 요청한 뒤 메인메뉴로 간다(팝업은 메인메뉴에 다시 뜬다)
+	void HandleAbandonFinished(bool bEnded);
+
+	//일시정지 중 오류 팝업이 닫혔다. 일시정지 화면(또는 확인 팝업)에 포커스를 되찾는다
+	UFUNCTION()
+	void HandleErrorPopupClosed();
+
+	EWarriorPauseState PauseState = EWarriorPauseState::Closed;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorPauseMenuWidget> PauseMenuWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorNoticePopupWidget> ExitConfirmPopup;
+
 	TWeakObjectPtr<AWarriorStageGameState> BoundGameState;
 
 	UPROPERTY(Transient)

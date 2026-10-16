@@ -60,6 +60,11 @@ UPawnCombatComponent* AWarriorPlayerCharacter::GetPawnCombatComponent() const
     return PlayerCombatComponent;
 }
 
+bool AWarriorPlayerCharacter::IsInventoryWheelOpen() const
+{
+    return InventoryWheelWidget && InventoryWheelWidget->IsWheelOpen();
+}
+
 UPawnUIComponent* AWarriorPlayerCharacter::GetPawnUIComponent() const
 {
     return PlayerUIComponent;

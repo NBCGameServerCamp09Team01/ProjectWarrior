@@ -84,6 +84,10 @@ public:
 	//POST /accounts/me/stage-plays/{id}/abandon. 보내지 못했으면 false이고 콜백은 오지 않는다
 	bool AbandonStagePlay(const FString& InStagePlayId, FAbandonCallback InCallback);
 
+	//포기 응답이 "서버에 진행 중 플레이가 더는 없다"는 뜻인가. 200 포기함, 404 없음, 409 STAGE_PLAY_NOT_IN_PROGRESS 이미 끝남(결과·만료).
+	//연결 실패(0)·5xx·그 밖은 false(플레이가 진행 중으로 남았을 수 있다 → 다음 로그인 때 이어하기를 묻는다)
+	static bool IsAbandonEnded(int32 InStatus, const FString& InErrorCode);
+
 	//체크포인트 저장 결과. InStatus는 HTTP 상태(연결 실패는 0), InErrorCode는 오류 본문의 code
 	using FCheckpointSaveCallback = TFunction<void(int32 InStatus, const FString& InErrorCode)>;
 
@@ -97,8 +101,13 @@ public:
 	//GET /accounts/me/stage-plays/{id}/checkpoint(C2). 보내지 못했으면 false이고 콜백은 오지 않는다
 	bool RequestCheckpoint(const FString& InStagePlayId, FCheckpointFetchCallback InCallback);
 
+	//나가기 포기의 끝. bEnded는 IsAbandonEnded와 같은 뜻이고, 포기할 플레이가 없었으면 true, 요청을 보내지 못했으면 false
+	using FAbandonDoneCallback = TFunction<void(bool bEnded)>;
+
 	//지금 플레이를 포기하고 ID를 비운다. 판 도중 스스로 나가는 메뉴(일시정지 → 나가기)용. 앱 종료·세션 종료에는 부르지 않는다(다음 로그인 때 이어하기를 묻는다)
-	void AbandonCurrentStagePlay();
+	//InOnDone은 늘 한 번 온다. 포기할 플레이가 없거나 보내지 못했으면 이 함수 안에서 바로 온다.
+	//시작 응답(P1) 전이면 이 판을 포기한 것으로 표시해, 늦게 온 201을 받자마자 그 플레이를 포기한다(서버에 진행 중으로 남지 않게)
+	void AbandonCurrentStagePlay(FAbandonDoneCallback InOnDone = nullptr);
 
 	//서버가 발급한 지금 플레이 ID(소문자 하이픈 GUID). 시작 응답 전이나 시작 실패면 비어 있다
 	const FString& GetCurrentStagePlayId() const { return CurrentStagePlayId; }
@@ -206,4 +215,8 @@ private:
 	EWarriorResultSubmitState ResultSubmitState = EWarriorResultSubmitState::None;
 
 	int32 StartSerial = 0;
+
+	//시작 응답(P1)을 기다리는 중에 사용자가 나갔다(AbandonCurrentStagePlay). 늦게 온 201은 받자마자 포기한다.
+	//번호(StartSerial)를 올려 응답을 버리면 서버에 플레이가 진행 중으로 남으므로, 번호는 두고 이 표시로 가린다. StartStagePlay·세션 끝에서 내린다
+	bool bStartGivenUp = false;
 };
