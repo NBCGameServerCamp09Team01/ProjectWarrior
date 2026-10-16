@@ -255,6 +255,8 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Dodge);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Sprint);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Finisher);
+	// 균형이 무너져 기절한 동안(UAIGameplayAbility_Stun). 행동이 멈추고 처형은 받을 수 있다
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_Stunned);
 	// 처형 불가 (보스, 비인간형 몬스터 등). UWarriorFunctionLibrary::CanBeFinisherTarget이 확인
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Status_FinisherImmune);
 	// 무적. 피격 판정(EvaluateHitResult)을 무시함 (넘어져 있는 동안 등)
