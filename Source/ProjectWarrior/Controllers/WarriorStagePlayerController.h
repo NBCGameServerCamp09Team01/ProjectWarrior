@@ -76,6 +76,10 @@ public:
 	void HandlePauseBack();
 
 	bool IsPauseOpen() const { return PauseState != EWarriorPauseState::Closed; }
+
+	//일시정지 화면의 "이 단계 건너뛰기"(튜토리얼). 스테이지에는 없다
+	virtual bool CanSkipFromPause() const { return false; }
+	virtual void SkipFromPause() {}
 	//~ End 일시정지
 
 protected:
@@ -198,6 +202,19 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Pause")
 	FText PauseStageInfoFormat = NSLOCTEXT("WarriorPause", "StageInfo", "웨이브 {0} / {1}");
 	//~ End 일시정지 화면
+
+	//~ Begin 자식(AWarriorTutorialPlayerController)이 바꾸는 곳. 기본 구현은 스테이지 동작
+	//진행 상태로 일시정지를 막을지. 기본: 판 상태(초기화·끝 상태·마지막 웨이브 클리어 연출)
+	virtual bool IsPauseAllowedByProgress(FString& OutReason) const;
+	//일시정지를 닫은 뒤 입력 모드를 되돌린다. 기본: 지금 판 상태의 권한
+	virtual void RestoreInputAfterPause();
+	//일시정지 화면의 정보 줄. 비면 바꾸지 않는다. 기본: "웨이브 3 / 5"
+	virtual FText GetPauseInfoText() const;
+	//"나가기"에서 서버 플레이를 포기(P4)하는가. 기본 true. 결과를 낸 뒤에도 플레이 ID가 남아 있으므로 판이 없는 레벨은 false로 둔다
+	virtual bool ShouldAbandonStagePlayOnLeave() const { return true; }
+	//AWarriorStageGameState가 있어야 하는 레벨인가(없으면 경고). 기본 true
+	virtual bool UsesStageGameState() const { return true; }
+	//~ End 자식이 바꾸는 곳
 
 private:
 	//일시정지를 열 수 있는가. 판 상태(초기화·끝 상태·마지막 웨이브 클리어 연출), 사망·블레이드·전술 모드 태그,

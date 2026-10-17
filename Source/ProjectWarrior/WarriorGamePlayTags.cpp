@@ -64,6 +64,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Finisher, "Player.Event.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Counter, "Player.Event.Counter");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_AttackBlocked, "Player.Event.AttackBlocked");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Event_BladeMode_WeakPointHit, "Player.Event.BladeMode.WeakPointHit");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Event_TacticalMode_StockAdded, "Player.Event.TacticalMode.StockAdded");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_SwitchTarget_Left, "Player.Event.SwitchTarget.Left");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_SwitchTarget_Right, "Player.Event.SwitchTarget.Right");
@@ -220,6 +222,7 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Dodge, "Shared.Status.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Sprint, "Shared.Status.Sprint");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Finisher, "Shared.Status.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Stunned, "Shared.Status.Stunned");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_FinisherImmune, "Shared.Status.FinisherImmune");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Invulnerable, "Shared.Status.Invulnerable");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_WeaponEquipped, "Shared.Status.WeaponEquipped");

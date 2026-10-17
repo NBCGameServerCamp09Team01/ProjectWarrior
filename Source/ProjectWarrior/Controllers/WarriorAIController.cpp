@@ -8,6 +8,7 @@
 #include "Perception/AISenseConfig_Hearing.h"
 #include "Perception/AISenseConfig_Damage.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "BrainComponent.h"
 #include "DrawDebugHelpers.h"
 #include "HAL/IConsoleManager.h"
 #include "TimerManager.h"
@@ -170,6 +171,11 @@ void AWarriorAIController::DrawStrafeDebug() const
 
 bool AWarriorAIController::RunBehaviorTree(UBehaviorTree* BTAsset)
 {
+	if (bBehaviorSuppressed)
+	{
+		return false;
+	}
+
 	const bool bRan = Super::RunBehaviorTree(BTAsset);
 
 	if (bRan && PendingInitialTarget.IsValid())
@@ -179,6 +185,23 @@ bool AWarriorAIController::RunBehaviorTree(UBehaviorTree* BTAsset)
 	}
 
 	return bRan;
+}
+
+void AWarriorAIController::SetBehaviorSuppressed(bool bInSuppressed)
+{
+	bBehaviorSuppressed = bInSuppressed;
+	if (!bInSuppressed)
+	{
+		return;
+	}
+
+	// 빙의할 때 BP가 이미 BT를 시작했을 수 있다
+	if (BrainComponent)
+	{
+		BrainComponent->StopLogic(TEXT("BehaviorSuppressed"));
+	}
+	StopMovement();
+	ClearFocus(EAIFocusPriority::Gameplay);
 }
 
 void AWarriorAIController::SetInitialTarget(AActor* InTarget)

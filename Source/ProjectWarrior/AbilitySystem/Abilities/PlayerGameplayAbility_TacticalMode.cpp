@@ -675,6 +675,15 @@ void UPlayerGameplayAbility_TacticalMode::HandleConfirm()
 
 		Step = ETacticalModeStep::SelectCommand;
 
+		if (AActor* Avatar = GetAvatarActorFromActorInfo())
+		{
+			FGameplayEventData StockEventData;
+			StockEventData.Instigator = Avatar;
+			StockEventData.Target = Target;
+			StockEventData.EventMagnitude = Stocks.Num();
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(Avatar, WarriorGameplayTags::Player_Event_TacticalMode_StockAdded, StockEventData);
+		}
+
 		// 다 찼거나 남은 스태미나로 넣을 기술이 없으면 바로 실행
 		if (Stocks.Num() >= MaxStocks || !CanAffordAnyTechnique())
 		{

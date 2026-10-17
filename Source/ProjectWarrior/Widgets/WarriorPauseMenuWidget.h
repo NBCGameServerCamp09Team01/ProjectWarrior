@@ -30,6 +30,9 @@ public:
 	//스테이지 정보 줄(예: "웨이브 3 / 5"). Text_StageInfo가 없으면 무시한다
 	void SetStageInfo(const FText& InText);
 
+	//"이 단계 건너뛰기"(튜토리얼) 버튼을 보일지. Button_SkipStep이 없으면 무시한다
+	void SetSkipVisible(bool bInVisible);
+
 protected:
 	//~ Begin UUserWidget Interface.
 	virtual void NativeConstruct() override;
@@ -43,6 +46,9 @@ protected:
 
 	UFUNCTION()
 	void HandleExitClicked();
+
+	UFUNCTION()
+	void HandleSkipClicked();
 
 	//~ Begin 반드시 있어야 하는 위젯 (WBP에 같은 이름으로 둔다)
 	UPROPERTY(meta = (BindWidget))
@@ -60,5 +66,9 @@ protected:
 	//"웨이브 3 / 5"
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_StageInfo;
+
+	//"이 단계 건너뛰기". 튜토리얼 WBP에만 둔다(컨트롤러의 CanSkipFromPause가 true일 때만 보인다)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_SkipStep;
 	//~ End 있으면 쓰는 위젯
 };

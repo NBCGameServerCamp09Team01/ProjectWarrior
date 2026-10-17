@@ -47,6 +47,11 @@ void UWarriorMainMenuWidget::NativeConstruct()
 		Button_Guild->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleGuildButtonClicked);
 	}
 
+	if (Button_Tutorial)
+	{
+		Button_Tutorial->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleTutorialButtonClicked);
+	}
+
 	if (Button_Logout)
 	{
 		Button_Logout->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLogoutButtonClicked);
@@ -128,6 +133,11 @@ void UWarriorMainMenuWidget::NativeDestruct()
 	if (UWarriorGuildSubsystem* Guild = UWarriorGuildSubsystem::Get(this))
 	{
 		Guild->OnMyGuildUpdated.RemoveDynamic(this, &ThisClass::HandleMyGuildUpdated);
+	}
+
+	if (Button_Tutorial)
+	{
+		Button_Tutorial->OnClicked.RemoveDynamic(this, &ThisClass::HandleTutorialButtonClicked);
 	}
 
 	if (Button_Logout)
@@ -258,6 +268,22 @@ void UWarriorMainMenuWidget::RefreshGuildBadge()
 	const int32 Pending = Guild && Guild->IsLeader() ? Guild->GetMyGuild().PendingJoinRequestCount : 0;
 	Text_GuildBadge->SetText(FText::AsNumber(Pending));
 	Text_GuildBadge->SetVisibility(Pending > 0 ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+}
+
+void UWarriorMainMenuWidget::RequestOpenTutorial()
+{
+	if (AWarriorFrontPlayerController* FrontPlayerController = GetOwningPlayer<AWarriorFrontPlayerController>())
+	{
+		FrontPlayerController->OpenTutorialSelect();
+		return;
+	}
+
+	UE_LOG(LogProjectWarrior, Warning, TEXT("[Front] %s: owning player is not AWarriorFrontPlayerController. Tutorial is not opened."), *GetName());
+}
+
+void UWarriorMainMenuWidget::HandleTutorialButtonClicked()
+{
+	RequestOpenTutorial();
 }
 
 void UWarriorMainMenuWidget::HandleLogoutButtonClicked()

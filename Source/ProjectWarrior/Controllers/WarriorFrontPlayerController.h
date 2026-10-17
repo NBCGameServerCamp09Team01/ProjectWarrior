@@ -14,6 +14,8 @@ class UWarriorNoticePopupWidget;
 class UWarriorStageSelectPopupWidget;
 class UWarriorRankingPopupWidget;
 class UWarriorGuildPopupWidget;
+class UWarriorTutorialChapterPopupWidget;
+class UDataAsset_TutorialSteps;
 
 //프론트 레벨의 화면 단계. 흐름은 Title → (로그인 안 했으면 Login ↔ Signup) → MainMenu.
 //BP에 저장된 값이 바뀌지 않도록 새 값은 끝에 추가한다.
@@ -59,6 +61,15 @@ public:
 	//메인메뉴의 "길드" 버튼. 메인메뉴 위에 길드 팝업을 띄운다(guild-api.md, M23 길드)
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void OpenGuild();
+
+	//메인메뉴의 "튜토리얼" 버튼. 메인메뉴 위에 장 고르기 팝업을 띄운다
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void OpenTutorialSelect();
+
+	//장 고르기 팝업에서 장을 골랐을 때. TutorialLevel을 Chapter=N 옵션으로 연다(InChapterIndex는 0부터).
+	//스테이지 실행 정보(UWarriorStageLaunchSubsystem)는 건드리지 않는다
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void EnterTutorial(int32 InChapterIndex);
 
 	//팝업에서 "입장"을 눌렀을 때. 열린 스테이지면 고르고 그 레벨로 이동한다.
 	//서버 판정(잠김 등)은 지금 스테이지 레벨의 플레이 시작에서 한다(로딩 전 확인으로 바꾸는 일은 기술부채 TD-30)
@@ -112,6 +123,20 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TSubclassOf<UWarriorGuildPopupWidget> GuildPopupClass;
 
+	//~ Begin 튜토리얼(BP_FrontPlayerController에서 지정)
+	//장 고르기 팝업(WBP_TutorialChapterPopup)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial")
+	TSubclassOf<UWarriorTutorialChapterPopupWidget> TutorialChapterPopupClass;
+
+	//튜토리얼 레벨(L_Tutorial). 이 참조로 패키지에도 쿠킹된다
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial")
+	TSoftObjectPtr<UWorld> TutorialLevel;
+
+	//장 이름을 읽을 단계 데이터(DA_TutorialSteps). 튜토리얼 GameMode가 쓰는 것과 같은 에셋
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial")
+	TSoftObjectPtr<UDataAsset_TutorialSteps> TutorialSteps;
+	//~ End 튜토리얼
+
 private:
 	//실시간 연결 상태가 바뀌었을 때(UWarriorRealtimeSubsystem::OnStateChanged). Reconnecting이면 표시를 띄우고 아니면 내린다
 	UFUNCTION()
@@ -144,6 +169,10 @@ private:
 	UFUNCTION()
 	void HandleGuildClosed();
 
+	//장 고르기 팝업이 닫히면 아래 화면으로 입력 포커스를 돌려준다
+	UFUNCTION()
+	void HandleTutorialSelectClosed();
+
 	//~ Begin 이어하기(M22, stage-play-api.md "이어하기(1차)")
 	//로그인 뒤 진행 중 플레이 확인 상태가 바뀌었을 때
 	UFUNCTION()
@@ -172,7 +201,7 @@ private:
 	void AbandonResumablePlay();
 	//~ End 이어하기
 
-	//가장 위에 떠 있는 위젯(안내 팝업 → 이어하기 팝업 → 스테이지 선택 팝업 → 랭킹 팝업 → 길드 팝업 → 지금 화면)으로 입력 포커스를 준다
+	//가장 위에 떠 있는 위젯(안내 팝업 → 이어하기 팝업 → 스테이지 선택 팝업 → 랭킹 팝업 → 길드 팝업 → 장 고르기 팝업 → 지금 화면)으로 입력 포커스를 준다
 	void FocusTopWidget();
 
 	//화면이 바뀐 뒤 음악 상황을 알리고 전환 소리를 낸다(어떤 소리인지는 사운드 표가 정함)
@@ -197,6 +226,9 @@ private:
 	//한 번 만든 길드 팝업을 재사용
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorGuildPopupWidget> GuildPopup;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorTutorialChapterPopupWidget> TutorialChapterPopup;
 	//이어하기 팝업(NoticePopupClass로 따로 만든다. 안내 팝업과 같이 쓰면 다른 안내가 문구·버튼을 덮는다)
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorNoticePopupWidget> ResumePopup;

@@ -8,6 +8,7 @@
 #include "ProjectWarrior/Interfaces/PawnCombatInterface.h"
 #include "ProjectWarrior/Interfaces/PawnUIInterface.h"
 #include "ProjectWarrior/Components/UI/PawnUIComponent.h"
+#include "ProjectWarrior/Components/UI/AIUIComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 
 UWarriorAttributeSet::UWarriorAttributeSet()
@@ -63,7 +64,11 @@ void UWarriorAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCal
 
 		SetCurrentStamina(NewCurrentStamina);
 
-		PawnUIComponent->OnCurrentStaminaChanged.Broadcast(GetCurrentStamina() / GetMaxStamina());
+		// AI의 이 막대는 균형을 보인다(PostAttributeChange)
+		if (!PawnUIComponent->IsA<UAIUIComponent>())
+		{
+			PawnUIComponent->OnCurrentStaminaChanged.Broadcast(GetCurrentStamina() / GetMaxStamina());
+		}
 	}
 
 	if (Data.EvaluatedData.Attribute == GetDamageTakenAttribute())
@@ -146,13 +151,21 @@ void UWarriorAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribu
 		return;  // 초기화 중(아바타/UI 컴포넌트 준비 전)에는 건너뛴다
 	}
 
+	// AI는 스태미나를 쓰지 않는다. AI 상태 막대(WBP_AIStatusBar)의 두 번째 막대는 OnCurrentStaminaChanged에 묶여 있으므로
+	// AI에게는 이 알림으로 균형(무너짐 게이지) 비율을 보낸다. 플레이어는 그대로 스태미나
+	const bool bShowBalance = PawnUIComponent->IsA<UAIUIComponent>();
+
 	if ((Attribute == GetCurrentHealthAttribute() || Attribute == GetMaxHealthAttribute()) && GetMaxHealth() > 0.f)
 	{
 		PawnUIComponent->OnCurrentHealthChanged.Broadcast(GetCurrentHealth() / GetMaxHealth());
 	}
-	else if ((Attribute == GetCurrentStaminaAttribute() || Attribute == GetMaxStaminaAttribute()) && GetMaxStamina() > 0.f)
+	else if (!bShowBalance && (Attribute == GetCurrentStaminaAttribute() || Attribute == GetMaxStaminaAttribute()) && GetMaxStamina() > 0.f)
 	{
 		PawnUIComponent->OnCurrentStaminaChanged.Broadcast(GetCurrentStamina() / GetMaxStamina());
+	}
+	else if (bShowBalance && (Attribute == GetCurrentBalanceAttribute() || Attribute == GetMaxBalanceAttribute()) && GetMaxBalance() > 0.f)
+	{
+		PawnUIComponent->OnCurrentStaminaChanged.Broadcast(GetCurrentBalance() / GetMaxBalance());
 	}
 }
 

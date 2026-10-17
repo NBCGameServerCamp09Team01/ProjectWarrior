@@ -47,6 +47,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void RequestOpenGuild();
 
+	//튜토리얼 장 고르기 팝업을 연다. 소유 컨트롤러의 OpenTutorialSelect를 호출한다
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void RequestOpenTutorial();
+
 protected:
 	//~ Begin UUserWidget Interface.
 	virtual void NativeConstruct() override;
@@ -80,6 +84,9 @@ protected:
 
 	//길드장이고 받은 신청이 있을 때만 Text_GuildBadge에 수를 보인다(도안 Q2)
 	void RefreshGuildBadge();
+
+	UFUNCTION()
+	void HandleTutorialButtonClicked();
 
 	//소유 컨트롤러의 Logout을 부른다. 화면 이동은 컨트롤러가 OnSessionEnded를 받아 한다
 	UFUNCTION()
@@ -115,6 +122,10 @@ protected:
 	//[길드] 버튼 위 받은 신청 수. 0이거나 길드장이 아니면 숨긴다
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> Text_GuildBadge;
+
+	//튜토리얼 장 고르기. WBP_MainMenu에 버튼을 두면 연결된다
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Tutorial;
 
 	//"OOO 영웅님, 환영합니다."
 	UPROPERTY(meta = (BindWidgetOptional))

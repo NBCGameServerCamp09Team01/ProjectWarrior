@@ -82,8 +82,11 @@ void AWarriorStagePlayerController::BeginPlay()
 	AWarriorStageGameState* StageGameState = GetWorld()->GetGameState<AWarriorStageGameState>();
 	if (!StageGameState)
 	{
-		UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] %s is used in a level without AWarriorStageGameState. Stage permissions are not applied."),
-			*GetClass()->GetName());
+		if (UsesStageGameState())
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Stage] %s is used in a level without AWarriorStageGameState. Stage permissions are not applied."),
+				*GetClass()->GetName());
+		}
 		return;
 	}
 
@@ -221,30 +224,9 @@ bool AWarriorStagePlayerController::CanOpenPause(FString& OutReason) const
 		return false;
 	}
 
-	//판 상태: 초기화(판 시작 전)·끝 상태(결과를 이미 냄)는 막는다
-	const AWarriorStageGameState* StageGameState = BoundGameState.Get();
-	const EWarriorStageState StageState = StageGameState ? StageGameState->GetStageState() : EWarriorStageState::None;
-	switch (StageState)
+	if (!IsPauseAllowedByProgress(OutReason))
 	{
-	case EWarriorStageState::None:
-	case EWarriorStageState::Initializing:
-	case EWarriorStageState::StageCleared:
-	case EWarriorStageState::StageFailed:
-		OutReason = FString::Printf(TEXT("State(%s)"), *UEnum::GetValueAsString(StageState));
 		return false;
-	default:
-		break;
-	}
-
-	//마지막 웨이브의 클리어 연출 뒤에는 결과를 낸다. 여기서 나가면 다 깬 판이 포기가 된다(계획서 EX-2)
-	if (StageState == EWarriorStageState::WaveCleared)
-	{
-		const AWarriorStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<AWarriorStageGameMode>();
-		if (StageGameMode && StageGameMode->IsCurrentWaveLast())
-		{
-			OutReason = TEXT("LastWaveCleared");
-			return false;
-		}
 	}
 
 	//사망(사망 ~ StageFailed 사이 포함)·블레이드 모드·전술 모드. 두 모드는 시간 배율을 바꾸고 입력을 따로 묶는다
@@ -287,6 +269,37 @@ bool AWarriorStagePlayerController::CanOpenPause(FString& OutReason) const
 		if (Presenter->IsShowing())
 		{
 			OutReason = TEXT("ErrorPopup");
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool AWarriorStagePlayerController::IsPauseAllowedByProgress(FString& OutReason) const
+{
+	//판 상태: 초기화(판 시작 전)·끝 상태(결과를 이미 냄)는 막는다
+	const AWarriorStageGameState* StageGameState = BoundGameState.Get();
+	const EWarriorStageState StageState = StageGameState ? StageGameState->GetStageState() : EWarriorStageState::None;
+	switch (StageState)
+	{
+	case EWarriorStageState::None:
+	case EWarriorStageState::Initializing:
+	case EWarriorStageState::StageCleared:
+	case EWarriorStageState::StageFailed:
+		OutReason = FString::Printf(TEXT("State(%s)"), *UEnum::GetValueAsString(StageState));
+		return false;
+	default:
+		break;
+	}
+
+	//마지막 웨이브의 클리어 연출 뒤에는 결과를 낸다. 여기서 나가면 다 깬 판이 포기가 된다(계획서 EX-2)
+	if (StageState == EWarriorStageState::WaveCleared)
+	{
+		const AWarriorStageGameMode* StageGameMode = GetWorld()->GetAuthGameMode<AWarriorStageGameMode>();
+		if (StageGameMode && StageGameMode->IsCurrentWaveLast())
+		{
+			OutReason = TEXT("LastWaveCleared");
 			return false;
 		}
 	}
@@ -351,13 +364,28 @@ void AWarriorStagePlayerController::ClosePause()
 		StageGameMode->NotifyPauseEnded();
 	}
 
+	RestoreInputAfterPause();
+
+	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Close."));
+}
+
+void AWarriorStagePlayerController::RestoreInputAfterPause()
+{
 	//열린 동안 판 상태가 바뀌었을 수 있으므로(웨이브 구성 도착 등) 지금 상태로 입력 모드까지 다시 맞춘다
 	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
 	{
 		ApplyStatePermission(StageGameState->GetStageState(), true);
 	}
+}
 
-	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Close."));
+FText AWarriorStagePlayerController::GetPauseInfoText() const
+{
+	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
+	{
+		return FText::Format(PauseStageInfoFormat,
+			FText::AsNumber(StageGameState->GetWaveNumber()), FText::AsNumber(StageGameState->GetTotalWaveCount()));
+	}
+	return FText::GetEmpty();
 }
 
 void AWarriorStagePlayerController::ShowPauseMenu()
@@ -383,11 +411,12 @@ void AWarriorStagePlayerController::ShowPauseMenu()
 		}
 	}
 
-	if (const AWarriorStageGameState* StageGameState = BoundGameState.Get())
+	const FText PauseInfo = GetPauseInfoText();
+	if (!PauseInfo.IsEmpty())
 	{
-		PauseMenuWidget->SetStageInfo(FText::Format(PauseStageInfoFormat,
-			FText::AsNumber(StageGameState->GetWaveNumber()), FText::AsNumber(StageGameState->GetTotalWaveCount())));
+		PauseMenuWidget->SetStageInfo(PauseInfo);
 	}
+	PauseMenuWidget->SetSkipVisible(CanSkipFromPause());
 	PauseMenuWidget->SetLeaving(false);
 
 	if (!PauseMenuWidget->IsInViewport())
@@ -543,6 +572,14 @@ void AWarriorStagePlayerController::BeginLeaving()
 	{
 		PauseMenuWidget->SetLeaving(true, LeavingText);
 	}
+	//서버 플레이가 없는 레벨(튜토리얼): 끝난 판의 플레이 ID가 남아 있을 수 있으므로 포기 요청을 부르지 않는다
+	if (!ShouldAbandonStagePlayOnLeave())
+	{
+		UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Leaving. No stage play to abandon."));
+		HandleAbandonFinished(true);
+		return;
+	}
+
 	UE_LOG(LogProjectWarrior, Log, TEXT("[Pause] Leaving. Abandoning the play."));
 
 	UWarriorStagePlaySubsystem* StagePlay = UWarriorStagePlaySubsystem::Get(this);
