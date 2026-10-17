@@ -9,10 +9,12 @@
 #include "EnhancedPlayerInput.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "ProjectWarrior/ProjectWarrior.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
 #include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
 #include "ProjectWarrior/Controllers/WarriorTutorialPlayerController.h"
 #include "ProjectWarrior/DataAssets/DataAsset_Item.h"
@@ -58,7 +60,7 @@ void AWarriorTutorialGameMode::RestartPlayer(AController* NewPlayer)
 
 void AWarriorTutorialGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	GetWorldTimerManager().ClearTimer(StepTimer);
+	ClearStepTimer();
 	UnbindStepSignals();
 
 	if (UAbilitySystemComponent* ASC = PlayerASC.Get())
@@ -137,7 +139,7 @@ void AWarriorTutorialGameMode::EnterStep(int32 InChapterIndex, int32 InStepIndex
 		ChapterIndex, StepIndex, *Step->StepId.ToString(), *UEnum::GetValueAsString(Step->Goal), *Step->GoalTag.ToString());
 
 	SetTutorialState(EWarriorTutorialState::StepIntro);
-	GetWorldTimerManager().SetTimer(StepTimer, this, &ThisClass::BeginStepActive, FMath::Max(StepIntroSeconds, 0.01f), false);
+	SetStepTimer(StepIntroSeconds, [this]() { BeginStepActive(); });
 }
 
 void AWarriorTutorialGameMode::BeginStepActive()
@@ -179,17 +181,30 @@ void AWarriorTutorialGameMode::CompleteStep()
 	{
 		UE_LOG(LogProjectWarrior, Log, TEXT("[Tutorial] Step done. chapter=%d step=%d id=%s failures=%d"),
 			ChapterIndex, StepIndex, *Step->StepId.ToString(), StepFailures);
+
+		//다음 틱에 끈다. 완료 신호는 어빌리티 안(예: 블레이드 모드 PerformSlash)에서 오므로 바로 끄면 남은 코드가 자세를 다시 켠다
+		if (!Step->CancelAbilityTagsOnComplete.IsEmpty() && PlayerASC.IsValid())
+		{
+			GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this,
+				[WeakASC = PlayerASC, CancelTags = Step->CancelAbilityTagsOnComplete]()
+				{
+					if (UAbilitySystemComponent* ASC = WeakASC.Get())
+					{
+						ASC->CancelAbilities(&CancelTags);
+					}
+				}));
+		}
 	}
 
 	SetTutorialState(EWarriorTutorialState::StepDone);
-	GetWorldTimerManager().SetTimer(StepTimer, this, &ThisClass::HandleStepDoneElapsed, FMath::Max(StepDoneSeconds, 0.01f), false);
+	SetStepTimer(StepDoneSeconds, [this]() { HandleStepDoneElapsed(); });
 }
 
 void AWarriorTutorialGameMode::HandleStepDoneElapsed()
 {
 	if (IsPlayerAbilityBusy())
 	{
-		GetWorldTimerManager().SetTimer(StepTimer, this, &ThisClass::HandleStepDoneElapsed, 0.25f, false);
+		SetStepTimer(0.25f, [this]() { HandleStepDoneElapsed(); });
 		return;
 	}
 	AdvanceStep();
@@ -215,7 +230,7 @@ bool AWarriorTutorialGameMode::IsPlayerAbilityBusy() const
 
 void AWarriorTutorialGameMode::AdvanceStep()
 {
-	GetWorldTimerManager().ClearTimer(StepTimer);
+	ClearStepTimer();
 	UnbindStepSignals();
 
 	const TArray<FWarriorTutorialChapter>& Chapters = TutorialSteps->GetChapters();
@@ -258,7 +273,7 @@ void AWarriorTutorialGameMode::SkipCurrentStep()
 
 void AWarriorTutorialGameMode::FinishTutorial()
 {
-	GetWorldTimerManager().ClearTimer(StepTimer);
+	ClearStepTimer();
 	UnbindStepSignals();
 
 	if (AWarriorTutorialZone* Zone = ActiveZone.Get())
@@ -628,9 +643,55 @@ void AWarriorTutorialGameMode::HandleInventoryChanged()
 
 //~ End 신호
 
+void AWarriorTutorialGameMode::SetStepTimer(float InRealSeconds, TFunction<void()>&& InCallback)
+{
+	StepTimerRemaining = FMath::Max(InRealSeconds, 0.01f);
+	StepTimerCallback = MoveTemp(InCallback);
+}
+
+void AWarriorTutorialGameMode::ClearStepTimer()
+{
+	StepTimerCallback.Reset();
+	StepTimerRemaining = 0.f;
+}
+
+void AWarriorTutorialGameMode::TickStepTimer(float InDeltaSeconds)
+{
+	if (!StepTimerCallback)
+	{
+		return;
+	}
+
+	//DeltaSeconds는 세상 시간 배율이 곱해져 있다. 나눠서 실제 시간으로 센다
+	const AWorldSettings* WorldSettings = GetWorldSettings();
+	const float TimeDilation = WorldSettings ? WorldSettings->GetEffectiveTimeDilation() : 1.f;
+	StepTimerRemaining -= InDeltaSeconds / FMath::Max(TimeDilation, KINDA_SMALL_NUMBER);
+	if (StepTimerRemaining > 0.f)
+	{
+		return;
+	}
+
+	//콜백이 새 타이머를 걸 수 있으므로 먼저 비운다
+	TFunction<void()> Callback = MoveTemp(StepTimerCallback);
+	ClearStepTimer();
+	Callback();
+}
+
 void AWarriorTutorialGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	TickStepTimer(DeltaSeconds);
+
+	//튜토리얼에는 스태미나를 회복할 수단이 없다. 블레이드 모드 유지·막기로 바닥나지 않게 늘 채워 둔다
+	if (bKeepPlayerStaminaFull && PlayerASC.IsValid())
+	{
+		const float MaxStamina = PlayerASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxStaminaAttribute());
+		if (PlayerASC->GetNumericAttribute(UWarriorAttributeSet::GetCurrentStaminaAttribute()) < MaxStamina)
+		{
+			PlayerASC->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentStaminaAttribute(), MaxStamina);
+		}
+	}
 
 	const FWarriorTutorialStep* Step = GetCurrentStep();
 	if (TutorialState != EWarriorTutorialState::StepActive || !Step || Step->Goal != EWarriorTutorialGoal::InputUsed || !Step->KeyAction)

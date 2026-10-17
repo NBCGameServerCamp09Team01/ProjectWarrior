@@ -102,6 +102,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Warrior|Tutorial", meta = (ClampMin = "0.0", Units = "s"))
 	float RespawnDelay = 2.f;
 
+	//사망 태그가 붙고 이만큼 지나도 OnCharacterDied가 오지 않으면 죽은 것으로 보고 다시 부른다
+	UPROPERTY(EditAnywhere, Category = "Warrior|Tutorial", meta = (ClampMin = "0.0", Units = "s"))
+	float DeathFallbackSeconds = 4.f;
+
 	UPROPERTY(VisibleAnywhere, Category = "Warrior|Tutorial")
 	TObjectPtr<USceneComponent> SceneRoot;
 
@@ -132,9 +136,13 @@ private:
 	void ApplySpawnSettings(AWarriorAICharacter* InEnemy, int32 InSpawnIndex) const;
 	void HandleEnemyInitialized(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy, int32 InSpawnIndex) const;
 	void HandleEnemyGameplayEvent(FGameplayTag InEventTag, const FGameplayEventData* InPayload);
+	//사망 태그가 붙으면 DeathFallbackSeconds 뒤를 대비한다. 사망 연출이 OnCharacterDied를 끝내 보내지 않는 경우(블레이드 모드 등)에도 다시 나오게
+	void HandleEnemyDeathTagChanged(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy, int32 InSpawnIndex);
 
 	//Enemies와 같은 순서. 부른 적(없으면 nullptr)
 	TArray<TWeakObjectPtr<AWarriorAICharacter>> SpawnedEnemies;
+	//Enemies와 같은 순서. 죽었지만 아직 남아 있는 몸. 다시 부를 때 남아 있으면 치운다
+	TArray<TWeakObjectPtr<AWarriorAICharacter>> DyingEnemies;
 	TArray<FTimerHandle> RespawnTimers;
 	TWeakObjectPtr<APawn> PlayerPawn;
 	bool bZoneActive = false;

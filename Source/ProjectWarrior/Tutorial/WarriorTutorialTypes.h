@@ -111,6 +111,10 @@ struct PROJECTWARRIOR_API FWarriorTutorialStep
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial", meta = (Categories = "Player.Ability"))
 	FGameplayTagContainer UnlockAbilityTags;
 
+	//단계를 끝내면 켜져 있는 이 어빌리티를 끈다(블레이드 모드처럼 켜 두는 모드를 다음 단계로 끌고 가지 않게)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial", meta = (Categories = "Player.Ability"))
+	FGameplayTagContainer CancelAbilityTagsOnComplete;
+
 	//단계 시작 때 주는 아이템
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Warrior|Tutorial")
 	TArray<FWarriorTutorialItemGrant> GrantItems;

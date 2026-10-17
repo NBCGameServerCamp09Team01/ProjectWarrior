@@ -84,6 +84,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial", meta = (Categories = "Player.Ability"))
 	FGameplayTagContainer WaitForAbilityTags;
 
+	//플레이어 스태미나를 늘 가득 채운다(튜토리얼에는 회복 수단이 없다)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial")
+	bool bKeepPlayerStaminaFull = true;
+
 	//막힌 어빌리티 알림을 다시 보내기까지(초). 키를 누르고 있으면 매 프레임 실패가 온다
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Tutorial", meta = (ClampMin = "0.0", Units = "s"))
 	float BlockedNoticeInterval = 1.f;
@@ -164,6 +168,11 @@ private:
 	EWarriorTutorialGoal BoundGoal = EWarriorTutorialGoal::AbilityActivated;
 	bool bInventoryBound = false;
 
-	FTimerHandle StepTimer;
+	//단계 문구·완료 표시 타이머. 블레이드·전술 모드가 세상 시간을 늦춰도 늘어지지 않게 Tick에서 실제 시간으로 센다(일시정지 중에는 멈춘다)
+	void SetStepTimer(float InRealSeconds, TFunction<void()>&& InCallback);
+	void ClearStepTimer();
+	void TickStepTimer(float InDeltaSeconds);
+	TFunction<void()> StepTimerCallback;
+	float StepTimerRemaining = 0.f;
 	double LastBlockedNoticeTime = -1.0;
 };

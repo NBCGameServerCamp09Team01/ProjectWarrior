@@ -107,6 +107,7 @@ void AWarriorTutorialZone::ActivateZone(APawn* InPlayerPawn)
 	}
 
 	SpawnedEnemies.SetNum(Enemies.Num());
+	DyingEnemies.SetNum(Enemies.Num());
 	RespawnTimers.SetNum(Enemies.Num());
 	for (int32 Index = 0; Index < Enemies.Num(); ++Index)
 	{
@@ -145,7 +146,15 @@ void AWarriorTutorialZone::DeactivateZone()
 			EnemyActor->Destroy();
 		}
 	}
+	for (const TWeakObjectPtr<AWarriorAICharacter>& Body : DyingEnemies)
+	{
+		if (AWarriorAICharacter* BodyActor = Body.Get())
+		{
+			BodyActor->Destroy();
+		}
+	}
 	SpawnedEnemies.Reset();
+	DyingEnemies.Reset();
 	RespawnTimers.Reset();
 }
 
@@ -154,6 +163,12 @@ void AWarriorTutorialZone::SpawnEnemy(int32 InSpawnIndex)
 	if (!bZoneActive || !Enemies.IsValidIndex(InSpawnIndex) || !Enemies[InSpawnIndex].EnemyClass)
 	{
 		return;
+	}
+
+	//사망 연출이 멈춰 몸이 남아 있으면 치운다(같은 자리에 새로 부른다)
+	if (AWarriorAICharacter* Body = DyingEnemies.IsValidIndex(InSpawnIndex) ? DyingEnemies[InSpawnIndex].Get() : nullptr)
+	{
+		Body->Destroy();
 	}
 
 	const FWarriorTutorialSpawn& Spawn = Enemies[InSpawnIndex];
@@ -178,6 +193,9 @@ void AWarriorTutorialZone::SpawnEnemy(int32 InSpawnIndex)
 	{
 		ASC->AddGameplayEventTagContainerDelegate(FGameplayTagContainer(),
 			FGameplayEventTagMulticastDelegate::FDelegate::CreateUObject(this, &ThisClass::HandleEnemyGameplayEvent));
+		//Death_Normal·Death_Knockback 모두 부모 태그 개수로 잡힌다
+		ASC->RegisterGameplayTagEvent(WarriorGameplayTags::Shared_Status_Death, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleEnemyDeathTagChanged, TWeakObjectPtr<AWarriorAICharacter>(Enemy), InSpawnIndex);
 	}
 
 	if (AWarriorAIController* AIController = Cast<AWarriorAIController>(Enemy->GetController()))
@@ -260,10 +278,39 @@ void AWarriorTutorialZone::HandleEnemyDied(AWarriorBaseCharacter* DeadCharacter)
 		return;
 	}
 
-	//죽은 몸은 적 쪽 사망 처리가 치운다. 자리를 비우고 새로 부른다
+	//죽은 몸은 적 쪽 사망 처리가 치운다. 자리를 비우고 새로 부른다(그때까지 남아 있으면 SpawnEnemy가 치운다)
+	DyingEnemies[SpawnIndex] = SpawnedEnemies[SpawnIndex];
 	SpawnedEnemies[SpawnIndex].Reset();
 	GetWorld()->GetTimerManager().SetTimer(RespawnTimers[SpawnIndex],
 		FTimerDelegate::CreateUObject(this, &ThisClass::SpawnEnemy, SpawnIndex), FMath::Max(RespawnDelay, 0.01f), false);
+}
+
+void AWarriorTutorialZone::HandleEnemyDeathTagChanged(const FGameplayTag InTag, int32 InNewCount, TWeakObjectPtr<AWarriorAICharacter> InEnemy, int32 InSpawnIndex)
+{
+	if (InNewCount <= 0 || !bZoneActive)
+	{
+		return;
+	}
+
+	//평소에는 사망 연출 끝의 OnCharacterDied가 처리한다. DeathFallbackSeconds 안에 오지 않으면 여기서 처리한다
+	//(이미 처리했으면 SpawnedEnemies에서 빠져 있어 HandleEnemyDied가 그냥 돌아간다)
+	FTimerHandle FallbackTimer;
+	GetWorld()->GetTimerManager().SetTimer(FallbackTimer, FTimerDelegate::CreateWeakLambda(this, [this, InEnemy, InSpawnIndex]()
+	{
+		if (!bZoneActive || !SpawnedEnemies.IsValidIndex(InSpawnIndex) || !Enemies[InSpawnIndex].bRespawnWhenDead)
+		{
+			return;
+		}
+		if (AWarriorAICharacter* Enemy = InEnemy.Get())
+		{
+			HandleEnemyDied(Enemy);
+		}
+		//몸이 OnCharacterDied 없이 사라졌다. 자리가 빈 채로 남지 않게 다시 부른다
+		else if (!SpawnedEnemies[InSpawnIndex].IsValid() && !GetWorld()->GetTimerManager().IsTimerActive(RespawnTimers[InSpawnIndex]))
+		{
+			SpawnEnemy(InSpawnIndex);
+		}
+	}), FMath::Max(DeathFallbackSeconds, 0.01f), false);
 }
 
 void AWarriorTutorialZone::HandleGoalVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
