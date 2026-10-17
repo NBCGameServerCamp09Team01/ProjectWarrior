@@ -86,6 +86,10 @@ namespace WarriorErrorTable
 			//~ c: STAT_·SKILL_ (S3·S4) 줄을 여기에 더한다
 			//~ d: RANK_ (랭킹) 줄을 여기에 더한다
 
+			//~ 채팅(chat-api.md, M23). 채팅 창 안 문구(Inline). {Seconds}는 UWarriorChatSubsystem이 retryAfterSeconds로 채운다
+			Make(TEXT("CHAT_TEXT_INVALID"),      LOCTEXT("ChatTextInvalid", "글을 확인해 주세요."), EShow::Inline, EAct::None),
+			Make(TEXT("CHAT_RATE_LIMITED"),      LOCTEXT("ChatRateLimited", "잠시 뒤에 보내 주세요. ({Seconds}초)"), EShow::Inline, EAct::None),
+			Make(TEXT("CHAT_MUTED"),             LOCTEXT("ChatMuted", "도배로 {Seconds}초 동안 채팅을 쉽니다."), EShow::Inline, EAct::None),
 			//~ d: 길드(guild-api.md v1, M23). 모두 retryable false, 화면 이동·보관본 없음(Action None).
 			//길드 팝업 안 문구(Inline)가 기본, 이름 중복은 이름 칸(Field), "상태가 바뀌었다"는 셋은 공용 팝업(Popup)
 			Make(TEXT("GUILD_NOT_FOUND"),        LOCTEXT("GuildNotFound", "길드를 찾을 수 없습니다."), EShow::Inline, EAct::None),
@@ -114,6 +118,10 @@ namespace WarriorErrorTable
 			{ WarriorErrorContext::Login,  Make(TEXT("UNKNOWN"),              LOCTEXT("LoginUnknownCode", "로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요."), EShow::Inline, EAct::None) },
 			{ WarriorErrorContext::Signup, Make(TEXT("INVALID_REQUEST_BODY"), LOCTEXT("SignupUnknown", "가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요."), EShow::Inline, EAct::None, true) },
 			{ WarriorErrorContext::Signup, Make(TEXT("UNKNOWN"),              LOCTEXT("SignupUnknownCode", "가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요."), EShow::Inline, EAct::None) },
+			//채팅: 길드 코드(GUILD_NOT_MEMBER)는 길드 줄이 표에 따로 있어도 채팅 창에서는 이 문구
+			{ WarriorErrorContext::Chat,   Make(TEXT("GUILD_NOT_MEMBER"),     LOCTEXT("ChatGuildNotMember", "길드에 가입하면 길드 채팅을 볼 수 있습니다."), EShow::Inline, EAct::None) },
+			{ WarriorErrorContext::Chat,   Make(TEXT("VALIDATION_FAILED"),    LOCTEXT("ChatValidation", "글을 확인해 주세요."), EShow::Inline, EAct::None) },
+			{ WarriorErrorContext::Chat,   Make(TEXT("UNKNOWN"),              LOCTEXT("ChatUnknownCode", "채팅을 보내지 못했습니다."), EShow::Inline, EAct::None) },
 		};
 		return Table;
 	}
@@ -126,6 +134,7 @@ namespace WarriorErrorTable
 			Make(TEXT("STAGE_PLAY_"), LOCTEXT("PrefixStagePlay", "결과를 저장하지 못했습니다.\n(오류 코드: {Code})"), EShow::Popup, EAct::DiscardStored),
 			Make(TEXT("RESULT_"),     LOCTEXT("PrefixResult", "결과를 저장하지 못했습니다.\n(오류 코드: {Code})"), EShow::Popup, EAct::DiscardStored),
 			Make(TEXT("STAGE_"),      LOCTEXT("PrefixStage", "스테이지를 시작하지 못했습니다.\n(오류 코드: {Code})"), EShow::Popup, EAct::GoMainMenu),
+			Make(TEXT("CHAT_"),       LOCTEXT("PrefixChat", "채팅을 보내지 못했습니다.\n(오류 코드: {Code})"), EShow::Inline, EAct::None),
 			Make(TEXT("GUILD_"),      LOCTEXT("PrefixGuild", "길드 요청을 처리하지 못했습니다.\n(오류 코드: {Code})"), EShow::Inline, EAct::None),
 		};
 		return Table;
