@@ -68,6 +68,10 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Event_Counter);
 	// 플레이어 근접 공격이 적의 가드에 막힘 (튕김 연출용)
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Event_AttackBlocked);
+	// 블레이드 모드에서 약점 선에 각도를 맞춰 벰(한 번 벨 때 한 번, 튜토리얼 완료 신호)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Event_BladeMode_WeakPointHit);
+	// 전술 모드에서 행동 스톡을 한 칸 쌓음(튜토리얼 완료 신호)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Event_TacticalMode_StockAdded);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Event_SwitchTarget_Left);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Player_Event_SwitchTarget_Right);

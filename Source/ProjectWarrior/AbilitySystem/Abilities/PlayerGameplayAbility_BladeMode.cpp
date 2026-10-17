@@ -1330,6 +1330,11 @@ void UPlayerGameplayAbility_BladeMode::PerformSlash()
 		ShakeScale = bMultiWeakPointHit ? MultiWeakPointShakeScale : WeakPointShakeScale;
 		FovPunchAmount = bMultiWeakPointHit ? MultiWeakPointFovPunch : WeakPointFovPunch;
 		FovPunchRemaining = FovPunchDuration;
+
+		FGameplayEventData WeakPointEventData;
+		WeakPointEventData.Instigator = PlayerCharacter;
+		WeakPointEventData.EventMagnitude = WeakPointHitCount;
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(PlayerCharacter, WarriorGameplayTags::Player_Event_BladeMode_WeakPointHit, WeakPointEventData);
 	}
 
 	// 벤 뒤에는 칼이 반대편에 있음. 다음 베기는 그 자리에서 시작
