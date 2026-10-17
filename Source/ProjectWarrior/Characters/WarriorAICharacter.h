@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "WarriorBaseCharacter.h"
 #include "GameplayTagContainer.h"
+#include "ProjectWarrior/Stage/WarriorDifficultyScaleGate.h"
 #include "WarriorAICharacter.generated.h"
 
 class UAICombatComponent;
@@ -45,8 +46,8 @@ public:
 	// 시작 데이터(GE, 비동기 로드)가 적용된 뒤에 최대·현재 체력과 공격력 기본값에 한 번 곱한다(먼저 곱하면 시작 GE의 Override가 덮어씀)
 	void SetDifficultyScale(float InHealthMultiplier, float InDamageMultiplier);
 
-	float GetDifficultyHealthMultiplier() const { return DifficultyHealthMultiplier; }
-	float GetDifficultyDamageMultiplier() const { return DifficultyDamageMultiplier; }
+	float GetDifficultyHealthMultiplier() const { return DifficultyScaleGate.HealthMultiplier; }
+	float GetDifficultyDamageMultiplier() const { return DifficultyScaleGate.DamageMultiplier; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -78,16 +79,11 @@ protected:
 private:
 	void InitAIStartUpData();
 
-	// 시작 데이터가 적용됐고 아직 곱하지 않았으면 난이도 배율을 곱한다(한 번만)
+	// 난이도 배율을 최대·현재 체력과 공격력 기본값에 곱한다. 언제 부를지는 DifficultyScaleGate가 정한다(한 번만)
 	void ApplyDifficultyScale();
 
-	float DifficultyHealthMultiplier = 1.f;
-	float DifficultyDamageMultiplier = 1.f;
-
-	// 시작 데이터(GE) 적용이 끝났는가. 그 전에 받은 배율은 적용을 미룬다
-	bool bStartUpDataApplied = false;
-
-	bool bDifficultyScaleApplied = false;
+	// 배율과 시작 데이터 중 어느 쪽이 먼저 와도 둘 다 준비됐을 때 한 번만 곱하게 하는 판정
+	FWarriorDifficultyScaleGate DifficultyScaleGate;
 
 public:
 	FORCEINLINE UAICombatComponent* GetAICombatComponent() const { return AICombatComponent; }
