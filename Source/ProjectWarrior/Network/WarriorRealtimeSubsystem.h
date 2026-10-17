@@ -8,6 +8,7 @@
 #include "ProjectWarrior/Auth/WarriorAuthTypes.h"
 #include "WarriorRealtimeSubsystem.generated.h"
 
+class FJsonObject;
 class IWebSocket;
 class UWarriorAuthSubsystem;
 
@@ -23,6 +24,10 @@ enum class EWarriorRealtimeState : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorRealtimeStateChanged, EWarriorRealtimeState, State);
 
+//서버 메시지 하나(type, id, data). 같은 id는 이미 걸렀다. 기능별 서브시스템(길드·채팅 …)이 구독해 자기 type만 처리한다(C++ 전용).
+//data는 늘 유효한 객체다(서버가 data를 안 주면 빈 객체)
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnWarriorRealtimeMessage, const FString& /*Type*/, const FString& /*Id*/, const TSharedPtr<FJsonObject>& /*Data*/);
+
 /**
  * 실시간 연결(S7). 명세: 루트 docs/contracts/realtime-api.md v1.1
  *
@@ -31,6 +36,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWarriorRealtimeStateChanged, EWar
  * - 서버 Ping에는 엔진이 Pong으로 답하고, 서버는 그때마다 세션을 늘린다.
  * - 서버 메시지는 봉투(type, id, sentAt, data)로 온다. 같은 id는 한 번만, 모르는 type은 무시한다.
  *   SESSION_REPLACED(다른 곳 로그인) → 로그인 상태를 끝낸다(화면 처리는 기존 OnSessionEnded 경로).
+ *   그 밖의 종류(CHAT_MESSAGE, GUILD_* …)는 OnMessage로 넘긴다. 기능 서브시스템이 구독하고, 아무도 처리하지 않으면 무시된다(M23).
  * - 끊기면 로그인은 유지한 채 1·2·4·8·16·30초 간격으로 다시 연결한다. 스테이지 플레이는 끊지 않는다.
  *   로그인이 끝나는 것은 서버가 401(접속 점검)이나 종료 코드 4001·4002를 줄 때뿐이다.
  * - UE IWebSocket은 핸드셰이크 실패의 상태 코드를 주지 않으므로, 연결에 실패하면 접속 점검(A4)으로 세션이 살아 있는지 확인한다.
@@ -54,6 +60,9 @@ public:
 	//상태가 바뀔 때. 프론트 컨트롤러가 "재연결 중" 표시에 쓴다
 	UPROPERTY(BlueprintAssignable, Category = "Warrior|Realtime")
 	FOnWarriorRealtimeStateChanged OnStateChanged;
+
+	//SESSION_REPLACED·ACCOUNT_CHANGED 말고 서버가 보낸 메시지. 길드·채팅 서브시스템이 구독한다(M23). 받는 쪽은 자기 type만 보고 나머지는 무시한다
+	FOnWarriorRealtimeMessage OnMessage;
 
 protected:
 	//연결 경로. 주소는 인증 서브시스템의 지금 서버 주소(GetEffectiveBaseUrl)를 ws로 바꿔 붙인다

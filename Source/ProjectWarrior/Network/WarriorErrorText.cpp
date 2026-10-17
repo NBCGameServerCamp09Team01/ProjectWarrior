@@ -88,6 +88,26 @@ namespace WarriorErrorTable
 
 			//~ c: STAT_·SKILL_ (S3·S4) 줄을 여기에 더한다
 			//~ d: RANK_ (랭킹) 줄을 여기에 더한다
+
+			//~ 채팅(chat-api.md, M23). 채팅 창 안 문구(Inline). {Seconds}는 UWarriorChatSubsystem이 retryAfterSeconds로 채운다
+			Make(TEXT("CHAT_TEXT_INVALID"),      LOCTEXT("ChatTextInvalid", "글을 확인해 주세요."), EShow::Inline, EAct::None),
+			Make(TEXT("CHAT_RATE_LIMITED"),      LOCTEXT("ChatRateLimited", "잠시 뒤에 보내 주세요. ({Seconds}초)"), EShow::Inline, EAct::None),
+			Make(TEXT("CHAT_MUTED"),             LOCTEXT("ChatMuted", "도배로 {Seconds}초 동안 채팅을 쉽니다."), EShow::Inline, EAct::None),
+			//~ d: 길드(guild-api.md v1, M23). 모두 retryable false, 화면 이동·보관본 없음(Action None).
+			//길드 팝업 안 문구(Inline)가 기본, 이름 중복은 이름 칸(Field), "상태가 바뀌었다"는 셋은 공용 팝업(Popup)
+			Make(TEXT("GUILD_NOT_FOUND"),        LOCTEXT("GuildNotFound", "길드를 찾을 수 없습니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_NOT_MEMBER"),       LOCTEXT("GuildNotMember", "길드에 소속되어 있지 않습니다."), EShow::Popup, EAct::None),
+			Make(TEXT("GUILD_NOT_LEADER"),       LOCTEXT("GuildNotLeader", "길드장만 할 수 있습니다."), EShow::Popup, EAct::None),
+			Make(TEXT("GUILD_ALREADY_JOINED"),   LOCTEXT("GuildAlreadyJoined", "이미 길드에 가입했습니다."), EShow::Popup, EAct::None),
+			Make(TEXT("GUILD_FULL"),             LOCTEXT("GuildFull", "길드 정원이 찼습니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_NAME_DUPLICATED"),  LOCTEXT("GuildNameDuplicated", "이미 사용 중인 길드 이름입니다."), EShow::Field, EAct::None),
+			Make(TEXT("GUILD_LIMIT_REACHED"),    LOCTEXT("GuildLimitReached", "더 이상 길드를 만들 수 없습니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_CREATE_REQUIREMENTS_NOT_MET"), LOCTEXT("GuildCreateRequirementsNotMet", "길드를 만들 조건을 충족하지 않았습니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_JOIN_REQUEST_DUPLICATED"), LOCTEXT("GuildJoinRequestDuplicated", "이미 신청한 길드입니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_JOIN_REQUEST_LIMIT"), LOCTEXT("GuildJoinRequestLimit", "신청은 3곳까지 할 수 있습니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_JOIN_REQUEST_NOT_FOUND"), LOCTEXT("GuildJoinRequestNotFound", "이미 처리되었거나 만료된 신청입니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_MEMBER_NOT_FOUND"), LOCTEXT("GuildMemberNotFound", "길드원을 찾을 수 없습니다."), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_LEADER_CANNOT_LEAVE"), LOCTEXT("GuildLeaderCannotLeave", "길드원이 있으면 길드장은 탈퇴할 수 없습니다(해체만 가능)."), EShow::Inline, EAct::None),
 		};
 		return Table;
 	}
@@ -101,6 +121,10 @@ namespace WarriorErrorTable
 			{ WarriorErrorContext::Login,  Make(TEXT("UNKNOWN"),              LOCTEXT("LoginUnknownCode", "로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요."), EShow::Inline, EAct::None) },
 			{ WarriorErrorContext::Signup, Make(TEXT("INVALID_REQUEST_BODY"), LOCTEXT("SignupUnknown", "가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요."), EShow::Inline, EAct::None, true) },
 			{ WarriorErrorContext::Signup, Make(TEXT("UNKNOWN"),              LOCTEXT("SignupUnknownCode", "가입하지 못했습니다. 잠시 뒤 다시 시도해 주세요."), EShow::Inline, EAct::None) },
+			//채팅: 길드 코드(GUILD_NOT_MEMBER)는 길드 줄이 표에 따로 있어도 채팅 창에서는 이 문구
+			{ WarriorErrorContext::Chat,   Make(TEXT("GUILD_NOT_MEMBER"),     LOCTEXT("ChatGuildNotMember", "길드에 가입하면 길드 채팅을 볼 수 있습니다."), EShow::Inline, EAct::None) },
+			{ WarriorErrorContext::Chat,   Make(TEXT("VALIDATION_FAILED"),    LOCTEXT("ChatValidation", "글을 확인해 주세요."), EShow::Inline, EAct::None) },
+			{ WarriorErrorContext::Chat,   Make(TEXT("UNKNOWN"),              LOCTEXT("ChatUnknownCode", "채팅을 보내지 못했습니다."), EShow::Inline, EAct::None) },
 		};
 		return Table;
 	}
@@ -113,6 +137,8 @@ namespace WarriorErrorTable
 			Make(TEXT("STAGE_PLAY_"), LOCTEXT("PrefixStagePlay", "결과를 저장하지 못했습니다.\n(오류 코드: {Code})"), EShow::Popup, EAct::DiscardStored),
 			Make(TEXT("RESULT_"),     LOCTEXT("PrefixResult", "결과를 저장하지 못했습니다.\n(오류 코드: {Code})"), EShow::Popup, EAct::DiscardStored),
 			Make(TEXT("STAGE_"),      LOCTEXT("PrefixStage", "스테이지를 시작하지 못했습니다.\n(오류 코드: {Code})"), EShow::Popup, EAct::GoMainMenu),
+			Make(TEXT("CHAT_"),       LOCTEXT("PrefixChat", "채팅을 보내지 못했습니다.\n(오류 코드: {Code})"), EShow::Inline, EAct::None),
+			Make(TEXT("GUILD_"),      LOCTEXT("PrefixGuild", "길드 요청을 처리하지 못했습니다.\n(오류 코드: {Code})"), EShow::Inline, EAct::None),
 		};
 		return Table;
 	}

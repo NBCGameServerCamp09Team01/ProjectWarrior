@@ -13,6 +13,7 @@ class UUserWidget;
 class UWarriorNoticePopupWidget;
 class UWarriorStageSelectPopupWidget;
 class UWarriorRankingPopupWidget;
+class UWarriorGuildPopupWidget;
 class UWarriorTutorialChapterPopupWidget;
 class UDataAsset_TutorialSteps;
 
@@ -56,6 +57,10 @@ public:
 	//메인메뉴의 "랭킹" 버튼. 메인메뉴 위에 랭킹 팝업(전체 총합부터)을 띄운다(ranking-api.md, 랭킹 M7)
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void OpenRanking();
+
+	//메인메뉴의 "길드" 버튼. 메인메뉴 위에 길드 팝업을 띄운다(guild-api.md, M23 길드)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void OpenGuild();
 
 	//메인메뉴의 "튜토리얼" 버튼. 메인메뉴 위에 장 고르기 팝업을 띄운다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
@@ -114,6 +119,9 @@ protected:
 	//랭킹 팝업 (BP_FrontPlayerController에서 WBP_RankingPopup 지정)
 	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
 	TSubclassOf<UWarriorRankingPopupWidget> RankingPopupClass;
+	//길드 팝업 (BP_FrontPlayerController에서 WBP_GuildPopup 지정, 설계 G-46 b: 랭킹과 같은 방식)
+	UPROPERTY(EditDefaultsOnly, Category = "Warrior|Front")
+	TSubclassOf<UWarriorGuildPopupWidget> GuildPopupClass;
 
 	//~ Begin 튜토리얼(BP_FrontPlayerController에서 지정)
 	//장 고르기 팝업(WBP_TutorialChapterPopup)
@@ -157,6 +165,10 @@ private:
 	UFUNCTION()
 	void HandleRankingClosed();
 
+	//길드 팝업이 닫히면 아래 화면으로 입력 포커스를 돌려준다
+	UFUNCTION()
+	void HandleGuildClosed();
+
 	//장 고르기 팝업이 닫히면 아래 화면으로 입력 포커스를 돌려준다
 	UFUNCTION()
 	void HandleTutorialSelectClosed();
@@ -189,7 +201,7 @@ private:
 	void AbandonResumablePlay();
 	//~ End 이어하기
 
-	//가장 위에 떠 있는 위젯(안내 팝업 → 이어하기 팝업 → 스테이지 선택 팝업 → 랭킹 팝업 → 장 고르기 팝업 → 지금 화면)으로 입력 포커스를 준다
+	//가장 위에 떠 있는 위젯(안내 팝업 → 이어하기 팝업 → 스테이지 선택 팝업 → 랭킹 팝업 → 길드 팝업 → 장 고르기 팝업 → 지금 화면)으로 입력 포커스를 준다
 	void FocusTopWidget();
 
 	//화면이 바뀐 뒤 음악 상황을 알리고 전환 소리를 낸다(어떤 소리인지는 사운드 표가 정함)
@@ -211,6 +223,9 @@ private:
 	//한 번 만든 랭킹 팝업을 재사용
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorRankingPopupWidget> RankingPopup;
+	//한 번 만든 길드 팝업을 재사용
+	UPROPERTY(Transient)
+	TObjectPtr<UWarriorGuildPopupWidget> GuildPopup;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWarriorTutorialChapterPopupWidget> TutorialChapterPopup;

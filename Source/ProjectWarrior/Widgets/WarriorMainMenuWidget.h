@@ -8,6 +8,7 @@
 #include "WarriorMainMenuWidget.generated.h"
 
 class UButton;
+class UNamedSlot;
 class UTextBlock;
 
 /**
@@ -16,6 +17,7 @@ class UTextBlock;
  * 계정 값은 UWarriorAccountSubsystem(GameInstance 서브시스템)에서 읽고, 값이 바뀌면(레벨 업, 스탯 투자) 다시 표시한다.
  * 환영 문구의 닉네임은 UWarriorAuthSubsystem의 계정에서 읽는다(지금은 서버가 닉네임을 주지 않아 이름 없는 문구가 나온다).
  * 스테이지 시작·종료 버튼은 WBP_MainMenu가 AWarriorFrontPlayerController의 함수를 직접 호출한다.
+ * 채팅 창(M23 채팅)은 WBP의 Slot_Chat에 C++가 넣는다(클래스는 UWarriorChatSettings::ChatPanelClass).
  */
 UCLASS(Abstract)
 class PROJECTWARRIOR_API UWarriorMainMenuWidget : public UUserWidget
@@ -41,6 +43,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void RequestOpenRanking();
 
+	//길드 팝업을 연다. 소유 컨트롤러의 OpenGuild를 호출한다(M23 길드)
+	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
+	void RequestOpenGuild();
+
 	//튜토리얼 장 고르기 팝업을 연다. 소유 컨트롤러의 OpenTutorialSelect를 호출한다
 	UFUNCTION(BlueprintCallable, Category = "Warrior|Front")
 	void RequestOpenTutorial();
@@ -57,6 +63,9 @@ protected:
 	//화면이 보일 때마다 환영 문구를 다시 만든다. 닉네임이 있으면 WelcomeFormat, 없으면 WelcomeNoNameText
 	void RefreshWelcome();
 
+	//Slot_Chat이 비어 있으면 설정의 채팅 창을 만들어 넣는다(M23 채팅). 자리·클래스가 없으면 아무것도 하지 않는다
+	void AddChatPanel();
+
 	UFUNCTION()
 	void HandleGrowthButtonClicked();
 
@@ -65,6 +74,16 @@ protected:
 
 	UFUNCTION()
 	void HandleRankingButtonClicked();
+
+	UFUNCTION()
+	void HandleGuildButtonClicked();
+
+	//길드 서브시스템의 OnMyGuildUpdated에 연결. 받은 신청 수 배지를 다시 그린다
+	UFUNCTION()
+	void HandleMyGuildUpdated();
+
+	//길드장이고 받은 신청이 있을 때만 Text_GuildBadge에 수를 보인다(도안 Q2)
+	void RefreshGuildBadge();
 
 	UFUNCTION()
 	void HandleTutorialButtonClicked();
@@ -96,6 +115,14 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Ranking;
 
+	//랭킹과 로그아웃 사이(M23 길드, 도안 Q1)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> Button_Guild;
+
+	//[길드] 버튼 위 받은 신청 수. 0이거나 길드장이 아니면 숨긴다
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> Text_GuildBadge;
+
 	//튜토리얼 장 고르기. WBP_MainMenu에 버튼을 두면 연결된다
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Tutorial;
@@ -106,6 +133,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> Button_Logout;
+
+	//채팅 창 자리(M23 채팅, 메인메뉴 왼쪽 아래). 안은 비워 두고 C++가 채팅 창을 넣는다(AddChatPanel)
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UNamedSlot> Slot_Chat;
 	//~ End 없어도 되는 위젯
 
 	//{0} 계정 레벨

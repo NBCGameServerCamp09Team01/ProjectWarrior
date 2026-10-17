@@ -338,8 +338,26 @@ void UWarriorRealtimeSubsystem::HandleMessage(const FString& InMessage)
 		return;
 	}
 
-	//모르는 종류는 무시한다(서버가 새 종류를 먼저 배포해도 깨지지 않게)
-	UE_LOG(LogProjectWarrior, Verbose, TEXT("[Realtime] Unknown message type ignored: %s"), *Type);
+	//그 밖의 종류는 기능 서브시스템(길드·채팅 …)에 넘긴다. data가 없거나 객체가 아니면 빈 객체로 넘긴다
+	TSharedPtr<FJsonObject> Data;
+	const TSharedPtr<FJsonObject>* DataField = nullptr;
+	if (Envelope->TryGetObjectField(TEXT("data"), DataField) && DataField && DataField->IsValid())
+	{
+		Data = *DataField;
+	}
+	else
+	{
+		Data = MakeShared<FJsonObject>();
+	}
+
+	if (!OnMessage.IsBound())
+	{
+		//받는 쪽이 없으면 무시한다(서버가 새 종류를 먼저 배포해도 깨지지 않게)
+		UE_LOG(LogProjectWarrior, Verbose, TEXT("[Realtime] Message not handled (no listener): %s"), *Type);
+		return;
+	}
+
+	OnMessage.Broadcast(Type, Id, Data);
 }
 
 //~ End 소켓 알림
