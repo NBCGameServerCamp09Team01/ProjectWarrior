@@ -17,6 +17,33 @@
 #include "ProjectWarrior/Characters/WarriorAICharacter.h"
 #include "ProjectWarrior/Components/UI/PawnUIComponent.h"
 #include "ProjectWarrior/Controllers/WarriorAIController.h"
+#include "Components/CapsuleComponent.h"
+
+namespace
+{
+	//InLocation 아래 바닥을 찾아 캡슐 바닥이 닿는 위치를 돌려준다. 바닥이 없으면 그대로
+	FVector FindGroundedPawnLocation(const UWorld* InWorld, const APawn* InPawn, const AActor* InIgnoredActor, const FVector& InLocation)
+	{
+		const UCapsuleComponent* Capsule = InPawn ? InPawn->FindComponentByClass<UCapsuleComponent>() : nullptr;
+		if (!InWorld || !Capsule)
+		{
+			return InLocation;
+		}
+
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(TutorialZoneGround), false, InPawn);
+		QueryParams.AddIgnoredActor(InIgnoredActor);
+		FHitResult Hit;
+		const FVector TraceStart = InLocation + FVector(0.f, 0.f, 300.f);
+		const FVector TraceEnd = InLocation - FVector(0.f, 0.f, 500.f);
+		if (!InWorld->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+		{
+			return InLocation;
+		}
+
+		//살짝 띄워 바닥과 겹치지 않게(겹치면 엔진이 위로 밀어내 떨어지는 동작이 나온다)
+		return Hit.ImpactPoint + FVector(0.f, 0.f, Capsule->GetScaledCapsuleHalfHeight() + 2.f);
+	}
+}
 
 AWarriorTutorialZone::AWarriorTutorialZone()
 {
@@ -99,7 +126,7 @@ void AWarriorTutorialZone::ActivateZone(APawn* InPlayerPawn)
 	if (bTeleportPlayer && InPlayerPawn)
 	{
 		const FTransform StartTransform = PlayerStartPoint->GetComponentTransform();
-		InPlayerPawn->TeleportTo(StartTransform.GetLocation(), StartTransform.Rotator());
+		InPlayerPawn->TeleportTo(FindGroundedPawnLocation(GetWorld(), InPlayerPawn, this, StartTransform.GetLocation()), StartTransform.Rotator());
 		if (AController* PlayerController = InPlayerPawn->GetController())
 		{
 			PlayerController->SetControlRotation(StartTransform.Rotator());
