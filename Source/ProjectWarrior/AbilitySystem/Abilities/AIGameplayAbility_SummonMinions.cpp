@@ -3,6 +3,10 @@
 
 #include "AIGameplayAbility_SummonMinions.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "ProjectWarrior/WarriorFunctionLibrary.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "ProjectWarrior/Characters/WarriorAICharacter.h"
 #include "ProjectWarrior/Controllers/WarriorAIController.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
@@ -101,6 +105,8 @@ void UAIGameplayAbility_SummonMinions::SummonMinions()
 	{
 		return;
 	}
+
+	BindSummonerDeath();
 
 	int32 CountToSpawn = FMath::Max(1, SummonCount);
 
@@ -208,7 +214,8 @@ void UAIGameplayAbility_SummonMinions::PlayMinionEmerge(APawn* Minion) const
 	{
 		ACharacter* Character = WeakMinion.Get();
 
-		if (!Character || Character->IsActorBeingDestroyed())
+		// 등장 중에 죽었으면(소환자 사망 등) 이동·AI를 되살리지 않음
+		if (!Character || Character->IsActorBeingDestroyed() || UWarriorFunctionLibrary::IsActorDead(Character))
 		{
 			return;
 		}
@@ -226,6 +233,70 @@ void UAIGameplayAbility_SummonMinions::PlayMinionEmerge(APawn* Minion) const
 			}
 		}
 	}), FreezeDuration, false);
+}
+
+void UAIGameplayAbility_SummonMinions::OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec)
+{
+	if (UAbilitySystemComponent* ASC = BoundSummonerASC.Get())
+	{
+		ASC->RegisterGameplayTagEvent(WarriorGameplayTags::Shared_Status_Death, EGameplayTagEventType::NewOrRemoved).Remove(SummonerDeathHandle);
+	}
+
+	SummonerDeathHandle.Reset();
+	BoundSummonerASC.Reset();
+
+	Super::OnRemoveAbility(ActorInfo, Spec);
+}
+
+void UAIGameplayAbility_SummonMinions::BindSummonerDeath()
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+
+	if (!ASC || BoundSummonerASC.Get() == ASC)
+	{
+		return;
+	}
+
+	// 사망 태그(Normal/Knockback/Finisher)가 붙으면 부모 태그 Shared.Status.Death 카운트가 오름
+	SummonerDeathHandle = ASC->RegisterGameplayTagEvent(WarriorGameplayTags::Shared_Status_Death, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &ThisClass::HandleSummonerDeathTagChanged);
+	BoundSummonerASC = ASC;
+}
+
+void UAIGameplayAbility_SummonMinions::HandleSummonerDeathTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		KillSummonedMinions();
+	}
+}
+
+void UAIGameplayAbility_SummonMinions::KillSummonedMinions()
+{
+	// 사망 처리 중 다른 콜백이 목록을 건드릴 수 있으므로 복사해서 순회
+	const TArray<TWeakObjectPtr<APawn>> MinionsToKill = SummonedMinions;
+	SummonedMinions.Reset();
+
+	for (const TWeakObjectPtr<APawn>& WeakMinion : MinionsToKill)
+	{
+		APawn* Minion = WeakMinion.Get();
+
+		if (!Minion || Minion->IsActorBeingDestroyed() || UWarriorFunctionLibrary::IsActorDead(Minion))
+		{
+			continue;
+		}
+
+		UAbilitySystemComponent* MinionASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Minion);
+
+		// 처형 연출 중인 하수인은 그 연출로 죽게 둠
+		if (!MinionASC || MinionASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Finisher))
+		{
+			continue;
+		}
+
+		// 체력이 0이 될 때와 같은 경로: 사망 태그 → 사망 어빌리티 → OnCharacterDied
+		UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(Minion, WarriorGameplayTags::Shared_Status_Death_Normal);
+	}
 }
 
 int32 UAIGameplayAbility_SummonMinions::GetAliveMinionCount()

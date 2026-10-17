@@ -24,6 +24,7 @@ public:
 protected:
 	//~ Begin GameplayAbility Interface.
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+	virtual void OnRemoveAbility(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) override;
 	//~ End GameplayAbility Interface
 
 	UPROPERTY(EditDefaultsOnly, Category = "Summon")
@@ -87,6 +88,14 @@ private:
 
 	// 하수인에게 등장 몽타주를 재생시키고 그동안 이동·AI 로직을 멈춤
 	void PlayMinionEmerge(APawn* Minion) const;
+
+	// 소환자가 죽으면 살아 있는 하수인도 함께 죽임 (웨이브는 소환자만 세므로 하수인이 남지 않도록)
+	void BindSummonerDeath();
+	void HandleSummonerDeathTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void KillSummonedMinions();
+
+	FDelegateHandle SummonerDeathHandle;
+	TWeakObjectPtr<UAbilitySystemComponent> BoundSummonerASC;
 
 	// 이번 발동에서 이미 소환했는지 (노티파이가 없으면 몽타주 종료 시 소환)
 	bool bSummonedThisActivation = false;

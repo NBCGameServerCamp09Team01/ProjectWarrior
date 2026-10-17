@@ -99,6 +99,10 @@ void AWarriorAICharacter::BeginPlay()
 void AWarriorAICharacter::OnDeathPoseReached(const FGameplayEventData* Payload)
 {
     UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(this, WarriorGameplayTags::AI_Status_DeathPoseReached);
+
+    // 쓰러진 몸(캡슐·메시)이 플레이어 이동을 막지 않도록 폰 채널 무시. 바닥(WorldStatic) 충돌은 유지
+    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+    GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 }
 
 FText AWarriorAICharacter::GetDisplayName() const
