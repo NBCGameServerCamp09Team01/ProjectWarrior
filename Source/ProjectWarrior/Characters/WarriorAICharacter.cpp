@@ -376,6 +376,12 @@ void AWarriorAICharacter::ApplyAffixes()
                 ASC->ApplyGameplayEffectToSelf(EffectClass.GetDefaultObject(), 1.f, ASC->MakeEffectContext());
             }
         }
+
+        // 신속: 최종 최고 속도에 배율(MaxWalkSpeed 직접 변경은 ALS가 걸음이 바뀔 때 덮어씀)
+        if (!FMath::IsNearlyEqual(Definition->SelfMoveSpeedScale, 1.f))
+        {
+            SetMovementSpeedScale(AffixId, Definition->SelfMoveSpeedScale);
+        }
     }
 
     // 강인처럼 최대 체력을 올리는 수식어: 무한 GE는 최대만 바꾸므로 현재 체력을 같은 비율로 올린다(가득 찬 채 시작)

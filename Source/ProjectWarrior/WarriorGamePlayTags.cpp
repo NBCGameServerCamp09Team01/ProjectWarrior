@@ -211,6 +211,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Stagger, "Shared.Event.Stagger");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_BaseDamage, "Shared.SetByCaller.BaseDamage");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_AffixDamage, "Shared.SetByCaller.AffixDamage");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Effect_Affix, "Shared.Effect.Affix");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Heal, "Shared.SetByCaller.Heal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Upgrade, "Shared.SetByCaller.Upgrade");

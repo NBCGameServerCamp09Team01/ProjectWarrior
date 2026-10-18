@@ -10,6 +10,7 @@
 #include "ProjectWarrior/Components/UI/PawnUIComponent.h"
 #include "ProjectWarrior/Components/UI/AIUIComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "ProjectWarrior/Stage/WarriorAffixLibrary.h"
 
 UWarriorAttributeSet::UWarriorAttributeSet()
 {
@@ -88,6 +89,9 @@ void UWarriorAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCal
 		);
 
 		PawnUIComponent->OnCurrentHealthChanged.Broadcast(GetCurrentHealth() / GetMaxHealth());
+
+		// 수식어 피격 효과(화상·둔화·흡혈). 근접·투사체 모두 여기를 지난다
+		WarriorAffix::HandleDamageTaken(Data, OldHealth - NewCurrentHealth);
 
 		//TODO::Handle character death
 		if (GetCurrentHealth() == 0.f)

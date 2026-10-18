@@ -246,6 +246,10 @@ namespace WarriorGameplayTags
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Event_Stagger);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_SetByCaller_BaseDamage);
+	// 수식어 피격 GE(화상 등)의 틱당 피해. 맞은 피해 × 카탈로그 OnHitDamageRatio
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_SetByCaller_AffixDamage);
+	// 수식어가 만든 GE 스펙에 붙는 동적 태그. 피격 처리는 이 태그가 있으면 건너뜀(화상 피해가 다시 화상을 걸지 않게)
+	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_Effect_Affix);
 
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_SetByCaller_Heal);
 	PROJECTWARRIOR_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Shared_SetByCaller_Upgrade);

@@ -38,9 +38,24 @@ struct PROJECTWARRIOR_API FWarriorAffixDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|Self")
 	TArray<TSubclassOf<UGameplayEffect>> SelfEffects;
 
-	//이 적에게 맞은 플레이어에게 거는 GE(화상·둔화 등)
+	//적 자신의 이동 속도 배율(신속 1.4). 1이면 바꾸지 않음
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|Self", meta = (ClampMin = "0.1"))
+	float SelfMoveSpeedScale = 1.f;
+
+	//이 적에게 맞은 플레이어에게 거는 GE(화상 등). 스펙에 Shared.SetByCaller.AffixDamage = 맞은 피해 × OnHitDamageRatio
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|OnHit")
 	TSubclassOf<UGameplayEffect> OnHitEffect;
+
+	//OnHitEffect 틱당 피해 비율(화상: 맞은 피해의 10%를 1초마다)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|OnHit", meta = (ClampMin = "0.0"))
+	float OnHitDamageRatio = 0.f;
+
+	//맞은 플레이어의 이동 속도 배율과 시간(냉기 0.6, 2초). 다시 맞으면 시간을 새로 고침. 1이면 둔화 없음
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|OnHit", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float OnHitMoveSpeedScale = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|OnHit", meta = (ClampMin = "0.0"))
+	float OnHitSlowSeconds = 0.f;
 
 	//준 피해 중 자기 체력으로 돌리는 비율(흡혈, 0~1)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Affix|OnHit", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -76,6 +91,7 @@ public:
 	UMaterialInterface* GetOutlineMaterial() const { return OutlineMaterial; }
 	UNiagaraSystem* GetAuraSystem() const { return AuraSystem; }
 	float GetAuraIntensity() const { return AuraIntensity; }
+	float GetVictimEffectIntensity() const { return VictimEffectIntensity; }
 
 	//설정(UWarriorStageSettings::AffixCatalog)의 카탈로그. 지정하지 않았거나 읽지 못하면 nullptr
 	static const UWarriorAffixCatalogDataAsset* LoadFromSettings();
@@ -111,4 +127,8 @@ private:
 	//불꽃 스프라이트가 밝은(HDR) 색이라 0~1 색에 곱한다
 	UPROPERTY(EditAnywhere, Category = "Warrior|Affix|Display", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
 	float AuraIntensity = 3.f;
+
+	//플레이어에게 불리한 효과(화상·둔화)가 걸린 동안 플레이어 몸에 붙는 같은 오라의 세기. 화면을 가리지 않게 적보다 약하게
+	UPROPERTY(EditAnywhere, Category = "Warrior|Affix|Display", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	float VictimEffectIntensity = 1.5f;
 };
