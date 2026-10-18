@@ -3,6 +3,7 @@
 
 #include "PlayerGameplayAbility_BladeMode.h"
 #include "ProjectWarrior/Characters/WarriorPlayerCharacter.h"
+#include "ProjectWarrior/Characters/WarriorAICharacter.h"
 #include "ProjectWarrior/Characters/AnimInstance/WarriorAnimInstance.h"
 #include "ProjectWarrior/Controllers/WarriorPlayerController.h"
 #include "ProjectWarrior/AbilitySystem/AbilityTask_ExecuteTaskOnTick.h"
@@ -886,11 +887,19 @@ void UPlayerGameplayAbility_BladeMode::SyncWeakLineTargets(const TArray<APawn*>&
 			continue;
 		}
 
+		// 수식어 외곽선은 적이 지금 가진 값으로 되돌린다: 약점선을 거는 사이에 생겼거나(스폰 직후 시작 데이터 로드 중, 저장값 없음)
+		// 그사이 죽어서 없어졌을 수 있다(저장값이 그 적이 만든 외곽선) → 저장값 대신 GetAffixOverlayMaterial
+		const AWarriorAICharacter* AffixEnemy = Cast<AWarriorAICharacter>(Entry.Pawn.Get());
 		for (int32 MeshIndex = 0; MeshIndex < Entry.Meshes.Num(); ++MeshIndex)
 		{
 			if (UMeshComponent* Mesh = Entry.Meshes[MeshIndex].Get())
 			{
-				Mesh->SetOverlayMaterial(Entry.SavedOverlayMaterials[MeshIndex]);
+				UMaterialInterface* RestoreMaterial = Entry.SavedOverlayMaterials[MeshIndex];
+				if (AffixEnemy && (!RestoreMaterial || RestoreMaterial->GetOuter() == AffixEnemy))
+				{
+					RestoreMaterial = AffixEnemy->GetAffixOverlayMaterial();
+				}
+				Mesh->SetOverlayMaterial(RestoreMaterial);
 			}
 		}
 

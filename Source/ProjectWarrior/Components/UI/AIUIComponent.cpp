@@ -3,3 +3,9 @@
 
 #include "AIUIComponent.h"
 
+void UAIUIComponent::SetAffixDisplay(const FText& InAffixLine, const FLinearColor& InTierColor)
+{
+	AffixLine = InAffixLine;
+	TierColor = InTierColor;
+	OnAffixDisplayChanged.Broadcast(AffixLine, TierColor);
+}

@@ -8,6 +8,8 @@
 #include "WarriorAffixCatalogDataAsset.generated.h"
 
 class UGameplayEffect;
+class UMaterialInterface;
+class UNiagaraSystem;
 
 //수식어 등급. 서버에는 등급 칸이 없어 붙은 수식어 수로 정한다(1개 = 챔피언, 2개 이상 = 희귀)
 UENUM(BlueprintType)
@@ -71,6 +73,10 @@ public:
 
 	FLinearColor GetTierColor(EWarriorAffixTier InTier) const;
 
+	UMaterialInterface* GetOutlineMaterial() const { return OutlineMaterial; }
+	UNiagaraSystem* GetAuraSystem() const { return AuraSystem; }
+	float GetAuraIntensity() const { return AuraIntensity; }
+
 	//설정(UWarriorStageSettings::AffixCatalog)의 카탈로그. 지정하지 않았거나 읽지 못하면 nullptr
 	static const UWarriorAffixCatalogDataAsset* LoadFromSettings();
 
@@ -93,4 +99,16 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Warrior|Affix|Tier", meta = (AllowPrivateAccess = "true"))
 	FLinearColor RareColor = FLinearColor(1.0f, 0.8f, 0.2f);
+
+	//수식어 적의 보이는 메시에 거는 오버레이(등급 색 가장자리 발광, 벡터 파라미터 TierColor). 블레이드 모드 약점선이 잠깐 대신 쓴다
+	UPROPERTY(EditAnywhere, Category = "Warrior|Affix|Display", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UMaterialInterface> OutlineMaterial;
+
+	//보이는 메시를 따라 붙는 오라(NS_AffixAura, 메시는 붙은 부모에서 찾음). 색은 첫 수식어의 AuraColor × AuraIntensity → User.AuraColor
+	UPROPERTY(EditAnywhere, Category = "Warrior|Affix|Display", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UNiagaraSystem> AuraSystem;
+
+	//불꽃 스프라이트가 밝은(HDR) 색이라 0~1 색에 곱한다
+	UPROPERTY(EditAnywhere, Category = "Warrior|Affix|Display", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	float AuraIntensity = 3.f;
 };

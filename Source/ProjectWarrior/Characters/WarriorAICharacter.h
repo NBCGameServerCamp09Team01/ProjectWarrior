@@ -12,6 +12,7 @@
 class UAICombatComponent;
 class UAIUIComponent;
 class UWidgetComponent;
+class UNiagaraComponent;
 struct FGameplayEventData;
 
 /**
@@ -60,6 +61,9 @@ public:
 	// 붙은 수식어 수로 정한 등급(없음·챔피언·희귀)
 	EWarriorAffixTier GetAffixTier() const { return UWarriorAffixCatalogDataAsset::GetTierForCount(AffixIds.Num()); }
 
+	// 수식어 외곽선(오버레이 머티리얼). 블레이드 모드가 약점선을 거둘 때 되돌릴 값이 비어 있으면 이것을 다시 건다. 수식어가 없으면 nullptr
+	UMaterialInterface* GetAffixOverlayMaterial() const { return AffixOverlayMaterial; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -102,8 +106,20 @@ private:
 	// 자기 GE·태그를 건다. 최대 체력이 늘면 현재 체력도 같은 비율로 올린다(시작 체력이 가득 찬 채로)
 	void ApplyAffixes();
 
+	// 보이는 스켈레탈 메시마다 등급 색 외곽선을 건다(이미 다른 오버레이가 있으면 건드리지 않음)
+	void ApplyAffixOutline(const UWarriorAffixCatalogDataAsset& InCatalog);
+
 	UPROPERTY(VisibleInstanceOnly, Category = "Affix")
 	TArray<FName> AffixIds;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> AffixOverlayMaterial;
+
+	// 첫 수식어 색의 오라. 죽으면 끈다
+	void SpawnAffixAura(const UWarriorAffixCatalogDataAsset& InCatalog);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> AffixAuraComponent;
 
 	bool bAffixesApplied = false;
 
