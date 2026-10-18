@@ -17,6 +17,7 @@
 #include "ProjectWarrior/WarriorFunctionLibrary.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "GameplayEffect.h"
 
 AWarriorAICharacter::AWarriorAICharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -159,6 +160,7 @@ void AWarriorAICharacter::InitAIStartUpData()
         {
             ApplyDifficultyScale();
         }
+        TryApplyAffixes();
         return;
     }
 
@@ -181,6 +183,8 @@ void AWarriorAICharacter::InitAIStartUpData()
                     {
                         ApplyDifficultyScale();
                     }
+                    // 수식어는 난이도 배율 위에 곱한다(무한 GE)
+                    TryApplyAffixes();
 
                     UWarriorFunctionLibrary::RemoveGameplayTagFromActorIfFound(this, WarriorGameplayTags::Shared_Status_Initializing);
 
@@ -220,4 +224,97 @@ void AWarriorAICharacter::ApplyDifficultyScale()
 
     UE_LOG(LogProjectWarrior, Verbose, TEXT("[Stage] %s difficulty scale applied. health x%.2f (%.0f -> %.0f), attack x%.2f"),
         *GetName(), DifficultyHealthMultiplier, MaxHealth, MaxHealth * DifficultyHealthMultiplier, DifficultyDamageMultiplier);
+}
+
+void AWarriorAICharacter::SetAffixes(const TArray<FName>& InAffixIds)
+{
+    if (InAffixIds.IsEmpty() || bAffixesApplied)
+    {
+        return;
+    }
+
+    const UWarriorAffixCatalogDataAsset* Catalog = UWarriorAffixCatalogDataAsset::LoadFromSettings();
+    if (!Catalog)
+    {
+        UE_LOG(LogProjectWarrior, Warning, TEXT("[Affix] %s: AffixCatalog is not set in Project Settings > Warrior Stage. %d affix(es) ignored."),
+            *GetName(), InAffixIds.Num());
+        return;
+    }
+
+    // 모르는 키는 그 수식어만 뺀다(판은 그대로, stage-api.md "수식어" 제안)
+    AffixIds.Reset();
+    for (const FName AffixId : InAffixIds)
+    {
+        if (Catalog->FindAffix(AffixId))
+        {
+            AffixIds.AddUnique(AffixId);
+        }
+        else
+        {
+            UE_LOG(LogProjectWarrior, Warning, TEXT("[Affix] %s: unknown affix '%s' ignored (not in DA_AffixCatalog)."),
+                *GetName(), *AffixId.ToString());
+        }
+    }
+
+    TryApplyAffixes();
+}
+
+void AWarriorAICharacter::TryApplyAffixes()
+{
+    if (bAffixesApplied || AffixIds.IsEmpty() || !DifficultyScaleGate.bStartUpDataApplied)
+    {
+        return;
+    }
+    bAffixesApplied = true;
+    ApplyAffixes();
+}
+
+void AWarriorAICharacter::ApplyAffixes()
+{
+    const UWarriorAffixCatalogDataAsset* Catalog = UWarriorAffixCatalogDataAsset::LoadFromSettings();
+    if (!Catalog || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+
+    UAbilitySystemComponent* ASC = WarriorAbilitySystemComponent;
+    const float OldMaxHealth = ASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute());
+
+    for (const FName AffixId : AffixIds)
+    {
+        const FWarriorAffixDefinition* Definition = Catalog->FindAffix(AffixId);
+        if (!Definition)
+        {
+            continue;
+        }
+
+        if (Definition->AffixTag.IsValid())
+        {
+            UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(this, Definition->AffixTag);
+        }
+
+        for (const TSubclassOf<UGameplayEffect>& EffectClass : Definition->SelfEffects)
+        {
+            if (EffectClass)
+            {
+                ASC->ApplyGameplayEffectToSelf(EffectClass.GetDefaultObject(), 1.f, ASC->MakeEffectContext());
+            }
+        }
+    }
+
+    // 강인처럼 최대 체력을 올리는 수식어: 무한 GE는 최대만 바꾸므로 현재 체력을 같은 비율로 올린다(가득 찬 채 시작)
+    const float NewMaxHealth = ASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute());
+    if (OldMaxHealth > 0.f && !FMath::IsNearlyEqual(NewMaxHealth, OldMaxHealth))
+    {
+        const float CurrentHealth = ASC->GetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute());
+        ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute(), CurrentHealth * NewMaxHealth / OldMaxHealth);
+    }
+
+    TArray<FString> Names;
+    for (const FName AffixId : AffixIds)
+    {
+        Names.Add(AffixId.ToString());
+    }
+    UE_LOG(LogProjectWarrior, Log, TEXT("[Affix] %s applied [%s] tier=%s maxHealth %.0f -> %.0f"),
+        *GetName(), *FString::Join(Names, TEXT(", ")), *UEnum::GetValueAsString(GetAffixTier()), OldMaxHealth, NewMaxHealth);
 }

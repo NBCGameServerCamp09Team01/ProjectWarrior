@@ -51,6 +51,10 @@ struct PROJECTWARRIOR_API FWarriorWaveEnemySpawnData
 	/** 난이도 공격력 배율(M9, 서버 구성의 damageMultiplier). 스폰한 적의 공격력에 곱한다. 로컬 웨이브는 1. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Warrior|Stage|Difficulty", meta = (ClampMin = "0.01"))
 	float DamageMultiplier = 1.0f;
+
+	/** 이 줄의 모든 마리에 붙는 수식어 키(서버 구성의 affixes, 예: affix.fire). 1개 = 챔피언, 2개 이상 = 희귀. 보스 줄은 무시한다. 로컬 웨이브 시험에도 쓴다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Warrior|Stage|Affix")
+	TArray<FName> Affixes;
 };
 
 /** 스테이지 내 단일 웨이브의 편집용 데이터. */
@@ -112,6 +116,9 @@ struct PROJECTWARRIOR_API FWarriorPendingWaveSpawnRequest
 
 	UPROPERTY()
 	float DamageMultiplier = 1.0f;
+
+	UPROPERTY()
+	TArray<FName> Affixes;
 };
 
 /** 스폰된 적 한 마리에 붙는 처치 보상 정보. */

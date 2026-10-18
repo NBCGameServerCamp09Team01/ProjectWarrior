@@ -123,6 +123,14 @@ bool AWarriorWaveSpawner::BuildPendingRequests(const FWarriorStageWaveData& InWa
 
 	for (const FWarriorWaveEnemySpawnData& EnemyData : InWaveData.Enemies)
 	{
+		//보스는 패턴·페이즈가 따로 있어 수식어를 붙이지 않는다(stage-api.md "수식어")
+		const bool bDropAffixes = EnemyData.bBossEnemy && !EnemyData.Affixes.IsEmpty();
+		if (bDropAffixes)
+		{
+			UE_LOG(LogProjectWarrior, Warning, TEXT("[Affix] %s: boss line %s ignores %d affix(es)."),
+				*GetName(), *GetNameSafe(EnemyData.EnemyClass), EnemyData.Affixes.Num());
+		}
+
 		for (int32 SpawnIndex = 0; SpawnIndex < EnemyData.Count; ++SpawnIndex)
 		{
 			FWarriorPendingWaveSpawnRequest& Request = PendingRequests.AddDefaulted_GetRef();
@@ -132,6 +140,10 @@ bool AWarriorWaveSpawner::BuildPendingRequests(const FWarriorStageWaveData& InWa
 			Request.GoldDropChance = FMath::Clamp(EnemyData.GoldDropChance, 0.0f, 1.0f);
 			Request.HealthMultiplier = EnemyData.HealthMultiplier;
 			Request.DamageMultiplier = EnemyData.DamageMultiplier;
+			if (!bDropAffixes)
+			{
+				Request.Affixes = EnemyData.Affixes;
+			}
 		}
 	}
 	return true;
@@ -239,6 +251,8 @@ bool AWarriorWaveSpawner::TrySpawnEnemy(const FWarriorPendingWaveSpawnRequest& S
 		EnemyRewards.Add(Enemy, FWarriorWaveEnemyReward{ SpawnRequest.GoldReward, SpawnRequest.GoldDropChance });
 		//M9 난이도: 시작 데이터 로드가 끝난 뒤 체력·공격력에 곱해진다(AWarriorAICharacter::SetDifficultyScale)
 		Enemy->SetDifficultyScale(SpawnRequest.HealthMultiplier, SpawnRequest.DamageMultiplier);
+		//수식어: 난이도 배율 뒤에 곱해진다(시작 데이터가 아직이면 로드 콜백에서)
+		Enemy->SetAffixes(SpawnRequest.Affixes);
 		++SpawnedEnemyCount;
 		Enemy->OnCharacterDied.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDied);
 		Enemy->OnDestroyed.AddUniqueDynamic(this, &ThisClass::HandleSpawnedEnemyDestroyed);

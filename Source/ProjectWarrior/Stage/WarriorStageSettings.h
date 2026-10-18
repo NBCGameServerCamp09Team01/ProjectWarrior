@@ -7,6 +7,7 @@
 #include "WarriorStageSettings.generated.h"
 
 class UWarriorMonsterCatalogDataAsset;
+class UWarriorAffixCatalogDataAsset;
 class UWarriorStageCatalogDataAsset;
 
 /**
@@ -27,6 +28,10 @@ public:
 	//몬스터 키 → 적 BP 표(M24, 예: /Game/MyGameContents/Stage/DA_MonsterCatalog). 서버 판 응답의 waves를 웨이브 데이터로 바꿀 때 쓴다
 	UPROPERTY(Config, EditAnywhere, Category = "Stage|Server Wave")
 	TSoftObjectPtr<UWarriorMonsterCatalogDataAsset> MonsterCatalog;
+
+	//수식어 키 → 효과·표시 표(예: /Game/MyGameContents/Stage/Affix/DA_AffixCatalog). 비어 있으면 수식어를 붙이지 않는다(경고)
+	UPROPERTY(Config, EditAnywhere, Category = "Stage|Server Wave")
+	TSoftObjectPtr<UWarriorAffixCatalogDataAsset> AffixCatalog;
 
 	//준비 시간이 끝난 뒤 서버 웨이브 구성(판 시작 응답)을 더 기다리는 한도(초). 넘으면 판을 시작하지 않고 메인메뉴(STAGE_WAVE_PLAN_TIMEOUT)
 	UPROPERTY(Config, EditAnywhere, Category = "Stage|Server Wave", meta = (ClampMin = "0.0"))
