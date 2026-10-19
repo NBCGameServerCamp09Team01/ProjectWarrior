@@ -9,6 +9,8 @@
 
 class UWarriorAbilitySystemComponent;
 class UPawnCombatComponent;
+class UFXSystemAsset;
+class UFXSystemComponent;
 /**
  * 
  */
@@ -54,5 +56,28 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
     static bool IsTargetPawnHostile(APawn* QueryPawn, APawn* TargetPawn);
+
+    // 근접/투사체 공통 피격 판정. InDamageCauser가 있으면 막기 방향 판정에 공격자 대신 사용 (예: 화살)
+    UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
+    static EWarriorHitResultType EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser = nullptr, EWarriorBlockRule InBlockRule = EWarriorBlockRule::Blockable);
+
+    // 사망 상태(Shared.Status.Death 하위 태그)인지. ASC가 없거나 이미 제거 중인 액터도 안전하게 처리 (false 또는 true)
+    UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
+    static bool IsActorDead(AActor* InActor);
+
+    // 처형 대상이 될 수 있는지. 대상이 없거나, 죽었거나, 처형 중이거나, 처형 불가(Shared.Status.FinisherImmune)면 false
+    UFUNCTION(BlueprintPure, Category = "Warrior|FunctionLibrary")
+    static bool CanBeFinisherTarget(AActor* InActor);
+
+    // 폰 회전 설정. ALS는 TargetRotation으로 되돌리려 하고, LookingDirection 모드는 컨트롤 회전과 어긋나면
+    // 제자리 회전으로 되돌리므로 둘 다 함께 갱신
+    static void SetPawnFacingRotation(APawn* InPawn, const FRotator& NewRotation);
+
+    // 이펙트 에셋 재생 (Niagara 시스템, Cascade 파티클 모두 지원). 에셋이 없거나 다른 타입이면 nullptr
+    static UFXSystemComponent* SpawnFXAttached(UFXSystemAsset* InEffect, USceneComponent* InParent, FName InSocketName = NAME_None,
+        const FVector& InScale = FVector::OneVector, bool bAutoDestroy = true);
+
+    static UFXSystemComponent* SpawnFXAtLocation(const UObject* WorldContextObject, UFXSystemAsset* InEffect, const FVector& InLocation,
+        const FRotator& InRotation = FRotator::ZeroRotator, const FVector& InScale = FVector::OneVector);
 
 };

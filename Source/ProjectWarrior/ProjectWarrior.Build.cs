@@ -8,26 +8,38 @@ public class ProjectWarrior : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { 
-			"Core", 
-			"CoreUObject", 
-			"Engine", 
-			"InputCore", 
-			"EnhancedInput",
-			"GameplayTags",
-			"GameplayTasks",
+		PublicDependencyModuleNames.AddRange(new string[] {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "InputCore",
+            "EnhancedInput",
+            "GameplayTags",
+            "GameplayTasks",
+            "GameplayAbilities",
+            "AIModule",
+            "NavigationSystem",
+            "UMG",
             "AnimGraphRuntime",
-            "MotionWarping"
+            "MotionWarping",
+            "Niagara",
+            "ALSV4_CPP"
     });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		// 사운드 틀(Audio/): 프로젝트 설정(DeveloperSettings), MetaSound 입력(AudioExtensions), 버튼 소리(SlateCore)
+		PrivateDependencyModuleNames.AddRange(new string[] { "DeveloperSettings", "AudioExtensions", "SlateCore" });
 
-		// Uncomment if you are using Slate UI
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
-		
-		// Uncomment if you are using online features
-		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
+        // 서버 통신: JSON 변환(FJsonObjectConverter), HTTP 요청, 실시간 연결(S7 WebSocket, realtime-api.md)
+        PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities", "HTTP", "WebSockets" });
 
-		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
-	}
+        // 랭킹 목록(UListView → SListView·STableViewBase가 Slate 모듈에 있음, 링크에 필요)
+        PrivateDependencyModuleNames.Add("Slate");
+        // Uncomment if you are using Slate UI
+        // PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+
+        // Uncomment if you are using online features
+        // PrivateDependencyModuleNames.Add("OnlineSubsystem");
+
+        // To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
+    }
 }

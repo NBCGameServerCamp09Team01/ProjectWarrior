@@ -1,0 +1,350 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "WarriorProjectileBase.h"
+#include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/ProjectileMovementComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "ProjectWarrior/WarriorFunctionLibrary.h"
+#include "ProjectWarrior/WarriorGamePlayTags.h"
+#include "Particles/ParticleSystemComponent.h"
+
+AWarriorProjectileBase::AWarriorProjectileBase()
+{
+	// 발사 후에만 틱 (환경 충돌 트레이스)
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
+
+	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Light;
+
+	ProjectileRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ProjectileRoot"));
+	SetRootComponent(ProjectileRoot);
+
+	ProjectileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ProjectileMesh"));
+	ProjectileMesh->SetupAttachment(RootComponent);
+	ProjectileMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	ProjectileCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("ProjectileCollision"));
+	ProjectileCollision->SetupAttachment(RootComponent);
+	ProjectileCollision->SetBoxExtent(FVector(25.f, 3.f, 3.f));
+	// 발사 전(대기 상태)에는 충돌하지 않음. LaunchProjectile에서 켬
+	ProjectileCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ProjectileCollision->SetCollisionObjectType(ECC_WorldDynamic);
+	ProjectileCollision->SetCollisionResponseToAllChannels(ECR_Overlap);
+	ProjectileCollision->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	ProjectileCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+	ProjectileCollision->SetGenerateOverlapEvents(true);
+	ProjectileCollision->OnComponentBeginOverlap.AddUniqueDynamic(this, &ThisClass::OnProjectileBeginOverlap);
+
+	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
+	ProjectileMovement->InitialSpeed = 3000.f;
+	ProjectileMovement->MaxSpeed = 3000.f;
+	ProjectileMovement->bRotationFollowsVelocity = true;
+	ProjectileMovement->ProjectileGravityScale = 0.f;
+	ProjectileMovement->bAutoActivate = false;
+}
+
+void AWarriorProjectileBase::LaunchProjectile(const FVector& LaunchDirection, const FGameplayEffectSpecHandle& InDamageSpecHandle, float LaunchSpeed)
+{
+	if (bLaunched)
+	{
+		return;
+	}
+
+	bLaunched = true;
+
+	if (InDamageSpecHandle.IsValid())
+	{
+		ProjectileDamageEffectSpecHandle = InDamageSpecHandle;
+	}
+
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+	// 들고 있을 때의 이펙트는 끄고 비행 이펙트로 교체
+	if (HeldEffectComponent)
+	{
+		HeldEffectComponent->Deactivate();
+		HeldEffectComponent = nullptr;
+	}
+
+	UWarriorFunctionLibrary::SpawnFXAttached(FlightEffect, ProjectileMesh, NAME_None, EffectScale);
+
+	const FVector Direction = LaunchDirection.IsNearlyZero() ? GetActorForwardVector() : LaunchDirection.GetSafeNormal();
+	SetActorRotation(Direction.Rotation());
+
+	LastTraceLocation = GetActorLocation();
+
+	ProjectileCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+	ProjectileMovement->SetUpdatedComponent(ProjectileRoot);
+	const float Speed = LaunchSpeed > 0.f ? LaunchSpeed : ProjectileMovement->InitialSpeed;
+	ProjectileMovement->MaxSpeed = FMath::Max(ProjectileMovement->MaxSpeed, Speed);
+	ProjectileMovement->Velocity = Direction * Speed;
+	ProjectileMovement->Activate(true);
+
+	SetActorTickEnabled(true);
+	SetLifeSpan(LifeSpanAfterLaunch);
+}
+
+void AWarriorProjectileBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	const FVector CurrentLocation = GetActorLocation();
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WarriorProjectileTrace), false, this);
+
+	if (APawn* InstigatorPawn = GetInstigator())
+	{
+		QueryParams.AddIgnoredActor(InstigatorPawn);
+
+		TArray<AActor*> AttachedActors;
+		InstigatorPawn->GetAttachedActors(AttachedActors);
+		QueryParams.AddIgnoredActors(AttachedActors);
+	}
+
+	FHitResult Hit;
+
+	// 벽/바닥 등 환경은 Overlap 이벤트를 생성하지 않는 경우가 많아 이동 구간을 트레이스로 검사
+	if (GetWorld()->LineTraceSingleByChannel(Hit, LastTraceLocation, CurrentLocation, ECC_Visibility, QueryParams))
+	{
+		AActor* HitActor = Hit.GetActor();
+
+		if (!ShouldIgnoreActor(HitActor))
+		{
+			if (APawn* HitPawn = ResolveHitPawn(HitActor))
+			{
+				HandleHitPawn(HitPawn, Hit.ImpactPoint);
+			}
+			else
+			{
+				NotifyProjectileImpact(HitActor, Hit.ImpactPoint, EWarriorHitResultType::Invalid);
+				Destroy();
+				return;
+			}
+		}
+	}
+
+	LastTraceLocation = CurrentLocation;
+}
+
+void AWarriorProjectileBase::OnProjectileBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (!bLaunched || ShouldIgnoreActor(OtherActor))
+	{
+		return;
+	}
+
+	if (APawn* HitPawn = Cast<APawn>(OtherActor))
+	{
+		HandleHitPawn(HitPawn, bFromSweep ? FVector(SweepResult.ImpactPoint) : GetActorLocation());
+	}
+}
+
+bool AWarriorProjectileBase::ShouldIgnoreActor(AActor* OtherActor) const
+{
+	if (!OtherActor || OtherActor == this || OtherActor->IsA<AWarriorProjectileBase>())
+	{
+		return true;
+	}
+
+	APawn* InstigatorPawn = GetInstigator();
+
+	if (!InstigatorPawn)
+	{
+		return false;
+	}
+
+	return OtherActor == InstigatorPawn
+		|| OtherActor->GetOwner() == InstigatorPawn
+		|| OtherActor->GetAttachParentActor() == InstigatorPawn;
+}
+
+void AWarriorProjectileBase::HandleHitPawn(APawn* HitPawn, const FVector& ImpactLocation)
+{
+	APawn* InstigatorPawn = GetInstigator();
+
+	if (!InstigatorPawn || HitPawn == InstigatorPawn || ProcessedActors.Contains(HitPawn))
+	{
+		return;
+	}
+
+	ProcessedActors.AddUnique(HitPawn);
+
+	// 아군은 통과
+	if (!UWarriorFunctionLibrary::IsTargetPawnHostile(InstigatorPawn, HitPawn))
+	{
+		return;
+	}
+
+	if (!UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitPawn))
+	{
+		NotifyProjectileImpact(HitPawn, ImpactLocation, EWarriorHitResultType::Invalid);
+		Destroy();
+		return;
+	}
+
+	FGameplayEventData EventData;
+	EventData.Instigator = InstigatorPawn;
+	EventData.Target = HitPawn;
+
+	const EWarriorHitResultType HitResult = UWarriorFunctionLibrary::EvaluateHitResult(InstigatorPawn, HitPawn, this, BlockRule);
+
+	switch (HitResult)
+	{
+	case EWarriorHitResultType::Blocked:
+		// 막은 쪽 어빌리티가 이 투사체를 되돌릴 수 있도록 함께 넘김 (이벤트 처리는 즉시 실행됨)
+		EventData.OptionalObject = this;
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Player_Event_Successful_Block, EventData);
+
+		// 되돌려졌으면 파괴하지 않고 계속 날아감
+		if (bReflected)
+		{
+			return;
+		}
+		break;
+
+	case EWarriorHitResultType::Dodged:
+		// 회피 성공이면 화살은 계속 날아감
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, WarriorGameplayTags::Player_Event_Successful_Dodge, EventData);
+		return;
+
+	case EWarriorHitResultType::Hit:
+		ApplyDamageToTarget(HitPawn);
+
+		if (bSendHitReactEvent)
+		{
+			UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(HitPawn, HitReactEventTag.IsValid() ? HitReactEventTag : WarriorGameplayTags::Shared_Event_HitReact_Light, EventData);
+		}
+		break;
+
+	default:
+		return;
+	}
+
+	NotifyProjectileImpact(HitPawn, ImpactLocation, HitResult);
+	Destroy();
+}
+
+bool AWarriorProjectileBase::ReflectProjectile(APawn* Reflector, float DamageMultiplier, float SpeedMultiplier)
+{
+	APawn* OriginalInstigator = GetInstigator();
+
+	if (!bCanBeReflected || !bLaunched || bReflected || !Reflector || Reflector == OriginalInstigator
+		|| !OriginalInstigator || UWarriorFunctionLibrary::IsActorDead(OriginalInstigator))
+	{
+		return false;
+	}
+
+	UAbilitySystemComponent* ReflectorASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Reflector);
+
+	if (!ReflectorASC)
+	{
+		return false;
+	}
+
+	// 피해는 같은 이펙트로 패링한 쪽이 다시 만듦 (공격력·통계의 가해자 = 패링한 쪽)
+	if (ProjectileDamageEffectSpecHandle.IsValid() && ProjectileDamageEffectSpecHandle.Data->Def)
+	{
+		const FGameplayEffectSpec& OriginalSpec = *ProjectileDamageEffectSpecHandle.Data;
+
+		FGameplayEffectContextHandle ContextHandle = ReflectorASC->MakeEffectContext();
+		ContextHandle.AddSourceObject(this);
+		ContextHandle.AddInstigator(Reflector, this);
+
+		FGameplayEffectSpecHandle ReflectedSpecHandle = ReflectorASC->MakeOutgoingSpec(OriginalSpec.Def->GetClass(), OriginalSpec.GetLevel(), ContextHandle);
+
+		if (ReflectedSpecHandle.IsValid())
+		{
+			const float BaseDamage = OriginalSpec.GetSetByCallerMagnitude(WarriorGameplayTags::Shared_SetByCaller_BaseDamage, false, 0.f);
+			ReflectedSpecHandle.Data->SetSetByCallerMagnitude(WarriorGameplayTags::Shared_SetByCaller_BaseDamage, BaseDamage * DamageMultiplier);
+			ProjectileDamageEffectSpecHandle = ReflectedSpecHandle;
+		}
+	}
+
+	bReflected = true;
+
+	// 이제 패링한 쪽이 쏜 투사체. 패링한 쪽은 다시 맞지 않고 원래 발사자는 맞을 수 있음
+	SetInstigator(Reflector);
+	ProcessedActors.Reset();
+	ProcessedActors.Add(Reflector);
+
+	const FVector CurrentLocation = GetActorLocation();
+	FVector Direction = (OriginalInstigator->GetActorLocation() - CurrentLocation).GetSafeNormal();
+
+	if (Direction.IsNearlyZero())
+	{
+		Direction = -GetActorForwardVector();
+	}
+
+	const float Speed = FMath::Max(ProjectileMovement->Velocity.Size(), ProjectileMovement->InitialSpeed) * FMath::Max(SpeedMultiplier, 0.1f);
+	ProjectileMovement->MaxSpeed = FMath::Max(ProjectileMovement->MaxSpeed, Speed);
+	ProjectileMovement->Velocity = Direction * Speed;
+	SetActorRotation(Direction.Rotation());
+
+	LastTraceLocation = CurrentLocation;
+	SetLifeSpan(LifeSpanAfterLaunch);
+
+	BP_OnProjectileReflected(Reflector, CurrentLocation);
+
+	return true;
+}
+
+APawn* AWarriorProjectileBase::ResolveHitPawn(AActor* HitActor)
+{
+	if (!HitActor)
+	{
+		return nullptr;
+	}
+
+	if (APawn* HitPawn = Cast<APawn>(HitActor))
+	{
+		return HitPawn;
+	}
+
+	// 무기처럼 폰에 붙어 있거나 폰이 소유한 액터에 맞으면 그 폰에 맞은 것으로 처리
+	if (APawn* ParentPawn = Cast<APawn>(HitActor->GetAttachParentActor()))
+	{
+		return ParentPawn;
+	}
+
+	return Cast<APawn>(HitActor->GetOwner());
+}
+
+void AWarriorProjectileBase::ApplyDamageToTarget(AActor* TargetActor)
+{
+	checkf(ProjectileDamageEffectSpecHandle.IsValid(), TEXT("Forgot to assign a valid damage spec handle to the projectile: %s"), *GetName());
+
+	if (UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor))
+	{
+		TargetASC->ApplyGameplayEffectSpecToSelf(*ProjectileDamageEffectSpecHandle.Data);
+	}
+}
+
+void AWarriorProjectileBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 스폰 직후(발사 전) 대기 상태의 이펙트
+	if (!bLaunched && HeldEffect)
+	{
+		HeldEffectComponent = UWarriorFunctionLibrary::SpawnFXAttached(HeldEffect, ProjectileMesh, NAME_None, EffectScale);
+	}
+
+	// 발사되면 LaunchProjectile이 LifeSpanAfterLaunch로 덮어씀
+	if (!bLaunched && HeldSafetyLifeSpan > 0.f)
+	{
+		SetLifeSpan(HeldSafetyLifeSpan);
+	}
+}
+
+void AWarriorProjectileBase::NotifyProjectileImpact(AActor* HitActor, const FVector& ImpactLocation, EWarriorHitResultType HitResult)
+{
+	UFXSystemAsset* ImpactEffect = (Cast<APawn>(HitActor) && ImpactCharacterEffect) ? ImpactCharacterEffect.Get() : ImpactWorldEffect.Get();
+
+	UWarriorFunctionLibrary::SpawnFXAtLocation(this, ImpactEffect, ImpactLocation, GetActorRotation(), EffectScale * GetActorScale3D());
+
+	BP_OnProjectileImpact(HitActor, ImpactLocation, HitResult);
+}

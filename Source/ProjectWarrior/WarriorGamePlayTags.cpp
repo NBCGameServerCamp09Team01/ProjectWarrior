@@ -21,10 +21,16 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_MustBeHeld, "InputTag.MustBeHeld");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_MustBeHeld_Block, "InputTag.MustBeHeld.Block");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_MustBeHeld_Sprint, "InputTag.MustBeHeld.Sprint");
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_BladeMode, "InputTag.Toggleable.BladeMode");
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_TacticalMode, "InputTag.Toggleable.TacticalMode");
 
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable, "InputTag.Toggleable");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Toggleable_TargetLock, "InputTag.Toggleable.TargetLock");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_SwitchTarget, "InputTag.SwitchTarget");
+
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_InventoryWheel, "InputTag.InventoryWheel");
+
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_Interact, "InputTag.Interact");
 
 	/** Player tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Equip_Weapon_Katana, "Player.Ability.Equip.Weapon.Katana");
@@ -35,9 +41,14 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Dodge, "Player.Ability.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_DodgeRoll, "Player.Ability.DodgeRoll");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_TargetLock, "Player.Ability.TargetLock");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_BladeMode, "Player.Ability.BladeMode");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_TacticalMode, "Player.Ability.TacticalMode");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_TacticalTechnique, "Player.Ability.TacticalTechnique");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Finisher, "Player.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Counter, "Player.Ability.Counter");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_ParryReflect, "Player.Ability.ParryReflect");
 
+	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack, "Player.Ability.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack_Katana_Light_1, "Player.Ability.Attack.Katana.Light.1");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack_Katana_Light_2, "Player.Ability.Attack.Katana.Light.2");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Ability_Attack_Katana_Light_3, "Player.Ability.Attack.Katana.Light.3");
@@ -52,6 +63,9 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Successful_Dodge, "Player.Event.Successful.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Finisher, "Player.Event.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_Counter, "Player.Event.Counter");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Event_AttackBlocked, "Player.Event.AttackBlocked");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Event_BladeMode_WeakPointHit, "Player.Event.BladeMode.WeakPointHit");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Event_TacticalMode_StockAdded, "Player.Event.TacticalMode.StockAdded");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_SwitchTarget_Left, "Player.Event.SwitchTarget.Left");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Event_SwitchTarget_Right, "Player.Event.SwitchTarget.Right");
@@ -63,32 +77,122 @@ namespace WarriorGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_AttackType_Light, "Player.SetByCaller.AttackType.Light");
 	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_AttackType_Heavy, "Player.SetByCaller.AttackType.Heavy");
+	UE_DEFINE_GAMEPLAY_TAG(Player_SetByCaller_StaminaDrain, "Player.SetByCaller.StaminaDrain");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_Blocking, "Player.Status.Blocking");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Status_Blocking_Perfect, "Player.Status.Blocking.Perfect");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_TargetLock, "Player.Status.TargetLock");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Status_BladeMode, "Player.Status.BladeMode");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Status_TacticalMode, "Player.Status.TacticalMode");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_OverrideLockOnRotation_Character, "Player.Status.OverrideLockOnRotation.Character");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_OverrideLockOnRotation_Controller, "Player.Status.OverrideLockOnRotation.Controller");
 	UE_DEFINE_GAMEPLAY_TAG(Player_Status_RegenStamina, "Player.Status.RegenStamina");
 
 	UE_DEFINE_GAMEPLAY_TAG(Player_Cooldown_Block, "Player.Cooldown.Block");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Cooldown_HitReact_Light, "Player.Cooldown.HitReact.Light");
 
 	/** AI tags **/
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Melee, "AI.Ability.Melee");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Range, "AI.Ability.Range");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Finisher, "AI.Ability.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block, "AI.Ability.Block");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Block_Counter, "AI.Ability.Block.Counter");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Dodge, "AI.Ability.Dodge");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special, "AI.Ability.Special");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special_Snipe, "AI.Ability.Special.Snipe");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special_RapidShot, "AI.Ability.Special.RapidShot");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Special_KnockbackStrike, "AI.Ability.Special.KnockbackStrike");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Equip_Weapon_Katana, "AI.Ability.Equip.Weapon.Katana");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Unequip_Weapon_Katana, "AI.Ability.Unequip.Weapon.Katana");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Equip_Weapon_Bow, "AI.Ability.Equip.Weapon.Bow");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Unequip_Weapon_Bow, "AI.Ability.Unequip.Weapon.Bow");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Katana, "AI.Weapon.Katana");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Bow, "AI.Weapon.Bow");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Axe, "AI.Weapon.Axe");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Shield, "AI.Weapon.Shield");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Hitbox_Mouth, "AI.Weapon.Hitbox.Mouth");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Hitbox_ClawLeft, "AI.Weapon.Hitbox.ClawLeft");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Weapon_Hitbox_ClawRight, "AI.Weapon.Hitbox.ClawRight");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Finisher, "AI.Event.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Death_PoseReached, "AI.Event.Death.PoseReached");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_DeathPoseReached, "AI.Status.DeathPoseReached");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Spawn, "AI.Event.Projectile.Spawn");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Projectile_Fire, "AI.Event.Projectile.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_IncomingAttack, "AI.Event.IncomingAttack");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_GuardHit, "AI.Event.GuardHit");
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Strafing, "AI.Status.Strafing");
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_UnderAttack, "AI.Status.UnderAttack");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Aiming, "AI.Status.Aiming");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Dodging, "AI.Status.Dodging");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Guarding, "AI.Status.Guarding");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_SuperArmor, "AI.Status.SuperArmor");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken, "AI.AttackToken");
+	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken_Melee, "AI.AttackToken.Melee");
+	UE_DEFINE_GAMEPLAY_TAG(AI_AttackToken_Range, "AI.AttackToken.Range");
+
+	/** Boss tags **/
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss, "AI.Ability.Boss");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Melee_1, "AI.Ability.Boss.Melee.1");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Melee_2, "AI.Ability.Boss.Melee.2");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_LeapSlam, "AI.Ability.Boss.LeapSlam");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Charge, "AI.Ability.Boss.Charge");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Sweep, "AI.Ability.Boss.Sweep");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Sweep2, "AI.Ability.Boss.Sweep2");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Shockwave, "AI.Ability.Boss.Shockwave");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RageCombo, "AI.Ability.Boss.RageCombo");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_PhaseTransition, "AI.Ability.Boss.PhaseTransition");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RockThrow, "AI.Ability.Boss.RockThrow");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_RockBarrage, "AI.Ability.Boss.RockBarrage");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_LeapSlamDouble, "AI.Ability.Boss.LeapSlamDouble");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_EnergyBurst, "AI.Ability.Boss.EnergyBurst");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Boss_Rolling, "AI.Ability.Boss.Rolling");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_Telegraph, "AI.Event.Boss.Telegraph");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_AreaImpact, "AI.Event.Boss.AreaImpact");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_LeapTakeoff, "AI.Event.Boss.LeapTakeoff");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Boss_PhaseChanged, "AI.Event.Boss.PhaseChanged");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Blocking, "AI.Status.Boss.Blocking");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_SuperArmor, "AI.Status.Boss.SuperArmor");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Airborne, "AI.Status.Boss.Airborne");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Boss_Stunned, "AI.Status.Boss.Stunned");
+
+	/** Nonhumanoid monster tags (Megaspikan / Larvae / Larvae Stalker) **/
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_ClawLeft, "AI.Ability.Megaspikan.ClawLeft");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_ClawRight, "AI.Ability.Megaspikan.ClawRight");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SmashLeft, "AI.Ability.Megaspikan.SmashLeft");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SmashRight, "AI.Ability.Megaspikan.SmashRight");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SmashForward, "AI.Ability.Megaspikan.SmashForward");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_Spit, "AI.Ability.Megaspikan.Spit");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_BigSpit, "AI.Ability.Megaspikan.BigSpit");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Megaspikan_SpawnLarvae, "AI.Ability.Megaspikan.SpawnLarvae");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_Larvae_Bite, "AI.Ability.Larvae.Bite");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_LarvaeStalker_Bite, "AI.Ability.LarvaeStalker.Bite");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_LarvaeStalker_Pounce, "AI.Ability.LarvaeStalker.Pounce");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Ability_LarvaeStalker_Burrow, "AI.Ability.LarvaeStalker.Burrow");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Event_Megaspikan_SpawnLarvae, "AI.Event.Megaspikan.SpawnLarvae");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Burrowing, "AI.Status.Burrowing");
+
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix, "AI.Affix");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Tough, "AI.Affix.Tough");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Strong, "AI.Affix.Strong");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Fast, "AI.Affix.Fast");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Armored, "AI.Affix.Armored");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Fire, "AI.Affix.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Frozen, "AI.Affix.Frozen");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Vampiric, "AI.Affix.Vampiric");
 
 	/** Shared tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact, "Shared.Ability.HitReact");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact_Light, "Shared.Ability.HitReact.Light");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact_Knockdown, "Shared.Ability.HitReact.Knockdown");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_Death, "Shared.Ability.Death");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_Stagger, "Shared.Ability.Stagger");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_RotateToTarget, "Shared.Ability.RotateToTarget");
@@ -96,6 +200,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_MeleeHit, "Shared.Event.MeleeHit");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact, "Shared.Event.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact_KnockBack, "Shared.Event.HitReact.KnockBack");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact_Light, "Shared.Event.HitReact.Light");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_HitReact_Heavy, "Shared.Event.HitReact.Heavy");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Equip_Weapon, "Shared.Event.Equip.Weapon");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Unequip_Weapon, "Shared.Event.Unequip.Weapon");
@@ -105,11 +211,20 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Stagger, "Shared.Event.Stagger");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_BaseDamage, "Shared.SetByCaller.BaseDamage");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_AffixDamage, "Shared.SetByCaller.AffixDamage");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Effect_Affix, "Shared.Effect.Affix");
 
+	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Heal, "Shared.SetByCaller.Heal");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Upgrade, "Shared.SetByCaller.Upgrade");
+
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death, "Shared.Status.Death");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Normal, "Shared.Status.Death.Normal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Finisher, "Shared.Status.Death.Finisher");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Death_Knockback, "Shared.Status.Death.Knockback");
 
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Initializing, "Shared.Status.Initializing");
+
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact, "Shared.Status.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact_Front, "Shared.Status.HitReact.Front");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact_Left, "Shared.Status.HitReact.Left");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_HitReact_Right, "Shared.Status.HitReact.Right");
@@ -118,5 +233,12 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Dodge, "Shared.Status.Dodge");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Sprint, "Shared.Status.Sprint");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Finisher, "Shared.Status.Finisher");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Stunned, "Shared.Status.Stunned");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_FinisherImmune, "Shared.Status.FinisherImmune");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_Invulnerable, "Shared.Status.Invulnerable");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Status_WeaponEquipped, "Shared.Status.WeaponEquipped");
+
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_AttackPower, "Upgrade.Stage.AttackPower");
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxHealth, "Upgrade.Stage.MaxHealth");
+	UE_DEFINE_GAMEPLAY_TAG(Upgrade_Stage_MaxStamina, "Upgrade.Stage.MaxStamina");
 }

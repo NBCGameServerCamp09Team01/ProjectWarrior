@@ -15,10 +15,31 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "AbilitySystemComponent.h"
+
+bool UPlayerGameplayAbility_TargetLock::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+
+	if (ASC && ASC->HasMatchingGameplayTag(WarriorGameplayTags::Player_Status_TacticalMode))
+	{
+		return false;
+	}
+
+	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+}
 
 void UPlayerGameplayAbility_TargetLock::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	TryLockOnTarget();
+
+	// 잡을 대상이 없으면 TryLockOnTarget 안에서 이미 해제(EndAbility)됐다.
+	// 여기서 이동 속도·입력 매핑을 다시 걸면 해제 후에 남아 락온이 풀리지 않은 상태가 된다
+	if (!IsActive())
+	{
+		return;
+	}
 
 	InitTargetLockMovement();
 	InitTargetLockMappingContext();
@@ -39,16 +60,49 @@ void UPlayerGameplayAbility_TargetLock::EndAbility(const FGameplayAbilitySpecHan
 void UPlayerGameplayAbility_TargetLock::OnTargetLockTick(float DeltaTime)
 {
 	FGameplayTagContainer TagContainer;
-	TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Shared.Status.Death")));
+	TagContainer.AddTag(WarriorGameplayTags::Shared_Status_Death);
 
-	if (!CurrentLockedActor 
-		|| UWarriorFunctionLibrary::NativeDoesActorHaveTag(CurrentLockedActor, WarriorGameplayTags::Shared_Ability_Death) 
+	// 플레이어가 죽으면(Shared.Status.Death 하위 태그) 해제. Shared.Ability.Death는 어빌리티 식별 태그라 캐릭터에 붙지 않음
+	if (!CurrentLockedActor
 		|| UWarriorFunctionLibrary::NativeDoesActorHaveAnyTag(GetPlayerCharacterFromActorInfo(), TagContainer)
 		)
 	{
 		CancelTargetLockAbility();
 
 		return;
+	}
+
+	// 대상이 죽으면 주변 대상으로 전환(왼쪽 우선, 없으면 오른쪽)하고, 잡을 대상이 없으면 해제.
+	// GA_AIDeath_Base도 사망 어빌리티가 끝날 때 SwitchTarget.Left를 보내지만 그 시점이 늦어 여기서 바로 전환한다
+	if (UWarriorFunctionLibrary::IsActorDead(CurrentLockedActor))
+	{
+		GetAvailableActorsToLock();
+
+		TArray<AActor*> ActorsOnLeft;
+		TArray<AActor*> ActorsOnRight;
+		GetAvailableActorsAroundTarget(ActorsOnLeft, ActorsOnRight);
+
+		// 후보가 하나도 없으면 GetAvailableActorsAroundTarget 안에서 이미 해제됐다
+		if (!IsActive())
+		{
+			return;
+		}
+
+		AActor* NewTargetToLock = GetNearestTargetFromAvailableActors(ActorsOnLeft);
+		if (!NewTargetToLock)
+		{
+			NewTargetToLock = GetNearestTargetFromAvailableActors(ActorsOnRight);
+		}
+
+		if (!NewTargetToLock)
+		{
+			CancelTargetLockAbility();
+
+			return;
+		}
+
+		CurrentLockedActor = NewTargetToLock;
+		GetPlayerCharacterFromActorInfo()->SetCurrentLockedActor(CurrentLockedActor);
 	}
 
 	SetTargetLockWidgetPosition();
@@ -154,7 +208,8 @@ void UPlayerGameplayAbility_TargetLock::GetAvailableActorsToLock()
 	{
 		if (AActor* HitActor = TraceHit.GetActor())
 		{
-			if (HitActor != GetPlayerCharacterFromActorInfo())
+			// 처형 직후 등 시체가 남아 있어도 다시 잡지 않도록 죽은 대상은 제외
+			if (HitActor != GetPlayerCharacterFromActorInfo() && !UWarriorFunctionLibrary::IsActorDead(HitActor))
 			{
 				AvailableActorsToLock.AddUnique(HitActor);
 			}

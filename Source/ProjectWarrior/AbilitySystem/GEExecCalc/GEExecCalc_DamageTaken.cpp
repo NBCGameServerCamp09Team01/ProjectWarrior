@@ -102,7 +102,8 @@ void UGEExecCalc_DamageTaken::Execute_Implementation(const FGameplayEffectCustom
 		BaseDamage *= DamageIncreasePercentHeavy;
 	}
 
-	const float FinalDamageDone = BaseDamage * SourceAttackPower / TargetDefensePower;
+	// 방어력이 0이면 피해가 무한대가 된다. 지금 커브·기본값의 최솟값이 1이라 1로 막아도 결과는 같다
+	const float FinalDamageDone = BaseDamage * SourceAttackPower / FMath::Max(TargetDefensePower, 1.f);
 
 	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Cyan, FString::Printf(TEXT("FinalDamageDone : %02f"), FinalDamageDone));
 

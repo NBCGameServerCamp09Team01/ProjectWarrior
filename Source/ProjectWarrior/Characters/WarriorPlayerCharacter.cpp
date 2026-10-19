@@ -4,6 +4,7 @@
 #include "WarriorPlayerCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "ProjectWarrior/Components/Camera/CameraClipHideComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -16,6 +17,14 @@
 #include "ProjectWarrior/Components/Combat/PlayerCombatComponent.h"
 #include "ProjectWarrior/Components/UI/PlayerUIComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "ProjectWarrior/PlayerStates/WarriorPlayerState.h"
+#include "ProjectWarrior/Components/Inventory/PlayerInventoryComponent.h"
+#include "ProjectWarrior/Components/Interact/PlayerInteractionComponent.h"
+#include "ProjectWarrior/Components/Combat/AttackTokenComponent.h"
+#include "ProjectWarrior/DataAssets/DataAsset_Item.h"
+#include "ProjectWarrior/Widgets/InventoryWheelWidget.h"
+#include "ProjectWarrior/Account/WarriorAccountSubsystem.h"
+
 
 AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -34,14 +43,26 @@ AWarriorPlayerCharacter::AWarriorPlayerCharacter(const FObjectInitializer& Objec
     FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
     FollowCamera->bUsePawnControlRotation = false;
 
+    // 카메라가 캐릭터 몸 안에 들어가면 그 캐릭터를 숨겨 클리핑 방지
+    CameraClipHideComponent = CreateDefaultSubobject<UCameraClipHideComponent>(TEXT("CameraClipHideComponent"));
+
     PlayerCombatComponent = CreateDefaultSubobject<UPlayerCombatComponent>(TEXT("PlayerCombatComponent"));
 
     PlayerUIComponent = CreateDefaultSubobject<UPlayerUIComponent>(TEXT("PlayerUIComponent"));
+
+    PlayerInteractionComponent = CreateDefaultSubobject<UPlayerInteractionComponent>(TEXT("PlayerInteractionComponent"));
+
+    AttackTokenComponent = CreateDefaultSubobject<UAttackTokenComponent>(TEXT("AttackTokenComponent"));
 }
 
 UPawnCombatComponent* AWarriorPlayerCharacter::GetPawnCombatComponent() const
 {
     return PlayerCombatComponent;
+}
+
+bool AWarriorPlayerCharacter::IsInventoryWheelOpen() const
+{
+    return InventoryWheelWidget && InventoryWheelWidget->IsWheelOpen();
 }
 
 UPawnUIComponent* AWarriorPlayerCharacter::GetPawnUIComponent() const
@@ -52,6 +73,12 @@ UPawnUIComponent* AWarriorPlayerCharacter::GetPawnUIComponent() const
 UPlayerUIComponent* AWarriorPlayerCharacter::GetPlayerUIComponent() const
 {
     return PlayerUIComponent;
+}
+
+UPlayerInventoryComponent* AWarriorPlayerCharacter::GetPlayerInventoryComponent() const
+{
+    const AWarriorPlayerState* WarriorPlayerState = GetPlayerState<AWarriorPlayerState>();
+    return WarriorPlayerState ? WarriorPlayerState->GetPlayerInventoryComponent() : nullptr;
 }
 
 void AWarriorPlayerCharacter::PossessedBy(AController* NewController)
@@ -73,6 +100,10 @@ void AWarriorPlayerCharacter::PossessedBy(AController* NewController)
             LoadedData->GiveToAbilitySystemComponent(WarriorAbilitySystemComponent);
         }
     }
+
+    // 스타트업 GE로 기본값이 잡힌 뒤에 계정 보너스를 추가.
+    ApplyAccountStatBonuses();
+    ApplyAccountSkillTags();
 }
 
 void AWarriorPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -97,6 +128,11 @@ void AWarriorPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerI
     WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_SwitchTarget, ETriggerEvent::Completed, this, &ThisClass::Input_SwitchTargetCompleted);
 
     WarriorInputComponent->BindAbilityInputAction(InputConfigData, this, &ThisClass::Input_AbilityInputPressed, &ThisClass::Input_AbilityInputReleased);
+
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_InventoryWheel, ETriggerEvent::Started, this, &ThisClass::Input_InventoryWheelStarted);
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_InventoryWheel, ETriggerEvent::Completed, this, &ThisClass::Input_InventoryWheelCompleted);
+    
+    WarriorInputComponent->BindNativeInputAction(InputConfigData, WarriorGameplayTags::InputTag_Interact, ETriggerEvent::Started, this, &ThisClass::Input_Interact);
 }
 
 void AWarriorPlayerCharacter::BeginPlay()
@@ -143,7 +179,7 @@ void AWarriorPlayerCharacter::Input_MoveCompleted(const FInputActionValue& Input
 
         FGameplayTagContainer TagContainer;
 
-        TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Player.Ability.Dodge")));
+        TagContainer.AddTag(WarriorGameplayTags::Player_Ability_Dodge);
 
         WarriorAbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
     }
@@ -182,9 +218,15 @@ void AWarriorPlayerCharacter::Input_SwitchTargetCompleted(const FInputActionValu
 
 void AWarriorPlayerCharacter::Input_LeftButton(const FInputActionValue& InputActionValue)
 {
+    // Inventory 열려있을 때 공격 x.
+    if (InventoryWheelWidget && InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+
     FGameplayTagContainer TagContainer;
 
-    TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Player.Ability.Attack")));
+    TagContainer.AddTag(WarriorGameplayTags::Player_Ability_Attack);
 
     WarriorAbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
 }
@@ -197,4 +239,102 @@ void AWarriorPlayerCharacter::Input_AbilityInputPressed(FGameplayTag _InputTag)
 void AWarriorPlayerCharacter::Input_AbilityInputReleased(FGameplayTag _InputTag)
 {
     WarriorAbilitySystemComponent->OnAbilityInputReleased(_InputTag);
+}
+
+void AWarriorPlayerCharacter::Input_InventoryWheelStarted(const FInputActionValue& InputActionValue)
+{
+    UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent();
+    if (!Inventory || !InventoryWheelWidgetClass)
+    {
+        return;
+    }
+
+    if (!InventoryWheelWidget)
+    {
+        InventoryWheelWidget = CreateWidget<UInventoryWheelWidget>(GetController<APlayerController>(), InventoryWheelWidgetClass);
+        InventoryWheelWidget->AddToViewport(10);
+    }
+
+    InventoryWheelWidget->OpenWheel(Inventory);
+}
+
+void AWarriorPlayerCharacter::Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue)
+{
+    if (!InventoryWheelWidget || !InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+
+    if (UDataAsset_Item* SelectedItem = InventoryWheelWidget->CloseWheel())
+    {
+        if (UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent())
+        {
+            Inventory->UseItem(SelectedItem);
+        }
+    }
+}
+
+void AWarriorPlayerCharacter::Input_Interact(const FInputActionValue& InputActionValue)
+{
+    // 인벤토리 휠이 열려 있으면 상호작용 x
+    if (InventoryWheelWidget && InventoryWheelWidget->IsWheelOpen())
+    {
+        return;
+    }
+    PlayerInteractionComponent->TryInteract();
+}
+
+// 아이템 사용 테스트 코드.
+void AWarriorPlayerCharacter::DebugAddGold(int32 InAmount)
+{
+    if (UPlayerInventoryComponent* Inventory = GetPlayerInventoryComponent())
+    {
+        Inventory->AddGold(InAmount);
+        UE_LOG(LogTemp, Log, TEXT("DebugAddGold: +%d -> %d"), InAmount, Inventory->GetGold());
+    }
+}
+
+void AWarriorPlayerCharacter::ApplyAccountSkillTags()
+{
+    const UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this);
+    if (!Account || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+
+    // 해금은 메인메뉴에서만 하고 스테이지마다 캐릭터가 새로 생기므로, 들어올 때 한 번 붙이면 된다
+    const FGameplayTagContainer& UnlockedSkills = Account->GetAccountData().UnlockedSkills;
+    WarriorAbilitySystemComponent->AddLooseGameplayTags(UnlockedSkills);
+    UE_LOG(LogTemp, Log, TEXT("[Skill] Applied unlocked skill tags: %s"), *UnlockedSkills.ToStringSimple());
+}
+
+void AWarriorPlayerCharacter::ApplyAccountStatBonuses()
+{
+    const UWarriorAccountSubsystem* Account = UWarriorAccountSubsystem::Get(this);
+    if (!Account || !AccountStatEffect || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+
+    FGameplayEffectContextHandle Context = WarriorAbilitySystemComponent->MakeEffectContext();
+    Context.AddSourceObject(this);
+
+    FGameplayEffectSpecHandle Spec = WarriorAbilitySystemComponent->MakeOutgoingSpec(AccountStatEffect, 1.f, Context);
+    if (!Spec.IsValid())
+    {
+        return;
+    }
+
+    // 투자하지 않은 스탯도 0으로 넣는다. SetByCaller 값이 빠지면 GAS가 에러 로그를 남긴다
+    for (const FGameplayTag& StatTag : Account->GetInvestableStats())
+    {
+        Spec.Data->SetSetByCallerMagnitude(StatTag, Account->GetStatBonus(StatTag));
+    }
+    WarriorAbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+
+    // 스테이지는 가득 찬 상태로 시작한다 (늘어난 최대치만큼 현재값 채우기)
+    WarriorAbilitySystemComponent->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute(),
+        WarriorAbilitySystemComponent->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute()));
+    WarriorAbilitySystemComponent->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentStaminaAttribute(),
+        WarriorAbilitySystemComponent->GetNumericAttribute(UWarriorAttributeSet::GetMaxStaminaAttribute()));
 }

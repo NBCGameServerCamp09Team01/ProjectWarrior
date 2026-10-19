@@ -14,6 +14,7 @@
  GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
 class IPawnUIInterface;
+class UPawnUIComponent;
 /**
  * 
  */
@@ -25,7 +26,11 @@ class PROJECTWARRIOR_API UWarriorAttributeSet : public UAttributeSet
 public:
     UWarriorAttributeSet();
 
+    virtual bool PreGameplayEffectExecute(struct FGameplayEffectModCallbackData& Data) override;
+
     virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
+
+    virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
     UPROPERTY(BlueprintReadOnly, Category = "Health")
     FGameplayAttributeData CurrentHealth;
@@ -69,4 +74,7 @@ public:
 
 private:
     TWeakInterfacePtr<IPawnUIInterface> CachedPawnUIInterface;
+
+    // PostGameplayEffectExecute 밖에서도 UI 컴포넌트를 얻기 위한 헬퍼 (checkf 대신 nullptr 허용)
+    UPawnUIComponent* FindPawnUIComponent() const;
 };

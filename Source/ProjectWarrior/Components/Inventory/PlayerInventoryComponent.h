@@ -1,0 +1,81 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "ProjectWarrior/Types/WarriorStructTypes.h"
+#include "PlayerInventoryComponent.generated.h"
+
+class UDataAsset_Item;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChangedDelegate);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGoldChangedDelegate, int32, NewGold);
+
+
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
+class PROJECTWARRIOR_API UPlayerInventoryComponent : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+	UPlayerInventoryComponent();
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool AddItem(UDataAsset_Item* InItem, int32 InCount = 1);
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool CanAddItem(const UDataAsset_Item* InItem, int32 InCount = 1) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool RemoveItem(UDataAsset_Item* InItem, int32 InCount = 1);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool UseItem(UDataAsset_Item* InItem);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory", meta = (ClampMin = "1"))
+	int32 MaxSlotCount = 8;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 GetMaxSlotCount() const { return MaxSlotCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool IsFull() const { return Slots.Num() >= MaxSlotCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 GetItemCount(const UDataAsset_Item* InItem) const;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	TArray<FWarriorInventorySlot> GetSlots() const { return Slots; }
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	int32 GetGold() const { return Gold; }
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void AddGold(int32 InAmount);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool SpendGold(int32 InAmount);
+
+	//체크포인트(M22)에서 이어 갈 때: 칸과 골드를 통째로 바꾼다. 빈 칸·칸 수 초과·최대 묶음 초과는 버리거나 잘라 낸다.
+	//골드 변화를 사용·획득으로 세지 않도록 판 통계는 이 다음에 되돌린다(WarriorPlayCheckpoint::Restore)
+	void RestoreState(int32 InGold, const TArray<FWarriorInventorySlot>& InSlots);
+
+	UPROPERTY(BlueprintAssignable)
+	FOnInventoryChangedDelegate OnInventoryChanged;
+
+	UPROPERTY(BlueprintAssignable)
+	FOnGoldChangedDelegate OnGoldChanged;
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TArray<FWarriorInventorySlot> Slots;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory", meta = (ClampMin = "0"))
+	int32 Gold = 0;
+
+private:
+	FWarriorInventorySlot* FindSlot(const UDataAsset_Item* InItem);
+
+	APawn* GetOwningPlayerPawn() const;
+};

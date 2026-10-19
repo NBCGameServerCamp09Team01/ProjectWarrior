@@ -12,24 +12,37 @@ void UWarriorAbilitySystemComponent::OnAbilityInputPressed(const FGameplayTag& I
         return;
     }
 
+    // 발동한 어빌리티가 그 자리에서 다른 어빌리티를 부여·제거하면(예: 전술 모드가 기술 GA를 부여) 도는 중인 배열이 바뀌어
+    // "Array has changed during ranged-for iteration" ensure가 남 → 대상 핸들을 먼저 모은 뒤 발동/취소
+    TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+
     for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
     {
-        if (!AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag)) continue;
-
-        if (InputTag.MatchesTag(WarriorGameplayTags::InputTag_Toggleable))
+        if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag))
         {
-            if (AbilitySpec.IsActive())
-            {
-                CancelAbilityHandle(AbilitySpec.Handle);
-            }
-            else
-            {
-                TryActivateAbility(AbilitySpec.Handle);
-            }
+            MatchingHandles.Add(AbilitySpec.Handle);
+        }
+    }
+
+    const bool bToggleable = InputTag.MatchesTag(WarriorGameplayTags::InputTag_Toggleable);
+
+    for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+    {
+        // 앞의 발동으로 제거됐을 수 있으므로 매번 다시 찾음
+        const FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecFromHandle(Handle);
+
+        if (!AbilitySpec)
+        {
+            continue;
+        }
+
+        if (bToggleable && AbilitySpec->IsActive())
+        {
+            CancelAbilityHandle(Handle);
         }
         else
         {
-            TryActivateAbility(AbilitySpec.Handle);
+            TryActivateAbility(Handle);
         }
     }
 }
@@ -41,12 +54,20 @@ void UWarriorAbilitySystemComponent::OnAbilityInputReleased(const FGameplayTag& 
         return;
     }
 
+    // 취소로 끝나는 어빌리티가 다른 어빌리티를 부여·제거할 수 있으므로 핸들을 먼저 모음
+    TArray<FGameplayAbilitySpecHandle> ActiveHandles;
+
     for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
     {
         if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag) && AbilitySpec.IsActive())
         {
-            CancelAbilityHandle(AbilitySpec.Handle);
+            ActiveHandles.Add(AbilitySpec.Handle);
         }
+    }
+
+    for (const FGameplayAbilitySpecHandle& Handle : ActiveHandles)
+    {
+        CancelAbilityHandle(Handle);
     }
 }
 

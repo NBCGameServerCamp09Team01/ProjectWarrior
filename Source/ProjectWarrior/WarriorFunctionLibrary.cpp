@@ -8,6 +8,12 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "ProjectWarrior/WarriorGamePlayTags.h"
 #include "GenericTeamAgentInterface.h"
+#include "Character/ALSBaseCharacter.h"
+#include "Kismet/GameplayStatics.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
 
 UWarriorAbilitySystemComponent* UWarriorFunctionLibrary::NativeGetWarriorASCFromActor(AActor* InActor)
 {
@@ -141,6 +147,79 @@ bool UWarriorFunctionLibrary::IsValidBlock(AActor* InAttacker, AActor* InDefende
     return DotResult < -0.1f ? true : false;
 }
 
+bool UWarriorFunctionLibrary::IsActorDead(AActor* InActor)
+{
+    if (!IsValid(InActor))
+    {
+        // 이미 제거된 대상은 죽은 것으로 취급
+        return true;
+    }
+
+    const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InActor);
+
+    return ASC && ASC->HasMatchingGameplayTag(WarriorGameplayTags::Shared_Status_Death);
+}
+
+bool UWarriorFunctionLibrary::CanBeFinisherTarget(AActor* InActor)
+{
+    if (IsActorDead(InActor))
+    {
+        return false;
+    }
+
+    // ASC가 없는 대상(소품 등)은 처형 대상이 아님
+    const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(InActor);
+
+    if (!ASC)
+    {
+        return false;
+    }
+
+    static const FGameplayTagContainer BlockedTags = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{
+        WarriorGameplayTags::Shared_Status_FinisherImmune, WarriorGameplayTags::Shared_Status_Finisher });
+
+    return !ASC->HasAnyMatchingGameplayTags(BlockedTags);
+}
+
+EWarriorHitResultType UWarriorFunctionLibrary::EvaluateHitResult(AActor* InAttacker, AActor* InVictim, AActor* InDamageCauser, EWarriorBlockRule InBlockRule)
+{
+    check(InAttacker && InVictim);
+
+    // 처형 연출 중이거나 이미 죽은 대상은 판정하지 않음 (투사체·범위 공격 포함)
+    // 무적(넘어져 있는 동안 등)인 대상도 판정하지 않음
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Finisher) || IsActorDead(InVictim)
+        || NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Invulnerable))
+    {
+        return EWarriorHitResultType::Invalid;
+    }
+
+    bool bCanBlock = false;
+    switch (InBlockRule)
+    {
+    case EWarriorBlockRule::Blockable:
+        bCanBlock = NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Player_Status_Blocking);
+        break;
+    case EWarriorBlockRule::PerfectParryOnly:
+        // 일반 가드로는 막을 수 없고 퍼펙트 패링 구간에만 막힘
+        bCanBlock = NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Player_Status_Blocking_Perfect);
+        break;
+    default:
+        break;
+    }
+
+    if (bCanBlock && IsValidBlock(InDamageCauser ? InDamageCauser : InAttacker, InVictim))
+    {
+        return EWarriorHitResultType::Blocked;
+    }
+
+    if (NativeDoesActorHaveTag(InVictim, WarriorGameplayTags::Shared_Status_Dodge))
+    {
+        return EWarriorHitResultType::Dodged;
+    }
+
+    return EWarriorHitResultType::Hit;
+}
+
 bool UWarriorFunctionLibrary::IsTargetPawnHostile(APawn* QueryPawn, APawn* TargetPawn)
 {
     check(QueryPawn && TargetPawn);
@@ -154,4 +233,68 @@ bool UWarriorFunctionLibrary::IsTargetPawnHostile(APawn* QueryPawn, APawn* Targe
     }
 
     return false;
+}
+
+void UWarriorFunctionLibrary::SetPawnFacingRotation(APawn* InPawn, const FRotator& NewRotation)
+{
+    if (!InPawn)
+    {
+        return;
+    }
+
+    if (AALSBaseCharacter* ALSCharacter = Cast<AALSBaseCharacter>(InPawn))
+    {
+        ALSCharacter->SetActorLocationAndTargetRotation(ALSCharacter->GetActorLocation(), NewRotation);
+    }
+    else
+    {
+        InPawn->SetActorRotation(NewRotation);
+    }
+
+    if (AController* Controller = InPawn->GetController())
+    {
+        Controller->SetControlRotation(NewRotation);
+    }
+}
+
+UFXSystemComponent* UWarriorFunctionLibrary::SpawnFXAttached(UFXSystemAsset* InEffect, USceneComponent* InParent, FName InSocketName, const FVector& InScale, bool bAutoDestroy)
+{
+    if (!InEffect || !InParent)
+    {
+        return nullptr;
+    }
+
+    if (UNiagaraSystem* NiagaraSystem = Cast<UNiagaraSystem>(InEffect))
+    {
+        return UNiagaraFunctionLibrary::SpawnSystemAttached(NiagaraSystem, InParent, InSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
+            InScale, EAttachLocation::SnapToTarget, bAutoDestroy, ENCPoolMethod::None);
+    }
+
+    if (UParticleSystem* ParticleSystem = Cast<UParticleSystem>(InEffect))
+    {
+        return UGameplayStatics::SpawnEmitterAttached(ParticleSystem, InParent, InSocketName, FVector::ZeroVector, FRotator::ZeroRotator,
+            InScale, EAttachLocation::SnapToTarget, bAutoDestroy);
+    }
+
+    return nullptr;
+}
+
+UFXSystemComponent* UWarriorFunctionLibrary::SpawnFXAtLocation(const UObject* WorldContextObject, UFXSystemAsset* InEffect, const FVector& InLocation, const FRotator& InRotation, const FVector& InScale)
+{
+    if (!InEffect || !WorldContextObject)
+    {
+        return nullptr;
+    }
+
+    if (UNiagaraSystem* NiagaraSystem = Cast<UNiagaraSystem>(InEffect))
+    {
+        return UNiagaraFunctionLibrary::SpawnSystemAtLocation(WorldContextObject, NiagaraSystem, InLocation, InRotation, InScale);
+    }
+
+    if (UParticleSystem* ParticleSystem = Cast<UParticleSystem>(InEffect))
+    {
+        return UGameplayStatics::SpawnEmitterAtLocation(WorldContextObject, ParticleSystem, InLocation, InRotation, InScale);
+    }
+
+    return nullptr;
 }

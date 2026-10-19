@@ -9,9 +9,15 @@
 
 class USpringArmComponent;
 class UCameraComponent;
+class UCameraClipHideComponent;
 class UDataAsset_InputConfig;
 class UPlayerCombatComponent;
 class UPlayerUIComponent;
+class UPlayerInventoryComponent;
+class UInventoryWheelWidget;
+class UPlayerInteractionComponent;
+class UAttackTokenComponent;
+class UGameplayEffect;
 
 struct FInputActionValue;
 /**
@@ -34,6 +40,13 @@ public:
 	virtual UPlayerUIComponent* GetPlayerUIComponent() const override;
 	//~ End PawnUIInterface Interface
 
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	UPlayerInventoryComponent* GetPlayerInventoryComponent() const;
+
+	// 테스트용 콘솔 명령
+	UFUNCTION(Exec)
+	void DebugAddGold(int32 InAmount);
+
 protected:
 	//~ Begin APawn Interface.
 	virtual void PossessedBy(AController* NewController) override;
@@ -50,12 +63,21 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta = (AllowPrivateAccess = "true"))
+	UCameraClipHideComponent* CameraClipHideComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat", meta = (AllowPrivateAccess = "true"))
 	UPlayerCombatComponent* PlayerCombatComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
 	UPlayerUIComponent* PlayerUIComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (AllowPrivateAccess = "true"))
+	UPlayerInteractionComponent* PlayerInteractionComponent;
 
+	// 적 AI가 동시에 공격할 수 있는 수를 제한하는 공격 토큰 풀
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat", meta = (AllowPrivateAccess = "true"))
+	UAttackTokenComponent* AttackTokenComponent;
 #pragma endregion
 
 #pragma region Inputs
@@ -96,7 +118,23 @@ private:
 	UFUNCTION()
 	void Input_AbilityInputReleased(FGameplayTag _InputTag);
 
+	UFUNCTION()
+	void Input_InventoryWheelStarted(const FInputActionValue& InputActionValue);
+
+	UFUNCTION()
+	void Input_InventoryWheelCompleted(const FInputActionValue& InputActionValue);
+
+	UFUNCTION()
+	void Input_Interact(const FInputActionValue& InputActionValue);
+
 #pragma endregion
+
+private:
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UInventoryWheelWidget> InventoryWheelWidgetClass;
+
+	UPROPERTY()
+	UInventoryWheelWidget* InventoryWheelWidget;
 
 private:
 	UPROPERTY()
@@ -105,8 +143,22 @@ private:
 public:
 	FORCEINLINE UPlayerCombatComponent* GetPlayerCombatComponent() const { return PlayerCombatComponent; }
 
+	//인벤토리 휠이 열려 있는가(일시정지를 막을 때 쓴다)
+	bool IsInventoryWheelOpen() const;
+
 	void SetCurrentLockedActor(AActor* _Target) { CurrentLockedActor = _Target; }
 
 	UFUNCTION(BlueprintCallable)
 	AActor* GetCurrentLockedActor() const { return CurrentLockedActor; }
+
+protected:
+	// 계정 성장(메인메뉴에서 투자한 스탯)을 적용하는 GE. Infinite, Account.Stat.* SetByCaller 모디파이어
+	UPROPERTY(EditDefaultsOnly, Category = "Account")
+	TSubclassOf<UGameplayEffect> AccountStatEffect;
+
+private:
+	void ApplyAccountStatBonuses();
+
+	// 해금한 스킬 태그(Account.Skill.*)를 능력 시스템에 붙인다. 효과(반격 강화·회피 숙련 등)는 이 태그를 보고 켜진다(S4)
+	void ApplyAccountSkillTags();
 };
