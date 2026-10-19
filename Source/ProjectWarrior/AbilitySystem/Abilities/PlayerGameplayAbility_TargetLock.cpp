@@ -34,6 +34,13 @@ void UPlayerGameplayAbility_TargetLock::ActivateAbility(const FGameplayAbilitySp
 {
 	TryLockOnTarget();
 
+	// 잡을 대상이 없으면 TryLockOnTarget 안에서 이미 해제(EndAbility)됐다.
+	// 여기서 이동 속도·입력 매핑을 다시 걸면 해제 후에 남아 락온이 풀리지 않은 상태가 된다
+	if (!IsActive())
+	{
+		return;
+	}
+
 	InitTargetLockMovement();
 	InitTargetLockMappingContext();
 
