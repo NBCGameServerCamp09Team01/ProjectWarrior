@@ -180,6 +180,15 @@ namespace WarriorGameplayTags
 
 	UE_DEFINE_GAMEPLAY_TAG(AI_Status_Burrowing, "AI.Status.Burrowing");
 
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix, "AI.Affix");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Tough, "AI.Affix.Tough");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Strong, "AI.Affix.Strong");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Fast, "AI.Affix.Fast");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Armored, "AI.Affix.Armored");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Fire, "AI.Affix.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Frozen, "AI.Affix.Frozen");
+	UE_DEFINE_GAMEPLAY_TAG(AI_Affix_Vampiric, "AI.Affix.Vampiric");
+
 	/** Shared tags **/
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact, "Shared.Ability.HitReact");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Ability_HitReact_Light, "Shared.Ability.HitReact.Light");
@@ -202,6 +211,8 @@ namespace WarriorGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Shared_Event_Stagger, "Shared.Event.Stagger");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_BaseDamage, "Shared.SetByCaller.BaseDamage");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_AffixDamage, "Shared.SetByCaller.AffixDamage");
+	UE_DEFINE_GAMEPLAY_TAG(Shared_Effect_Affix, "Shared.Effect.Affix");
 
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Heal, "Shared.SetByCaller.Heal");
 	UE_DEFINE_GAMEPLAY_TAG(Shared_SetByCaller_Upgrade, "Shared.SetByCaller.Upgrade");

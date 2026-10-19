@@ -114,6 +114,21 @@ namespace WarriorWavePlan
 				const float DamageMultiplier = GetNumberOr<float>(EnemyObject, TEXT("damageMultiplier"), 1.f);
 				Enemy.HealthMultiplier = HealthMultiplier > 0.f ? HealthMultiplier : 1.f;
 				Enemy.DamageMultiplier = DamageMultiplier > 0.f ? DamageMultiplier : 1.f;
+
+				//수식어(v1.5): 없거나(v1.5 전) null이면 비움. 문자열이 아니거나 빈 값은 건너뛴다. 모르는 키는 적에게 붙일 때 거른다
+				const TArray<TSharedPtr<FJsonValue>>* AffixValues = nullptr;
+				if (EnemyObject->TryGetArrayField(TEXT("affixes"), AffixValues))
+				{
+					for (const TSharedPtr<FJsonValue>& AffixValue : *AffixValues)
+					{
+						FString AffixId;
+						//숫자도 TryGetString은 문자열로 바꿔 주므로 종류를 먼저 본다
+						if (AffixValue.IsValid() && AffixValue->Type == EJson::String && AffixValue->TryGetString(AffixId) && !AffixId.IsEmpty())
+						{
+							Enemy.Affixes.AddUnique(FName(*AffixId));
+						}
+					}
+				}
 			}
 		}
 	}
@@ -173,6 +188,7 @@ namespace WarriorWavePlan
 				Enemy.GoldDropChance = PlanEnemy.GoldDropChance;
 				Enemy.HealthMultiplier = PlanEnemy.HealthMultiplier;
 				Enemy.DamageMultiplier = PlanEnemy.DamageMultiplier;
+				Enemy.Affixes = PlanEnemy.Affixes;
 			}
 		}
 		return true;

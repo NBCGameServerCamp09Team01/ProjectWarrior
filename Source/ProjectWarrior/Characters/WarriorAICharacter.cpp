@@ -17,6 +17,10 @@
 #include "ProjectWarrior/WarriorFunctionLibrary.h"
 #include "ProjectWarrior/AbilitySystem/WarriorAttributeSet.h"
 #include "ProjectWarrior/ProjectWarrior.h"
+#include "GameplayEffect.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 AWarriorAICharacter::AWarriorAICharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -55,6 +59,25 @@ void AWarriorAICharacter::OnCharacterDiedEvent_Implementation()
     if (AIHealthWidgetComponent)
     {
         AIHealthWidgetComponent->SetVisibility(false, true);
+    }
+
+    // 쓰러진 몸에는 수식어 오라·외곽선을 남기지 않음
+    if (AffixAuraComponent)
+    {
+        AffixAuraComponent->Deactivate();
+    }
+    if (AffixOverlayMaterial)
+    {
+        TArray<USkeletalMeshComponent*> Meshes;
+        GetComponents<USkeletalMeshComponent>(Meshes);
+        for (USkeletalMeshComponent* MeshComponent : Meshes)
+        {
+            if (MeshComponent && MeshComponent->GetOverlayMaterial() == AffixOverlayMaterial)
+            {
+                MeshComponent->SetOverlayMaterial(nullptr);
+            }
+        }
+        AffixOverlayMaterial = nullptr;
     }
 
     // 컨트롤러 Focus가 남아 있으면 ALS가 계속 플레이어 쪽을 바라보며 제자리 회전(Turn In Place) 애니메이션을 재생함
@@ -159,6 +182,7 @@ void AWarriorAICharacter::InitAIStartUpData()
         {
             ApplyDifficultyScale();
         }
+        TryApplyAffixes();
         return;
     }
 
@@ -181,6 +205,8 @@ void AWarriorAICharacter::InitAIStartUpData()
                     {
                         ApplyDifficultyScale();
                     }
+                    // 수식어는 난이도 배율 위에 곱한다(무한 GE)
+                    TryApplyAffixes();
 
                     UWarriorFunctionLibrary::RemoveGameplayTagFromActorIfFound(this, WarriorGameplayTags::Shared_Status_Initializing);
 
@@ -220,4 +246,169 @@ void AWarriorAICharacter::ApplyDifficultyScale()
 
     UE_LOG(LogProjectWarrior, Verbose, TEXT("[Stage] %s difficulty scale applied. health x%.2f (%.0f -> %.0f), attack x%.2f"),
         *GetName(), DifficultyHealthMultiplier, MaxHealth, MaxHealth * DifficultyHealthMultiplier, DifficultyDamageMultiplier);
+}
+
+void AWarriorAICharacter::SetAffixes(const TArray<FName>& InAffixIds)
+{
+    if (InAffixIds.IsEmpty() || bAffixesApplied)
+    {
+        return;
+    }
+
+    const UWarriorAffixCatalogDataAsset* Catalog = UWarriorAffixCatalogDataAsset::LoadFromSettings();
+    if (!Catalog)
+    {
+        UE_LOG(LogProjectWarrior, Warning, TEXT("[Affix] %s: AffixCatalog is not set in Project Settings > Warrior Stage. %d affix(es) ignored."),
+            *GetName(), InAffixIds.Num());
+        return;
+    }
+
+    // 모르는 키는 그 수식어만 뺀다(판은 그대로, stage-api.md "수식어" 제안)
+    AffixIds.Reset();
+    for (const FName AffixId : InAffixIds)
+    {
+        if (Catalog->FindAffix(AffixId))
+        {
+            AffixIds.AddUnique(AffixId);
+        }
+        else
+        {
+            UE_LOG(LogProjectWarrior, Warning, TEXT("[Affix] %s: unknown affix '%s' ignored (not in DA_AffixCatalog)."),
+                *GetName(), *AffixId.ToString());
+        }
+    }
+
+    TryApplyAffixes();
+}
+
+void AWarriorAICharacter::ApplyAffixOutline(const UWarriorAffixCatalogDataAsset& InCatalog)
+{
+    UMaterialInterface* OutlineMaterial = InCatalog.GetOutlineMaterial();
+    if (!OutlineMaterial)
+    {
+        return;
+    }
+
+    UMaterialInstanceDynamic* OutlineInstance = UMaterialInstanceDynamic::Create(OutlineMaterial, this);
+    OutlineInstance->SetVectorParameterValue(TEXT("TierColor"), InCatalog.GetTierColor(GetAffixTier()));
+    AffixOverlayMaterial = OutlineInstance;
+
+    // ALS 기반 적은 GetMesh()가 숨겨진 애니메이션용이고 보이는 메시가 따로 붙어 있다(블레이드 모드 약점선과 같은 고르기)
+    TArray<USkeletalMeshComponent*> Meshes;
+    GetComponents<USkeletalMeshComponent>(Meshes);
+    for (USkeletalMeshComponent* MeshComponent : Meshes)
+    {
+        // 이미 다른 오버레이(블레이드 모드 약점선)가 있으면 그쪽이 끝날 때 GetAffixOverlayMaterial로 되돌린다
+        if (MeshComponent && MeshComponent->IsVisible() && MeshComponent->GetSkeletalMeshAsset() && !MeshComponent->GetOverlayMaterial())
+        {
+            MeshComponent->SetOverlayMaterial(OutlineInstance);
+        }
+    }
+}
+
+void AWarriorAICharacter::SpawnAffixAura(const UWarriorAffixCatalogDataAsset& InCatalog)
+{
+    UNiagaraSystem* AuraSystem = InCatalog.GetAuraSystem();
+    const FWarriorAffixDefinition* FirstAffix = AffixIds.IsEmpty() ? nullptr : InCatalog.FindAffix(AffixIds[0]);
+    if (!AuraSystem || !FirstAffix)
+    {
+        return;
+    }
+
+    // 오라는 메시를 붙은 부모에서 찾으므로 보이는 스켈레탈 메시에 붙인다(GetMesh()는 숨겨진 애니메이션용일 수 있음)
+    TArray<USkeletalMeshComponent*> Meshes;
+    GetComponents<USkeletalMeshComponent>(Meshes);
+    USkeletalMeshComponent* const* AuraParent = Meshes.FindByPredicate([](const USkeletalMeshComponent* MeshComponent)
+    {
+        return MeshComponent && MeshComponent->IsVisible() && MeshComponent->GetSkeletalMeshAsset();
+    });
+    if (!AuraParent)
+    {
+        return;
+    }
+
+    AffixAuraComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(AuraSystem, *AuraParent, NAME_None, FVector::ZeroVector,
+        FRotator::ZeroRotator, EAttachLocation::SnapToTarget, false);
+    if (AffixAuraComponent)
+    {
+        AffixAuraComponent->SetVariableLinearColor(TEXT("User.AuraColor"), FirstAffix->AuraColor * InCatalog.GetAuraIntensity());
+    }
+}
+
+void AWarriorAICharacter::TryApplyAffixes()
+{
+    if (bAffixesApplied || AffixIds.IsEmpty() || !DifficultyScaleGate.bStartUpDataApplied)
+    {
+        return;
+    }
+    bAffixesApplied = true;
+    ApplyAffixes();
+}
+
+void AWarriorAICharacter::ApplyAffixes()
+{
+    const UWarriorAffixCatalogDataAsset* Catalog = UWarriorAffixCatalogDataAsset::LoadFromSettings();
+    if (!Catalog || !WarriorAbilitySystemComponent)
+    {
+        return;
+    }
+
+    UAbilitySystemComponent* ASC = WarriorAbilitySystemComponent;
+    const float OldMaxHealth = ASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute());
+
+    for (const FName AffixId : AffixIds)
+    {
+        const FWarriorAffixDefinition* Definition = Catalog->FindAffix(AffixId);
+        if (!Definition)
+        {
+            continue;
+        }
+
+        if (Definition->AffixTag.IsValid())
+        {
+            UWarriorFunctionLibrary::AddGameplayTagToActorIfNone(this, Definition->AffixTag);
+        }
+
+        for (const TSubclassOf<UGameplayEffect>& EffectClass : Definition->SelfEffects)
+        {
+            if (EffectClass)
+            {
+                ASC->ApplyGameplayEffectToSelf(EffectClass.GetDefaultObject(), 1.f, ASC->MakeEffectContext());
+            }
+        }
+
+        // 신속: 최종 최고 속도에 배율(MaxWalkSpeed 직접 변경은 ALS가 걸음이 바뀔 때 덮어씀)
+        if (!FMath::IsNearlyEqual(Definition->SelfMoveSpeedScale, 1.f))
+        {
+            SetMovementSpeedScale(AffixId, Definition->SelfMoveSpeedScale);
+        }
+    }
+
+    // 강인처럼 최대 체력을 올리는 수식어: 무한 GE는 최대만 바꾸므로 현재 체력을 같은 비율로 올린다(가득 찬 채 시작)
+    const float NewMaxHealth = ASC->GetNumericAttribute(UWarriorAttributeSet::GetMaxHealthAttribute());
+    if (OldMaxHealth > 0.f && !FMath::IsNearlyEqual(NewMaxHealth, OldMaxHealth))
+    {
+        const float CurrentHealth = ASC->GetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute());
+        ASC->SetNumericAttributeBase(UWarriorAttributeSet::GetCurrentHealthAttribute(), CurrentHealth * NewMaxHealth / OldMaxHealth);
+    }
+
+    // 체력바 수식어 줄(예: "강인 · 강력")과 등급 색
+    TArray<FString> Names;
+    TArray<FString> DisplayNames;
+    for (const FName AffixId : AffixIds)
+    {
+        Names.Add(AffixId.ToString());
+        if (const FWarriorAffixDefinition* Definition = Catalog->FindAffix(AffixId))
+        {
+            DisplayNames.Add(Definition->DisplayName.IsEmpty() ? AffixId.ToString() : Definition->DisplayName.ToString());
+        }
+    }
+    if (AIUIComponent)
+    {
+        AIUIComponent->SetAffixDisplay(FText::FromString(FString::Join(DisplayNames, TEXT(" · "))), Catalog->GetTierColor(GetAffixTier()));
+    }
+    ApplyAffixOutline(*Catalog);
+    SpawnAffixAura(*Catalog);
+    UE_LOG(LogProjectWarrior, Log, TEXT("[Affix] %s applied [%s] tier=%s maxHealth %.0f -> %.0f"),
+        *GetName(), *FString::Join(Names, TEXT(", ")), *UEnum::GetValueAsString(GetAffixTier()), OldMaxHealth, NewMaxHealth);
 }

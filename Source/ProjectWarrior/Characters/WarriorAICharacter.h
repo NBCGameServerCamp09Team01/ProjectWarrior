@@ -6,11 +6,13 @@
 #include "WarriorBaseCharacter.h"
 #include "GameplayTagContainer.h"
 #include "ProjectWarrior/Stage/WarriorDifficultyScaleGate.h"
+#include "ProjectWarrior/Stage/WarriorAffixCatalogDataAsset.h"
 #include "WarriorAICharacter.generated.h"
 
 class UAICombatComponent;
 class UAIUIComponent;
 class UWidgetComponent;
+class UNiagaraComponent;
 struct FGameplayEventData;
 
 /**
@@ -49,6 +51,19 @@ public:
 	float GetDifficultyHealthMultiplier() const { return DifficultyScaleGate.HealthMultiplier; }
 	float GetDifficultyDamageMultiplier() const { return DifficultyScaleGate.DamageMultiplier; }
 
+	// 수식어(서버 웨이브 구성의 적 줄 affixes). 웨이브 생성기가 SetDifficultyScale 바로 뒤에 부른다(졸개는 물려받지 않음).
+	// DA_AffixCatalog에 없는 키는 빼고 경고한다. 시작 데이터·난이도 배율이 적용된 뒤에 한 번 자기 GE를 건다
+	void SetAffixes(const TArray<FName>& InAffixIds);
+
+	// 붙은 수식어 키(카탈로그에 있는 것만, 웨이브 순서)
+	const TArray<FName>& GetAffixIds() const { return AffixIds; }
+
+	// 붙은 수식어 수로 정한 등급(없음·챔피언·희귀)
+	EWarriorAffixTier GetAffixTier() const { return UWarriorAffixCatalogDataAsset::GetTierForCount(AffixIds.Num()); }
+
+	// 수식어 외곽선(오버레이 머티리얼). 블레이드 모드가 약점선을 거둘 때 되돌릴 값이 비어 있으면 이것을 다시 건다. 수식어가 없으면 nullptr
+	UMaterialInterface* GetAffixOverlayMaterial() const { return AffixOverlayMaterial; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -84,6 +99,29 @@ private:
 
 	// 배율과 시작 데이터 중 어느 쪽이 먼저 와도 둘 다 준비됐을 때 한 번만 곱하게 하는 판정
 	FWarriorDifficultyScaleGate DifficultyScaleGate;
+
+	// 시작 데이터가 적용됐고 수식어를 아직 걸지 않았으면 건다. 시작 데이터 콜백(난이도 배율 뒤)과 SetAffixes가 부른다
+	void TryApplyAffixes();
+
+	// 자기 GE·태그를 건다. 최대 체력이 늘면 현재 체력도 같은 비율로 올린다(시작 체력이 가득 찬 채로)
+	void ApplyAffixes();
+
+	// 보이는 스켈레탈 메시마다 등급 색 외곽선을 건다(이미 다른 오버레이가 있으면 건드리지 않음)
+	void ApplyAffixOutline(const UWarriorAffixCatalogDataAsset& InCatalog);
+
+	UPROPERTY(VisibleInstanceOnly, Category = "Affix")
+	TArray<FName> AffixIds;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> AffixOverlayMaterial;
+
+	// 첫 수식어 색의 오라. 죽으면 끈다
+	void SpawnAffixAura(const UWarriorAffixCatalogDataAsset& InCatalog);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraComponent> AffixAuraComponent;
+
+	bool bAffixesApplied = false;
 
 public:
 	FORCEINLINE UAICombatComponent* GetAICombatComponent() const { return AICombatComponent; }

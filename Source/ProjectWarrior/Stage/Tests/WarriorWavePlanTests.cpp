@@ -5,6 +5,7 @@
 #include "ProjectWarrior/Network/WarriorErrorText.h"
 #include "ProjectWarrior/Network/WarriorStagePlaySubsystem.h"
 #include "ProjectWarrior/Stage/WarriorMonsterCatalogDataAsset.h"
+#include "ProjectWarrior/Stage/WarriorAffixCatalogDataAsset.h"
 #include "ProjectWarrior/Stage/WarriorWavePlan.h"
 
 namespace WarriorWavePlanTests
@@ -234,6 +235,91 @@ bool FWarriorWavePlanDifficultyTest::RunTest(const FString& Parameters)
 	FWarriorStageWavePlan OldPlan;
 	WarriorWavePlan::ReadFromResponse(WarriorWavePlanTests::ResponseBody, OldPlan);
 	TestEqual(TEXT("Old response difficulty"), OldPlan.Difficulty, 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorWavePlanAffixTest, "ProjectWarrior.Stage.Affix.WavePlanAffixes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWarriorWavePlanAffixTest::RunTest(const FString& Parameters)
+{
+	// 수식어(stage-play-api.md v1.5): 적 줄 affixes를 순서대로 읽어 생성 데이터까지 넘긴다.
+	// 칸이 없거나(v1.5 전) null·빈 배열이면 비움. 문자열이 아닌 값·빈 문자열·겹친 키는 건너뛴다(모르는 키는 적에게 붙일 때 거름).
+	// 실패하면 WarriorWavePlan::ReadFromData의 affixes 읽기와 ToWaveData의 복사를 의심한다
+	const TCHAR* Body = TEXT(R"({
+		"data": {
+			"stagePlayId": "3f2b8c1e-7a4d-4e2f-9b10-6c5d4e3f2a1b",
+			"waves": [
+				{ "waveNumber": 1, "enemies": [
+					{ "monsterId": "monster.samurai", "count": 2, "affixes": ["affix.fire", "affix.fast"] },
+					{ "monsterId": "monster.samurai", "count": 1, "affixes": [] },
+					{ "monsterId": "monster.samurai", "count": 1, "affixes": null },
+					{ "monsterId": "monster.samurai", "count": 1 },
+					{ "monsterId": "monster.samurai", "count": 1, "affixes": ["affix.frozen", 3, "", "affix.frozen", "affix.unknown"] }
+				] }
+			]
+		},
+		"meta": {}
+	})");
+
+	FWarriorStageWavePlan Plan;
+	WarriorWavePlan::ReadFromResponse(Body, Plan);
+	if (!TestEqual(TEXT("Wave count"), Plan.Waves.Num(), 1) || !TestEqual(TEXT("Enemy lines"), Plan.Waves[0].Enemies.Num(), 5))
+	{
+		return false;
+	}
+	const TArray<FWarriorWavePlanEnemy>& Enemies = Plan.Waves[0].Enemies;
+	TestEqual(TEXT("Two affixes"), Enemies[0].Affixes.Num(), 2);
+	TestTrue(TEXT("Order kept"), Enemies[0].Affixes.Num() == 2 && Enemies[0].Affixes[0] == FName(TEXT("affix.fire")) && Enemies[0].Affixes[1] == FName(TEXT("affix.fast")));
+	TestTrue(TEXT("Empty array"), Enemies[1].Affixes.IsEmpty());
+	TestTrue(TEXT("Null affixes"), Enemies[2].Affixes.IsEmpty());
+	TestTrue(TEXT("Missing affixes (before v1.5)"), Enemies[3].Affixes.IsEmpty());
+	TestEqual(TEXT("Non-string, empty and duplicate skipped; unknown kept for later"), Enemies[4].Affixes.Num(), 2);
+
+	TArray<FWarriorStageWaveData> Waves;
+	FName Unknown;
+	TestTrue(TEXT("Converted"), WarriorWavePlan::ToWaveData(Plan, WarriorWavePlanTests::MakeCatalog(false), Waves, Unknown));
+	if (TestEqual(TEXT("Wave data count"), Waves.Num(), 1))
+	{
+		TestEqual(TEXT("Spawn data affixes"), Waves[0].Enemies[0].Affixes.Num(), 2);
+		TestTrue(TEXT("Spawn data no affixes"), Waves[0].Enemies[3].Affixes.IsEmpty());
+	}
+
+	// 수식어가 없는 예전 응답도 그대로 읽힌다
+	FWarriorStageWavePlan OldPlan;
+	WarriorWavePlan::ReadFromResponse(WarriorWavePlanTests::ResponseBody, OldPlan);
+	TestTrue(TEXT("Old response has no affixes"), OldPlan.Waves.Num() > 0 && OldPlan.Waves[0].Enemies[0].Affixes.IsEmpty());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWarriorAffixCatalogTest, "ProjectWarrior.Stage.Affix.CatalogRules",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FWarriorAffixCatalogTest::RunTest(const FString& Parameters)
+{
+	// 수식어 키 모양은 서버 검사(StageWaveMasterValidator W8)와 같은 규칙, 등급은 붙은 수 1 = 챔피언, 2+ = 희귀.
+	// 실패하면 UWarriorAffixCatalogDataAsset::IsValidAffixId·GetTierForCount·FindAffix를 의심한다
+	TestTrue(TEXT("Simple"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.fire")));
+	TestTrue(TEXT("Dots and digits"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.vampiric.lv2")));
+	TestFalse(TEXT("No prefix"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("fire")));
+	TestFalse(TEXT("Prefix only"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.")));
+	TestFalse(TEXT("Uppercase"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.Fire")));
+	TestFalse(TEXT("Underscore"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.fire_aura")));
+	TestTrue(TEXT("Max length"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.") + FString::ChrN(58, TEXT('a'))));
+	TestFalse(TEXT("Too long"), UWarriorAffixCatalogDataAsset::IsValidAffixId(TEXT("affix.") + FString::ChrN(59, TEXT('a'))));
+
+	TestTrue(TEXT("Tier none"), UWarriorAffixCatalogDataAsset::GetTierForCount(0) == EWarriorAffixTier::None);
+	TestTrue(TEXT("Tier champion"), UWarriorAffixCatalogDataAsset::GetTierForCount(1) == EWarriorAffixTier::Champion);
+	TestTrue(TEXT("Tier rare"), UWarriorAffixCatalogDataAsset::GetTierForCount(2) == EWarriorAffixTier::Rare);
+	TestTrue(TEXT("Tier rare (4)"), UWarriorAffixCatalogDataAsset::GetTierForCount(4) == EWarriorAffixTier::Rare);
+
+	UWarriorAffixCatalogDataAsset* Catalog = NewObject<UWarriorAffixCatalogDataAsset>();
+	TMap<FName, FWarriorAffixDefinition> Affixes;
+	Affixes.Add(TEXT("affix.fire"), FWarriorAffixDefinition());
+	Catalog->SetAffixesForTest(Affixes);
+	TestNotNull(TEXT("Known affix"), Catalog->FindAffix(TEXT("affix.fire")));
+	TestNull(TEXT("Unknown affix"), Catalog->FindAffix(TEXT("affix.unknown")));
+	TestNull(TEXT("None key"), Catalog->FindAffix(NAME_None));
 	return true;
 }
 

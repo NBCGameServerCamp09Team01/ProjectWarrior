@@ -49,6 +49,10 @@ struct PROJECTWARRIOR_API FWarriorWavePlanEnemy
 
 	UPROPERTY()
 	float DamageMultiplier = 1.f;
+
+	//이 줄의 적 모두에 붙는 수식어 키(stage-play-api.md v1.5, 예: affix.fire). 없으면 비어 있다. DA_AffixCatalog로 효과를 찾는다
+	UPROPERTY()
+	TArray<FName> Affixes;
 };
 
 //웨이브 하나(waves[])
