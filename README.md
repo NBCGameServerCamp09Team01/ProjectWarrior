@@ -11,7 +11,7 @@
 |---|---|
 | 엔진 | Unreal Engine 5.8.3 (런처 버전) |
 | 언어 | C++ (모듈 `ProjectWarrior`) + 블루프린트·UMG |
-| 주요 기능 | Gameplay Abilities·Tags·Tasks, Enhanced Input, AI(비헤이비어 트리·EQS), UMG, Motion Warping |
+| 주요 기능 | Gameplay Abilities·Tags·Tasks, Enhanced Input, AI(비헤이비어 트리·EQS), UMG, Motion Warping |https://drive.google.com/file/d/1isCyLvQacL2-r32QbVFqdGNrz72B7oVf/view?usp=sharing
 | 플러그인 | ALS-Community(캐릭터 이동), UEGitPlugin, VibeUE·ModelContextProtocol(에디터 자동화) |
 | 서버 연동 | HTTP(JSON) + WebSocket, 모듈 `HTTP`·`WebSockets`·`Json` |
 
@@ -27,8 +27,8 @@ flowchart LR
   M -. "진행 중 판이 있으면" .-> C["이어하기"] --> P
 ```
 
-- 스테이지는 상태 7개(`Initializing → Preparing → InProgress → WaveCleared → Resting → … → StageCleared / StageFailed`)를 `WarriorStageFlowManager`가 넘기고, 판 구성(웨이브·적·배율)은 서버가 판 시작 때 정해 줍니다.
-- 판 도중 게임이 꺼지면 다음 로그인 때 같은 판을 이어 합니다(웨이브 클리어마다 체크포인트).
+- 스테이지는 상태 7개(`Initializing → Preparing → InProgress → WaveCleared → Resting → … → StageCleared / StageFailed`)를 `WarriorStageFlowManager`가 넘기고, 스테이지 구성(웨이브·적·배율)은 서버가 스테이지 시작 때 정해 줍니다.
+- 스테이지 도중 게임이 꺼지면 다음 로그인 때 같은 스테이지를 이어 합니다(웨이브 클리어마다 체크포인트).
 
 ## 주요 시스템
 
@@ -36,8 +36,8 @@ flowchart LR
 |---|---|---|
 | 전투 | 플레이어·적·보스 모두 GAS(능력·속성·GE·피해 계산), 무기·활·투사체·락온·전술 모드 | `AbilitySystem/`, `Components/`, `Items/` |
 | AI·보스 | 비헤이비어 트리·EQS, 공격 토큰, 보스 패턴 세트 | `Characters/`, `Tasks/`, `Decorators/`, `Services/`, `EQS/` |
-| 스테이지 | 상태 흐름, 웨이브 스폰, 서버 웨이브 계획 적용, 난이도 배율, 판 통계 | `Stage/`, `GameModes/`, `Stats/` |
-| 판 안 성장 | 상점·인벤토리·강화 | `Shop/`, `Components/` |
+| 스테이지 | 상태 흐름, 웨이브 스폰, 서버 웨이브 계획 적용, 난이도 배율, 스테이지 통계 | `Stage/`, `GameModes/`, `Stats/` |
+| 스테이지 안 성장 | 상점·인벤토리·강화 | `Shop/`, `Components/` |
 | 튜토리얼 | 구역·단계 데이터 | `Tutorial/` |
 | 서버 연동 | GameInstance 서브시스템: `Api`(보내기·다시 보내기·못 보낸 결과 보관), `Auth`, `StageList`·`StagePlay`·`PlayCheckpoint`, `StatInvest`·`SkillUnlock`, `Ranking`, `Guild`, `Chat`, `Realtime`(WebSocket) | `Network/`, `Auth/`, `Account/`, `Skill/`, `Chat/` |
 | 화면 | 타이틀·로그인·메인메뉴·스테이지 선택·성장·스킬·랭킹·길드·채팅·HUD·일시정지·결과 | `Widgets/`, `Content/MyGameContents/UI/` |
