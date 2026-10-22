@@ -46,6 +46,10 @@ UPlayerGameplayAbility_BladeMode::UPlayerGameplayAbility_BladeMode()
 	// 전술 모드와 시간 배율을 서로 덮어쓰지 않도록 동시에 켜지 않음
 	ActivationBlockedTags.AddTag(WarriorGameplayTags::Player_Status_TacticalMode);
 
+	// 자세를 잡고 베는 모드라 켜져 있는 동안 회피·구르기를 쓰지 않음
+	BlockAbilitiesWithTag.AddTag(WarriorGameplayTags::Player_Ability_Dodge);
+	BlockAbilitiesWithTag.AddTag(WarriorGameplayTags::Player_Ability_DodgeRoll);
+
 	HitReactEventTag = WarriorGameplayTags::Shared_Event_HitReact_Light;
 	WeakPointHitSoundTag = WarriorSoundTags::Sound_Player_BladeMode_WeakPoint;
 	MultiWeakPointHitSoundTag = WarriorSoundTags::Sound_Player_BladeMode_WeakPoint_Multi;
