@@ -36,6 +36,9 @@ void AWeaponBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 판정용 상자라 게임 화면에는 그리지 않음 (BP에서 숨김을 꺼 둔 무기도 있음)
+	WeaponCollision->SetHiddenInGame(true);
+
 	// 스폰 시 지정한 Instigator(주인 캐릭터)를 따라 제거됨. 없으면 Owner 사용
 	AActor* OwningActor = GetInstigator() ? GetInstigator() : GetOwner();
 
